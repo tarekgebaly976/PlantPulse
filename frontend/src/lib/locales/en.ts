@@ -95,7 +95,7 @@ export const en = {
     checks: "Pre-startup & commissioning checks", addCheck: "Add check", lessons: "Lessons learned", report: "Completion report",
     materials: "Materials", permits: "Permits", loto: "LOTO", manpower: "Manpower", delayReason: "Delay reason", fits: "Fits planned window" },
   kpi: { title: "Maintenance KPIs", formula: "Formula", source: "Source data", rules: "Inclusion rules", missing: "Missing data", drill: "Drill-down",
-    exportXlsx: "Export XLSX", exportPdf: "Export PDF", numerator: "Numerator", denominator: "Denominator", production: "Production data",
+    exportXlsx: "Export XLSX", mgmtReport: "Management presentation", exportPdf: "Export PDF", numerator: "Numerator", denominator: "Denominator", production: "Production data",
     budget: "Budget", tons: "Tons produced", goodTons: "Good tons", plannedH: "Planned hours", runH: "Run hours", ideal: "Ideal rate (t/h)",
     notice: "Values are computed only from recorded data. Unavailable KPIs show why.",
     manual: "Company KPIs", manualHint: "The plant's own KPI sheet: a target and an actual per month for each KPI, by department if needed. Download the template, let your team fill it, then upload it. KPIs linked to a CMMS KPI are also shown next to the calculated values.", actual: "Actual", target: "Target", ytd: "YTD avg", enterMonth: "Enter month", month: "Month", deleteConfirm: "Delete KPI {{name}} and all its values?",

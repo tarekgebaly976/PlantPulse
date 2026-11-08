@@ -99,7 +99,7 @@ export const bn: Dict = {
     checks: "চালুর আগে ও কমিশনিং চেক", addCheck: "চেক যোগ করুন", lessons: "শিক্ষণীয় বিষয়", report: "সমাপ্তি রিপোর্ট",
     materials: "মালামাল", permits: "পারমিট", loto: "LOTO", manpower: "জনবল", delayReason: "বিলম্বের কারণ", fits: "পরিকল্পিত সময়ের মধ্যে" },
   kpi: { title: "রক্ষণাবেক্ষণ KPI", formula: "সূত্র", source: "উৎস ডেটা", rules: "অন্তর্ভুক্তির নিয়ম", missing: "অনুপস্থিত ডেটা", drill: "বিস্তারিত দেখুন",
-    exportXlsx: "XLSX এক্সপোর্ট", exportPdf: "PDF এক্সপোর্ট", numerator: "লব", denominator: "হর", production: "উৎপাদন ডেটা",
+    exportXlsx: "XLSX এক্সপোর্ট", mgmtReport: "ব্যবস্থাপনা প্রেজেন্টেশন", exportPdf: "PDF এক্সপোর্ট", numerator: "লব", denominator: "হর", production: "উৎপাদন ডেটা",
     budget: "বাজেট", tons: "উৎপাদিত টন", goodTons: "ভালো টন", plannedH: "পরিকল্পিত ঘণ্টা", runH: "চলার ঘণ্টা", ideal: "আদর্শ হার (টন/ঘণ্টা)",
     notice: "মানগুলো শুধু রেকর্ড করা ডেটা থেকে হিসাব করা হয়। যে KPI পাওয়া যায় না, তার কারণ দেখানো হয়।",
     manual: "কোম্পানির KPI", manualHint: "প্ল্যান্টের নিজস্ব KPI শিট: প্রতিটি KPI-র জন্য প্রতি মাসে একটি লক্ষ্য ও একটি প্রকৃত মান, প্রয়োজনে বিভাগ অনুযায়ী। টেমপ্লেট ডাউনলোড করুন, টিমকে পূরণ করতে দিন, তারপর আপলোড করুন। CMMS KPI-র সাথে যুক্ত KPI হিসাব করা মানের পাশেও দেখানো হয়।", actual: "প্রকৃত", target: "লক্ষ্য", ytd: "বছরের গড়", enterMonth: "মাসের মান লিখুন", month: "মাস", deleteConfirm: "KPI {{name}} এবং এর সব মান মুছবেন?",

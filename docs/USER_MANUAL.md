@@ -125,6 +125,12 @@ Alerts can be acknowledged, turned into a predictive work order and resolved. Tr
 *KPIs & reports*: 20 KPIs for a period and department. Click a KPI for its formula, inclusion rules, numerator /
 denominator, 12-month trend and the underlying records. If data is missing the KPI says **Not available** and why —
 values are never estimated. Export XLSX/PDF. Work order PDF reports are on each work order.
+*Management presentation* (planners and managers): choose the period and, optionally, a department, then click the
+button. PlantPulse builds a PowerPoint deck in your interface language (English, Arabic or Bengali) with an executive
+summary, the KPI scorecard against the previous period and company targets, 12-month trends, work orders, the top 5
+bad actors, cost against budget, emergency breakdowns, lubrication and condition monitoring, and the plan for the
+next period. Whole months are compared with the same number of months before (October with September, a quarter with
+the previous quarter). The charts are native PowerPoint charts, so the deck can be edited before the meeting.
 Enter daily production (tonnes, hours) and monthly budgets in the *Production data / Budget* tab — needed for cost
 per ton, OEE and budget vs actual.
 The plant's own KPI sheet goes in the *Company KPIs* tab: pick the year, *Download template* (two rows per KPI —

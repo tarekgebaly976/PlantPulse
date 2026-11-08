@@ -51,6 +51,7 @@ PERMISSIONS: dict[str, str] = {
     "kpi.view": "View KPI dashboards",
     "kpi.manage": "Maintain production records, budgets, KPI settings",
     "report.export": "Export reports",
+    "report.management": "Generate the management presentation (PowerPoint) for a period",
     "attachment.upload": "Upload attachments",
 }
 
@@ -109,6 +110,7 @@ ROLES: dict[str, tuple[str, set[str]]] = {
             "attachment.upload",
             "shift.manage",
             "kpi.manage",
+            "report.management",
         },
     ),
     "mech_supervisor": ("Mechanical Supervisor", _SUPERVISOR),

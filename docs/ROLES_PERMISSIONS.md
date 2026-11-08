@@ -26,6 +26,7 @@ _This is the **default** matrix. A System Administrator can change it (and add c
 | `wo.close` | Technically close work orders | ✓ | ✓ |  | ✓ | ✓ |  |  |  |  |  |  |
 | `wo.close_emergency` | Close emergency work orders | ✓ | ✓ |  | ✓ | ✓ |  |  |  |  |  |  |
 | `wo.cancel` | Cancel work orders | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |  |
+| `wo.bulk_close` | Close or cancel many work orders / requests at once (planning, engineers, managers) | ✓ | ✓ | ✓ |  |  | ✓ | ✓ |  |  |  |  |
 | `pm.view` | View PM plans | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |
 | `pm.manage` | Create and edit PM plans and job plans | ✓ | ✓ | ✓ |  |  | ✓ |  |  |  |  |  |
 | `pm.approve_deferral` | Approve PM deferrals and cancellations | ✓ | ✓ |  | ✓ | ✓ |  |  |  |  |  |  |
@@ -47,10 +48,12 @@ _This is the **default** matrix. A System Administrator can change it (and add c
 | `pdm.view` | View condition monitoring | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ |
 | `pdm.manage` | Manage measurement points and limits | ✓ | ✓ |  |  |  | ✓ |  |  |  |  |  |
 | `pdm.record` | Record condition readings | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |
+| `pdm.prioritize` | Set the priority of measurement points (critical items at the top of the list) | ✓ | ✓ | ✓ |  |  | ✓ | ✓ |  |  |  |  |
 | `pdm.alert_manage` | Acknowledge/resolve condition alerts | ✓ | ✓ |  | ✓ | ✓ | ✓ |  |  |  |  |  |
 | `shutdown.view` | View shutdowns | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |
-| `shutdown.manage` | Plan and update shutdowns | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |  |
+| `shutdown.manage` | Plan and update shutdowns | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |
 | `kpi.view` | View KPI dashboards | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ | ✓ |
 | `kpi.manage` | Maintain production records, budgets, KPI settings | ✓ | ✓ | ✓ |  |  | ✓ |  |  |  |  |  |
 | `report.export` | Export reports | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ |  | ✓ |
+| `report.management` | Generate the management presentation (PowerPoint) for a period | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |
 | `attachment.upload` | Upload attachments | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |

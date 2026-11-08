@@ -162,7 +162,7 @@ function CompanyKPIs() {
 }
 
 function KPIs() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { can } = useSession();
   const today = new Date().toISOString().slice(0, 10);
   const [start, setStart] = useState(`${today.slice(0, 7)}-01`);
@@ -187,11 +187,15 @@ function KPIs() {
   const saveProd = useMut(() => put("/kpis/production", { ...prod, tons_produced: Number(prod.tons_produced), good_tons: n(prod.good_tons), planned_production_hours: n(prod.planned_production_hours), run_hours: n(prod.run_hours), ideal_rate_tph: n(prod.ideal_rate_tph) }));
   const saveBud = useMut(() => put("/kpis/budgets", { ...bud, amount: Number(bud.amount) }));
   const costDept = q.data?.kpis.find((k) => k.code === "cost_by_department")?.details.by_department as Record<string, number> | undefined;
+  // Management presentation (PowerPoint) in the current interface language, for the selected period and department.
+  const deck = useMut(() => download("/kpis/management-report.pptx", { start, end, department_id: dept, lang: i18n.language }), { success: false });
   return (
     <>
-      <PageHeader title={t("kpi.title")} actions={can("report.export") ? <>
+      <PageHeader title={t("kpi.title")} actions={<>
+        {can("report.management") && <Button loading={deck.isPending} onClick={() => deck.mutate(undefined)}>{t("kpi.mgmtReport")}</Button>}
+        {can("report.export") && <>
         <Button variant="default" onClick={() => void download("/exports/kpis.xlsx", { start, end, department_id: dept })}>{t("kpi.exportXlsx")}</Button>
-        <Button variant="default" onClick={() => void download("/reports/kpis.pdf", { start, end })}>{t("kpi.exportPdf")}</Button></> : null}>
+        <Button variant="default" onClick={() => void download("/reports/kpis.pdf", { start, end })}>{t("kpi.exportPdf")}</Button></>}</>}>
         <Group align="end" wrap="wrap">
           <TextInput type="date" label={t("common.from")} value={start} onChange={(e) => setStart(e.currentTarget.value)} />
           <TextInput type="date" label={t("common.to")} value={end} onChange={(e) => setEnd(e.currentTarget.value)} />
