@@ -49,3 +49,96 @@ test.{$CMMS_DOMAIN:localhost} {
 		reverse_proxy cmms-test-web:3000
 	}
 }
+
+# PlantPulse product website (scripts/site.sh, deploy/docker-compose.site.yml) at PRODUCT_DOMAIN, e.g.
+# plantpulse-cmms.com, with www.<domain> redirected to it. Until the site is started this answers 502; the CMMS
+# addresses above are not affected either way.
+{$PRODUCT_DOMAIN:plantpulse.localhost} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+	request_body {
+		max_size 64KB
+	}
+	reverse_proxy plantpulse-site:8080
+	log {
+		output stdout
+		format json
+	}
+}
+
+www.{$PRODUCT_DOMAIN:plantpulse.localhost} {
+	redir https://{$PRODUCT_DOMAIN:plantpulse.localhost}{uri} permanent
+}
+
+# Public demo (scripts/demo.sh, deploy/docker-compose.demo.yml) at demo.<PRODUCT_DOMAIN>: sample data only. Until it is
+# started this answers 502; nothing else is affected.
+demo.{$PRODUCT_DOMAIN:plantpulse.localhost} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+	request_body {
+		max_size 30MB
+	}
+	handle /api/* {
+		reverse_proxy plantpulse-demo-api:8000
+	}
+	handle {
+		reverse_proxy plantpulse-demo-web:3000
+	}
+}
+
+# Customer instances (scripts/customer.sh): <name>.<PRODUCT_DOMAIN> -> that customer's own containers. Each customer has
+# a small file in deploy/caddy.d (c-<name>.caddy) that uses this block; customers are added without restarting Caddy.
+(customer) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	request_body {
+		max_size 30MB
+	}
+	handle /api/* {
+		reverse_proxy plantpulse-c-{args[0]}-api:8000
+	}
+	handle {
+		reverse_proxy plantpulse-c-{args[0]}-web:3000
+	}
+	log {
+		output stdout
+		format json
+	}
+}
+
+# A paused customer (scripts/customer.sh stop, or a trial that ended): a friendly page instead of an error. The
+# customer's data stays in its stopped containers; customer.sh start switches back to (customer).
+(paused) {
+	header {
+		X-Robots-Tag "noindex, nofollow"
+		Cache-Control "no-store"
+		-Server
+	}
+	handle /api/* {
+		respond "This PlantPulse system is paused." 503
+	}
+	handle {
+		rewrite * /paused.html
+		reverse_proxy plantpulse-site:8080
+	}
+}
+
+import caddy.d/*.caddy

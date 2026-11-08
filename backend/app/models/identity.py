@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint, false
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,6 +36,12 @@ class Role(Base):
     code: Mapped[str] = mapped_column(String(40), unique=True)
     name: Mapped[str] = mapped_column(String(120))
     description: Mapped[str | None] = mapped_column(String(400))
+    # A built-in role the administrator has edited: start-up no longer resets its permissions to the default matrix.
+    customized: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Custom roles belong to the organization that created them; built-in roles (from app.core.permissions) have none.
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True
+    )
 
 
 class Permission(Base):
@@ -70,6 +76,8 @@ class Membership(Base, Timestamped):
     role_id: Mapped[uuid.UUID] = fk("roles.id")
     department_id: Mapped[uuid.UUID | None] = fk("departments.id", nullable=True, ondelete="SET NULL")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Receives the daily summary e-mail for its departments (whole plant when none). Set by administrators only.
+    daily_summary: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     user: Mapped[User] = relationship(back_populates="memberships")
     role: Mapped[Role] = relationship(lazy="joined")
@@ -114,6 +122,19 @@ class LoginAttempt(Base):
     ip: Mapped[str | None] = mapped_column(String(64), index=True)
     success: Mapped[bool] = mapped_column(Boolean)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class PasswordReset(Base):
+    """A "forgot password" link: single use, short-lived, stored only as a SHA-256 digest of the token in the link."""
+
+    __tablename__ = "password_resets"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = fk("users.id", ondelete="CASCADE", index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ip: Mapped[str | None] = mapped_column(String(64))
 
 
 class Skill(Base):

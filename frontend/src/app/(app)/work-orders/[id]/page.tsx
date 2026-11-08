@@ -26,7 +26,7 @@ function Transition({ wo, allowed }: { wo: WODetail["work_order"]; allowed: stri
   if (!allowed.length) return null;
   return (
     <>
-      <Group gap="xs" wrap="wrap">
+      <Group gap="xs" wrap="wrap" className="pp-actions" data-testid="wo-actions">
         {allowed.map((s) => (
           <Button key={s} size="sm" variant={s === "cancelled" ? "outline" : "filled"} color={s === "cancelled" ? "red" : undefined}
             onClick={() => setTo(s)} data-testid={`to-${s}`} className="tap-target">{t("wo.moveTo")}: {t(`status.${s}`)}</Button>
@@ -289,7 +289,7 @@ export default function WODetailPage() {
                   {can("wo.assign") && !finished && <Button size="compact-xs" variant="subtle" color="red" onClick={() => unassign.mutate(a.user_id)}>×</Button>}</Group>))}</Stack>
               {can("wo.assign") && !finished && (
                 <Group align="end">
-                  <UserPicker label={t("wo.assign")} value={assignee} onChange={setAssignee} />
+                  <UserPicker label={t("wo.assign")} value={assignee} onChange={setAssignee} tradeFilter />
                   <Checkbox label={t("wo.force")} checked={force} onChange={(e) => setForce(e.currentTarget.checked)} />
                   <Button disabled={!assignee} loading={assign.isPending} onClick={() => assign.mutate(undefined)}>{t("wo.assign")}</Button>
                 </Group>

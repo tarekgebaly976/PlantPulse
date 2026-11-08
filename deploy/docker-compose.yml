@@ -16,6 +16,8 @@ x-api-env: &api-env
   CMMS_SMTP_USER: ${CMMS_SMTP_USER:-}
   CMMS_SMTP_PASSWORD: ${CMMS_SMTP_PASSWORD:-}
   CMMS_SMTP_FROM: ${CMMS_SMTP_FROM:-}
+  CMMS_EMAIL_NOTIFICATIONS: ${CMMS_EMAIL_NOTIFICATIONS:-true}  # false: only password-reset e-mails (scripts/main-mail.sh)
+  CMMS_PUBLIC_URL: https://${CMMS_DOMAIN:-localhost}
 
 services:
   db:
@@ -80,12 +82,16 @@ services:
     ports: ["80:80", "443:443"]
     environment:
       CMMS_DOMAIN: ${CMMS_DOMAIN:-localhost}
+      # Product website (scripts/site.sh), e.g. plantpulse-cmms.com; the .localhost default never asks for a certificate.
+      PRODUCT_DOMAIN: ${PRODUCT_DOMAIN:-plantpulse.localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy.d:/etc/caddy/caddy.d:ro  # customer addresses (scripts/customer.sh)
       - ./well-known:/srv/.well-known:ro
       - caddy_data:/data
     depends_on: [web, api]
-    # "edge" also reaches the optional test copy (deploy/docker-compose.test.yml) at test.<domain>.
+    # "edge" also reaches the optional test copy (deploy/docker-compose.test.yml) at test.<domain>
+    # and the product website (deploy/docker-compose.site.yml).
     networks: [default, edge]
 
 networks:

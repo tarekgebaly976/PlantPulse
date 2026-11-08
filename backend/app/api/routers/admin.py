@@ -1,10 +1,10 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, time
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -13,14 +13,15 @@ from app.api.pagination import PageQ, paginate
 from app.core.db import get_db
 from app.core.security import hash_password, hash_token, new_token, validate_password_strength
 from app.models.enums import DepartmentType, FailureCodeKind
-from app.models.identity import Membership, Role, User, UserSession
+from app.models.identity import Membership, Role, RolePermission, User, UserSession
 from app.models.system import AuditLog
 from app.models.tenancy import Department, IntegrationToken, NumberSequence, Plant
 from app.models.workorders import WOStatusTransition
 from app.schemas.common import ORM, In
 from app.services import failure_modes as fm
 from app.services import user_import
-from app.services.common import audit, utcnow
+from app.services.common import audit, reset_role, role_permissions, utcnow
+from app.services.plants import create_plant
 from app.services.workflow import ensure_default_transitions
 
 router = APIRouter(tags=["admin"])
@@ -71,6 +72,74 @@ def update_plant(body: PlantUpdate, ctx: Ctx = Depends(require("plant.admin")), 
     return ctx.plant
 
 
+# ---------- daily summary e-mail (administrators only) ----------
+class DailySummaryCfg(In):
+    enabled: bool
+    send_time: time  # plant-local, e.g. "06:30"
+    # Frequency: ISO weekdays to send on (1 = Monday .. 7 = Sunday). All 7 = daily, one day = weekly. Omitted = unchanged.
+    days: list[int] | None = Field(None, min_length=1, max_length=7)
+
+
+@router.get("/daily-summary")
+def get_daily_summary(ctx: Ctx = Depends(require("plant.admin")), db: Session = Depends(get_db, scope="function")) -> dict:
+    from app.core.config import get_settings
+    from app.services import daily_summary
+
+    people = daily_summary.recipients(db, ctx.plant)
+    return {
+        "enabled": ctx.plant.daily_summary_enabled,
+        "send_time": ctx.plant.daily_summary_time.strftime("%H:%M"),
+        "days": daily_summary.send_days(ctx.plant),
+        "working_days": ctx.plant.working_days,
+        "timezone": ctx.plant.timezone,
+        "recipients": [{"user_id": u.id, "full_name": u.full_name, "email": u.email, "department_ids": d} for u, d in people],
+        "email_configured": get_settings().email_enabled,
+        "suppressed": daily_summary.suppressed_reason(),
+    }
+
+
+@router.put("/daily-summary")
+def set_daily_summary(
+    body: DailySummaryCfg, ctx: Ctx = Depends(require("plant.admin")), db: Session = Depends(get_db, scope="function")
+) -> dict:
+    if body.days is not None:
+        if any(d < 1 or d > 7 for d in body.days):
+            raise HTTPException(422, "Days are ISO weekdays 1 (Monday) to 7 (Sunday)")
+        ctx.plant.daily_summary_days = sorted(set(body.days))
+    ctx.plant.daily_summary_enabled = body.enabled
+    ctx.plant.daily_summary_time = body.send_time.replace(second=0, microsecond=0, tzinfo=None)
+    audit(
+        db,
+        "daily_summary.update",
+        user_id=ctx.user.id,
+        plant_id=ctx.plant_id,
+        entity_type="plant",
+        entity_id=ctx.plant_id,
+        data={
+            "enabled": body.enabled,
+            "send_time": ctx.plant.daily_summary_time.strftime("%H:%M"),
+            "days": ctx.plant.daily_summary_days,
+        },
+    )
+    db.flush()
+    return get_daily_summary(ctx, db)
+
+
+@router.get("/daily-summary/preview")
+def preview_daily_summary(
+    user_id: uuid.UUID | None = None, ctx: Ctx = Depends(require("plant.admin")), db: Session = Depends(get_db, scope="function")
+) -> dict:
+    """What the chosen member (default: yourself) would receive today; nothing is sent."""
+    from app.services import daily_summary
+    from app.services.common import plant_today
+
+    m, user = _member(db, ctx, user_id) if user_id else (None, ctx.user)
+    dept_ids = m.department_ids if m is not None else ctx.department_ids
+    stats = daily_summary.collect(db, ctx.plant, plant_today(ctx.plant))
+    subject, body = daily_summary.compose(db, ctx.plant, stats, user, dept_ids)
+    return {"subject": subject, "body": body}
+
+
 class DepartmentIn(In):
     code: str = Field(min_length=1, max_length=32)
     name: str
@@ -106,6 +175,146 @@ def create_department(
     return d
 
 
+class DepartmentUpdate(In):
+    code: str | None = Field(None, min_length=1, max_length=32)
+    name: str | None = Field(None, min_length=1, max_length=200)
+    name_ar: str | None = None
+    type: DepartmentType | None = None
+    is_active: bool | None = None
+
+
+@router.patch("/departments/{dept_id}", response_model=DepartmentOut)
+def update_department(
+    dept_id: uuid.UUID, body: DepartmentUpdate, ctx: Ctx = Depends(require("plant.admin")), db: Session = Depends(get_db, scope="function")
+) -> Department:
+    """Rename a department (code, name) or retire it. Equipment and history keep pointing to it."""
+    from app.models.assets import Asset
+
+    d = db.get(Department, dept_id)
+    if d is None or d.plant_id != ctx.plant_id:
+        raise HTTPException(404, "Department not found")
+    data = body.model_dump(exclude_unset=True)
+    if data.get("is_active") is False:
+        left = db.execute(
+            select(func.count()).select_from(Asset).where(Asset.department_id == d.id, Asset.is_active.is_(True))
+        ).scalar_one()
+        if left:
+            raise HTTPException(409, f"{left} active equipment still belong to {d.code}: move them first")
+    for k, v in data.items():
+        setattr(d, k, v)
+    try:
+        db.flush()
+    except IntegrityError as e:
+        raise HTTPException(409, "Department code already exists") from e
+    audit(db, "department.update", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="department", entity_id=d.id, data=data)
+    return d
+
+
+class MoveAssetsIn(In):
+    # Production lines or units; everything below them moves too.
+    asset_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+    to_department_id: uuid.UUID
+    # For units: put them under this production line of the target department. Blank = each unit becomes a line.
+    parent_id: uuid.UUID | None = None
+    apply: bool = False
+
+
+@router.post("/departments/move-assets")
+def move_assets(body: MoveAssetsIn, ctx: Ctx = Depends(require("plant.admin")), db: Session = Depends(get_db, scope="function")) -> dict:
+    """Move production lines or units (with every level below them) to another department, together with their work
+    orders, so lists, KPIs and department access follow the equipment. A unit either becomes a production line of the
+    target department or goes under a chosen line there. apply=false only counts."""
+    from sqlalchemy import update
+
+    from app.models.assets import Asset
+    from app.models.enums import AssetLevel
+    from app.models.pm import PMPlan
+    from app.models.workorders import WorkOrder
+    from app.services.assets import move_asset
+
+    target = db.get(Department, body.to_department_id)
+    if target is None or target.plant_id != ctx.plant_id:
+        raise HTTPException(404, "Department not found")
+    parent = None
+    if body.parent_id:
+        parent = db.get(Asset, body.parent_id)
+        if (
+            parent is None
+            or parent.plant_id != ctx.plant_id
+            or parent.department_id != target.id
+            or parent.level != AssetLevel.PRODUCTION_LINE
+        ):
+            raise HTTPException(422, f"The new parent must be a production line of {target.code}")
+    picked = []
+    for aid in dict.fromkeys(body.asset_ids):
+        a = db.get(Asset, aid)
+        if a is None or a.plant_id != ctx.plant_id:
+            raise HTTPException(404, "Asset not found")
+        if a.level not in (AssetLevel.PRODUCTION_LINE, AssetLevel.UNIT):
+            raise HTTPException(422, f"{a.code} is a {a.level.value.replace('_', ' ')}: pick its unit or production line")
+        if parent is not None and parent.path.startswith(a.path):
+            raise HTTPException(422, f"{a.code} cannot go under its own child {parent.code}")
+        picked.append(a)
+    # A unit picked together with its own line moves with the line.
+    picked = [a for a in picked if not any(o is not a and a.path.startswith(o.path) for o in picked)]
+    ids: list[uuid.UUID] = []
+    plan: list[dict] = []
+    for a in picked:
+        ids += svc_subtree(db, a)
+        if a.level == AssetLevel.PRODUCTION_LINE:
+            becomes = "line"
+        else:
+            becomes = f"under {parent.code}" if parent is not None else "line"
+        plan.append({"code": a.code, "name": a.name, "becomes": becomes})
+    wos = db.execute(select(func.count()).select_from(WorkOrder).where(WorkOrder.asset_id.in_(ids))).scalar_one() if ids else 0
+    plans = db.execute(select(func.count()).select_from(PMPlan).where(PMPlan.asset_id.in_(ids))).scalar_one() if ids else 0
+    out = {
+        "lines": [a.code for a in picked],
+        "moves": plan,
+        "to": target.code,
+        "assets": len(ids),
+        "work_orders": wos,
+        "pm_plans": plans,
+        "applied": False,
+    }
+    if body.apply and ids:
+        db.execute(update(Asset).where(Asset.id.in_(ids)).values(department_id=target.id).execution_options(synchronize_session=False))
+        db.execute(
+            update(WorkOrder)
+            .where(WorkOrder.asset_id.in_(ids))
+            .values(department_id=target.id)
+            .execution_options(synchronize_session=False)
+        )
+        for a in picked:
+            a.department_id = target.id
+            if a.level == AssetLevel.UNIT:
+                if parent is None:
+                    a.level = AssetLevel.PRODUCTION_LINE
+                    move_asset(db, a, None)
+                else:
+                    move_asset(db, a, parent.id)
+        if not target.is_active:
+            target.is_active = True
+        db.flush()
+        out["applied"] = True
+        audit(
+            db,
+            "department.move_assets",
+            user_id=ctx.user.id,
+            plant_id=ctx.plant_id,
+            entity_type="department",
+            entity_id=target.id,
+            data=out,
+        )
+    return out
+
+
+def svc_subtree(db: Session, asset) -> list[uuid.UUID]:
+    from app.services.assets import subtree_ids
+
+    return subtree_ids(db, asset)
+
+
 # ---------- users & memberships ----------
 class UserOut(ORM):
     id: uuid.UUID
@@ -124,6 +333,7 @@ class MemberOut(ORM):
     department_id: uuid.UUID | None
     department_ids: list[uuid.UUID] = []
     is_active: bool
+    daily_summary: bool = False
 
 
 class UserCreate(In):
@@ -149,10 +359,16 @@ class MembershipUpdate(In):
     is_active: bool | None = None
     trade: str | None = None
     hourly_rate: float | None = Field(None, ge=0)
+    daily_summary: bool | None = None  # receives the daily summary e-mail
 
 
-def _role(db: Session, code: str) -> Role:
-    role = db.execute(select(Role).where(Role.code == code)).scalar_one_or_none()
+def _org_roles(ctx: Ctx):  # noqa: ANN202 - SQL condition
+    """Roles this organization may use: the built-in ones and its own custom roles."""
+    return or_(Role.organization_id.is_(None), Role.organization_id == ctx.user.organization_id)
+
+
+def _role(db: Session, code: str, ctx: Ctx) -> Role:
+    role = db.execute(select(Role).where(Role.code == code, _org_roles(ctx))).scalar_one_or_none()
     if role is None:
         raise HTTPException(422, f"Unknown role {code}")
     return role
@@ -176,6 +392,7 @@ def _member_out(m: Membership, u: User) -> dict:
         "department_id": m.department_id,
         "department_ids": m.department_ids,
         "is_active": m.is_active and u.is_active,
+        "daily_summary": m.daily_summary,
     }
 
 
@@ -191,7 +408,7 @@ def create_user(body: UserCreate, ctx: Ctx = Depends(require("user.manage")), db
         validate_password_strength(body.password)
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
-    role = _role(db, body.role)
+    role = _role(db, body.role, ctx)
     if role.code == "system_admin" and not ctx.user.is_system_admin:
         raise HTTPException(403, "Only system administrators can grant the system administrator role")
     depts = _dept_list(db, ctx, body.department_ids if body.department_ids is not None else [d for d in [body.department_id] if d])
@@ -278,7 +495,7 @@ def update_membership(
         raise HTTPException(404, "Member not found")
     data = body.model_dump(exclude_unset=True)
     if "role" in data:
-        role = _role(db, data["role"])
+        role = _role(db, data["role"], ctx)
         if role.code == "system_admin" and not ctx.user.is_system_admin:
             raise HTTPException(403, "Only system administrators can grant the system administrator role")
         m.role_id = role.id
@@ -307,6 +524,8 @@ def update_membership(
             s.revoked_at = utcnow()
     elif data.get("is_active") is True:
         m.is_active = True
+    if data.get("daily_summary") is not None:
+        m.daily_summary = data["daily_summary"]
     db.flush()
     db.refresh(m)
     audit(db, "user.update", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="user", entity_id=user_id, data=data)
@@ -362,9 +581,243 @@ def remove_user(user_id: uuid.UUID, ctx: Ctx = Depends(require("user.manage")), 
     audit(db, "user.remove", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="user", entity_id=user.id, data={"email": user.email})
 
 
+@router.get("/trades")
+def list_trades(ctx: Ctx = Depends(get_ctx), db: Session = Depends(get_db, scope="function")) -> list[str]:
+    """Trades to offer: the default list plus any trade already used in this plant (people or job plans)."""
+    from app.core.trades import DEFAULT_TRADES
+    from app.models.pm import JobPlan
+
+    used = set(
+        db.execute(
+            select(User.trade)
+            .join(Membership, Membership.user_id == User.id)
+            .where(Membership.plant_id == ctx.plant_id, User.trade.is_not(None))
+        ).scalars()
+    )
+    used |= set(db.execute(select(JobPlan.trade).where(JobPlan.plant_id == ctx.plant_id, JobPlan.trade.is_not(None))).scalars())
+    out = list(DEFAULT_TRADES)
+    seen = {t.casefold() for t in out}
+    for t in sorted(x.strip() for x in used if x and x.strip()):
+        if t.casefold() not in seen:
+            seen.add(t.casefold())
+            out.append(t)
+    return out
+
+
 @router.get("/roles")
 def list_roles(ctx: Ctx = Depends(get_ctx), db: Session = Depends(get_db, scope="function")) -> list[dict]:
-    return [{"code": r.code, "name": r.name} for r in db.execute(select(Role).order_by(Role.name)).scalars()]
+    return [{"code": r.code, "name": r.name} for r in db.execute(select(Role).where(_org_roles(ctx)).order_by(Role.name)).scalars()]
+
+
+# ---------- roles & permissions (what each role may do) ----------
+# The matrix is shared by every plant of the organization. Only a System Administrator edits it; the System
+# Administrator role itself is not editable, so the administrator can never lock themselves out.
+LOCKED_ROLES = {"system_admin"}
+
+
+def _sysadmin(ctx: Ctx, what: str) -> None:
+    if not ctx.user.is_system_admin:
+        raise HTTPException(403, f"Only a System Administrator can {what}")
+
+
+def _editable_role(db: Session, code: str, ctx: Ctx) -> Role:
+    _sysadmin(ctx, "change roles")
+    role = _role(db, code, ctx)
+    if role.code in LOCKED_ROLES:
+        raise HTTPException(409, "The System Administrator role always has every permission and cannot be changed")
+    return role
+
+
+@router.get("/permissions")
+def list_permissions(ctx: Ctx = Depends(require("user.manage"))) -> list[dict]:
+    from app.core.permissions import PERMISSIONS
+
+    return [{"code": c, "description": d, "group": c.split(".")[0]} for c, d in PERMISSIONS.items()]
+
+
+@router.get("/roles/matrix")
+def roles_matrix(ctx: Ctx = Depends(require("user.manage")), db: Session = Depends(get_db, scope="function")) -> list[dict]:
+    from app.core.permissions import ROLES
+
+    roles = list(db.execute(select(Role).where(_org_roles(ctx)).order_by(Role.name)).scalars())
+    perms: dict[uuid.UUID, list[str]] = {r.id: [] for r in roles}
+    for rid, code in db.execute(select(RolePermission.role_id, RolePermission.permission_code).where(RolePermission.role_id.in_(perms))):
+        perms[rid].append(code)
+    members: dict[uuid.UUID, int] = {
+        rid: n
+        for rid, n in db.execute(
+            select(Membership.role_id, func.count())
+            .join(Plant, Plant.id == Membership.plant_id)
+            .where(Plant.organization_id == ctx.user.organization_id, Membership.is_active.is_(True))
+            .group_by(Membership.role_id)
+        )
+    }
+    return [
+        {
+            "code": r.code,
+            "name": r.name,
+            "builtin": r.code in ROLES,
+            "customized": r.customized,
+            "locked": r.code in LOCKED_ROLES,
+            "members": members.get(r.id, 0),
+            "permissions": sorted(perms[r.id]),
+        }
+        for r in roles
+    ]
+
+
+class RolePermissionsIn(In):
+    permissions: list[str]
+
+
+@router.put("/roles/{code}/permissions")
+def set_role_permissions(
+    code: str, body: RolePermissionsIn, ctx: Ctx = Depends(require("user.manage")), db: Session = Depends(get_db, scope="function")
+) -> dict:
+    from app.core.permissions import PERMISSIONS, ROLES
+
+    role = _editable_role(db, code, ctx)
+    wanted = set(body.permissions)
+    unknown = wanted - set(PERMISSIONS)
+    if unknown:
+        raise HTTPException(422, f"Unknown permission(s): {', '.join(sorted(unknown))}")
+    before = role_permissions(db, role.id)
+    for p in wanted - before:
+        db.add(RolePermission(role_id=role.id, permission_code=p))
+    for p in before - wanted:
+        db.execute(delete(RolePermission).where(RolePermission.role_id == role.id, RolePermission.permission_code == p))
+    if role.code in ROLES:
+        role.customized = True
+    audit(
+        db,
+        "role.permissions",
+        user_id=ctx.user.id,
+        plant_id=ctx.plant_id,
+        entity_type="role",
+        entity_id=role.id,
+        data={"role": role.code, "added": sorted(wanted - before), "removed": sorted(before - wanted)},
+    )
+    return {"code": role.code, "permissions": sorted(wanted)}
+
+
+class RoleCreate(In):
+    name: str = Field(min_length=2, max_length=120)
+    copy_from: str | None = None  # start with the permissions of this role
+
+
+@router.post("/roles", status_code=201)
+def create_role(body: RoleCreate, ctx: Ctx = Depends(require("user.manage")), db: Session = Depends(get_db, scope="function")) -> dict:
+    _sysadmin(ctx, "create roles")
+    name = body.name.strip()
+    if db.execute(select(Role.id).where(_org_roles(ctx), func.lower(Role.name) == name.lower())).first():
+        raise HTTPException(409, f"A role named {name} already exists")
+    perms: set[str] = set()
+    if body.copy_from:
+        src = _role(db, body.copy_from, ctx)
+        perms = role_permissions(db, src.id)
+    role = Role(code=f"c_{uuid.uuid4().hex[:12]}", name=name, organization_id=ctx.user.organization_id, customized=True)
+    db.add(role)
+    db.flush()
+    for p in perms:
+        db.add(RolePermission(role_id=role.id, permission_code=p))
+    audit(
+        db,
+        "role.create",
+        user_id=ctx.user.id,
+        plant_id=ctx.plant_id,
+        entity_type="role",
+        entity_id=role.id,
+        data={"name": name, "copy_from": body.copy_from},
+    )
+    return {"code": role.code, "name": role.name, "permissions": sorted(perms)}
+
+
+class RoleRename(In):
+    name: str = Field(min_length=2, max_length=120)
+
+
+@router.patch("/roles/{code}")
+def rename_role(
+    code: str, body: RoleRename, ctx: Ctx = Depends(require("user.manage")), db: Session = Depends(get_db, scope="function")
+) -> dict:
+    from app.core.permissions import ROLES
+
+    role = _editable_role(db, code, ctx)
+    name = body.name.strip()
+    if db.execute(select(Role.id).where(_org_roles(ctx), func.lower(Role.name) == name.lower(), Role.id != role.id)).first():
+        raise HTTPException(409, f"A role named {name} already exists")
+    role.name = name
+    if role.code in ROLES:
+        role.customized = True
+    audit(db, "role.rename", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="role", entity_id=role.id, data={"name": name})
+    return {"code": role.code, "name": role.name}
+
+
+@router.post("/roles/{code}/reset")
+def reset_builtin_role(code: str, ctx: Ctx = Depends(require("user.manage")), db: Session = Depends(get_db, scope="function")) -> dict:
+    from app.core.permissions import ROLES
+
+    role = _editable_role(db, code, ctx)
+    if role.code not in ROLES:
+        raise HTTPException(409, "Only built-in roles have a default to go back to")
+    reset_role(db, role)
+    audit(db, "role.reset", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="role", entity_id=role.id, data={"role": role.code})
+    return {"code": role.code, "permissions": sorted(role_permissions(db, role.id))}
+
+
+@router.delete("/roles/{code}", status_code=204)
+def delete_role(code: str, ctx: Ctx = Depends(require("user.manage")), db: Session = Depends(get_db, scope="function")) -> None:
+    from app.core.permissions import ROLES
+
+    role = _editable_role(db, code, ctx)
+    if role.code in ROLES:
+        raise HTTPException(409, "Built-in roles cannot be deleted; take permissions away instead")
+    used = db.execute(select(func.count()).select_from(Membership).where(Membership.role_id == role.id)).scalar_one()
+    if used:
+        raise HTTPException(409, f"{used} user(s) still have this role; give them another role first")
+    audit(db, "role.delete", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="role", entity_id=role.id, data={"name": role.name})
+    db.delete(role)
+
+
+# ---------- plants (a new, empty plant / mill) ----------
+class PlantCreate(In):
+    code: str = Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9_-]+$")
+    name: str = Field(min_length=2, max_length=200)
+    timezone: str = "Asia/Riyadh"
+    currency: str = Field("SAR", min_length=3, max_length=3)
+    departments: str = Field("general", pattern="^(general|paper|none)$")
+
+
+@router.get("/plants")
+def list_plants(ctx: Ctx = Depends(require("plant.admin")), db: Session = Depends(get_db, scope="function")) -> list[dict]:
+    rows = db.execute(select(Plant).where(Plant.organization_id == ctx.user.organization_id).order_by(Plant.code)).scalars()
+    return [
+        {"id": p.id, "code": p.code, "name": p.name, "timezone": p.timezone, "currency": p.currency, "is_active": p.is_active} for p in rows
+    ]
+
+
+@router.post("/plants", status_code=201)
+def new_plant(body: PlantCreate, ctx: Ctx = Depends(require("plant.admin")), db: Session = Depends(get_db, scope="function")) -> dict:
+    """An empty plant in the same organization: starting departments and the default workflow, nothing else.
+    System Administrators see it at once in the plant switcher; other users are added from Admin → Users there."""
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    _sysadmin(ctx, "create plants")
+    try:
+        ZoneInfo(body.timezone)
+    except (ZoneInfoNotFoundError, ValueError) as e:
+        raise HTTPException(422, f"Unknown time zone {body.timezone}") from e
+    plant = create_plant(db, ctx.user.organization_id, body.code, body.name, body.timezone, body.currency, body.departments)
+    audit(
+        db,
+        "plant.create",
+        user_id=ctx.user.id,
+        plant_id=plant.id,
+        entity_type="plant",
+        entity_id=plant.id,
+        data={"code": plant.code, "name": plant.name, "departments": body.departments},
+    )
+    return {"id": plant.id, "code": plant.code, "name": plant.name}
 
 
 # ---------- failure codes ----------

@@ -4,6 +4,10 @@ The interface is available in **English** and **Arabic** (right-to-left): use th
 top bar. Your choice is saved to your account. The coloured badge at the top shows whether you are **online**; the
 system needs a connection to save records — nothing is stored silently on the device.
 
+A coloured label in the top bar marks systems that are **not** your real plant: red **TEST** = the test copy used
+for trying new versions and training; blue **DEMO** = the public demo (https://demo.plantpulse-cmms.com) with sample
+data that is reset every night. Record real work only in the system without a label.
+
 Screenshots: `docs/screenshots/`.
 
 ## 1. Signing in
@@ -79,6 +83,32 @@ Print at 100% / actual size. At most 2,400 labels (100 sheets) per PDF.
 * *Shutdowns*: work packages with durations and predecessors; the critical path is calculated and shown in red on the
   Gantt chart; track material/permit/LOTO readiness, daily progress and delay reasons; pre-startup checks must be
   completed before the shutdown can be closed.
+
+### Planning tools (planners, engineers, managers)
+* **Auto / Manual work orders** – Preventive maintenance → **Auto / Manual**, per department:
+  * **PM work orders** and **PdM rounds**: created by the system (**Auto**, default) or held in *Waiting for release*
+    (**Manual**).
+  * **Lubrication work orders**: Auto, or Manual = the team generates each route from Lubrication → **Generate**.
+  * **Critical PdM alert creates** (points set to auto-create): a **Work order**, a **Work request** for supervisors
+    to triage, or **Alert only**. Work requests are otherwise never created automatically; people raise them.
+  Rights: PM needs PM-plan rights; PdM needs PdM or PM rights; lubrication needs lubrication or PM rights.
+* **Waiting for release** – Preventive maintenance → **Waiting for release** lists PM / PdM occurrences without a work
+  order. Tick them and press **Release selected** to create the work orders now (any date).
+* **Import work plan** – Work orders or Preventive maintenance → **Import work plan**: download the template, one row
+  per work order (equipment, type, priority, due date, planned start, hours, technicians). Put `pm_plan_code` on a
+  row to release that plan's next waiting occurrence, so it still counts in PM compliance. Only equipment in your
+  departments; assigning technicians needs the assign right. Preview first; nothing is saved if a row has an error.
+* **Export plans (Excel)** – Preventive maintenance → **Export plans (Excel)**: sheet *pm_plans* lists every plan
+  with its code (asset-frequency-trade, e.g. `PM1-DRYER-03-Q-MECH`; PdM rounds `...-CMM-RELI`); sheet *work_plan*
+  (first) already holds the waiting occurrences of the next 60 days in the Import work plan layout. Delete the rows
+  you do not want, add technicians, and import the same file.
+* **Import shutdown plan** – Shutdowns → **Import shutdown plan**: one row per work package. A new `shutdown_code`
+  creates the shutdown (name, start, end); existing package codes are updated; `predecessors` set the order and the
+  critical path is recalculated; `create_wo = yes` makes a shutdown work order for the equipment.
+* **Bulk close / cancel** – Work orders: tick work orders (or the header box for the whole page) → **Close / cancel
+  selected**. *Close* = work done (a PM counts as done), *Cancel* = not done. A reason is required and kept in each
+  work order's history. Work requests: tick open requests → **Close selected** (rejected with your reason).
+  Rights: planners, engineers, reliability engineers, managers (`wo.bulk_close`).
 
 ## 7. Storekeepers
 *Spare parts*: goods receipts (optionally against a purchase requisition line), issues and returns against work

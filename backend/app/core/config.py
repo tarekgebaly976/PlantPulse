@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     login_max_attempts: int = 5
     login_window_minutes: int = 15
     login_lockout_minutes: int = 15
+    # "Forgot password": how long the e-mailed link works, and how many links one account may ask for per hour.
+    password_reset_minutes: int = 30
+    password_reset_per_hour: int = 3
     rate_limit_per_minute: int = 300
     login_rate_limit_per_minute: int = 20
 
@@ -42,10 +45,14 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_from: str | None = None
     smtp_starttls: bool = True
+    # False: alerts and daily summaries stay inside the app (no e-mail); password-reset e-mails still go out.
+    email_notifications: bool = True
 
     scheduler_enabled: bool = True
     # Shown as a red banner on every page, e.g. "TEST copy": marks a test installation so nobody mistakes it for the real one.
     instance_label: str = ""
+    # Address of the web app, used for links in e-mails (e.g. https://cmms.example.com); empty = no link.
+    public_url: str = ""
     log_level: str = "INFO"
     log_json: bool = True
 
@@ -59,6 +66,12 @@ class Settings(BaseSettings):
     @property
     def email_enabled(self) -> bool:
         return bool(self.smtp_host and self.smtp_from)
+
+    @property
+    def password_reset_enabled(self) -> bool:
+        """Self-service reset needs e-mail and the app's own address for the link (never taken from the request's
+        Host header). Off on the public demo, whose accounts are shared by every visitor."""
+        return self.email_enabled and bool(self.public_url) and not self.instance_label.strip().upper().startswith("DEMO")
 
 
 @lru_cache

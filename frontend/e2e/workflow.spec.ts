@@ -154,7 +154,23 @@ test("condition reading above warning limit raises an alert", async ({ page }) =
 test("KPI dashboard shows unavailable KPIs with their reason and drill-down", async ({ page }) => {
   await login(page, "manager");
   await page.goto("/kpis");
+  // A period before any demo data, so the result does not depend on today's date.
+  await page.getByLabel("From", { exact: true }).fill("2020-01-01");
+  await page.getByLabel("To", { exact: true }).fill("2020-01-31");
   await expect(page.getByTestId("kpi-oee")).toContainText("Not available");
+  await expect(page.getByTestId("kpi-mttr")).toContainText("Not available");
   await page.getByTestId("kpi-overdue_work_orders").click();
   await expect(page.getByText("Formula:")).toBeVisible();
+});
+
+test("dark mode switches on, survives a reload and switches back", async ({ page }) => {
+  await login(page, "manager");
+  const html = page.locator("html");
+  await expect(html).toHaveAttribute("data-mantine-color-scheme", "light");
+  await page.getByRole("button", { name: "Dark mode" }).click();
+  await expect(html).toHaveAttribute("data-mantine-color-scheme", "dark");
+  await page.reload(); // remembered on this device
+  await expect(html).toHaveAttribute("data-mantine-color-scheme", "dark");
+  await page.getByRole("button", { name: "Light mode" }).click();
+  await expect(html).toHaveAttribute("data-mantine-color-scheme", "light");
 });

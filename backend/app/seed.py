@@ -6,7 +6,6 @@ from datetime import date, time, timedelta
 
 from sqlalchemy import select
 
-from app.cli import PAPER_DEPTS
 from app.core.db import SessionLocal
 from app.core.security import hash_password
 from app.models.assets import Asset, AssetBOM, FailureCode, Meter
@@ -30,6 +29,7 @@ from app.models.tenancy import Department, Organization, Plant
 from app.services.assets import compute_path, new_qr_token
 from app.services.common import plant_today, sync_rbac, utcnow
 from app.services.inventory import receive
+from app.services.plants import PAPER_DEPTS
 from app.services.pm import plan_occurrences
 from app.services.workflow import ensure_default_transitions
 
@@ -100,7 +100,9 @@ ASSETS = [
 ]
 
 
-def seed_demo(password: str) -> None:
+def seed_demo(password: str, profile: str = "paper") -> None:
+    """profile "paper": the sample paper mill (used by the tests); "general": the same plant renamed into a general
+    manufacturing plant (app.demo_general), used by the public demo."""
     with SessionLocal() as db, db.begin():
         sync_rbac(db)
         if db.execute(select(Organization).where(Organization.code == "DEMO")).scalar_one_or_none():
@@ -404,4 +406,16 @@ def seed_demo(password: str) -> None:
         db.flush()
         for k in ("tech1", "tech2", "tech3"):
             db.add(TeamMember(team_id=team.id, user_id=users[k].id))
-    print("Demo data loaded: organization DEMO, plant DMO. Users: " + ", ".join(e for e, *_ in USERS))
+        db.flush()
+        from app.demo_activity import add_demo_activity
+
+        activity = add_demo_activity(db, plant)
+        if profile == "general":
+            from app.demo_general import generalize
+
+            generalize(db, plant)
+    print(
+        f"Demo activity: {activity['history']} past work orders, {activity['open']} open, {activity['requests']} new requests, "
+        f"{activity['lube_overdue']} overdue lubrication tasks"
+    )
+    print(f"Demo data loaded ({profile} plant): organization DEMO, plant DMO. Users: " + ", ".join(e for e, *_ in USERS))
