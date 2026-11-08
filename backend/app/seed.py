@@ -414,6 +414,7 @@ def seed_demo(password: str, profile: str = "paper") -> None:
             from app.demo_general import generalize
 
             generalize(db, plant)
+            plant.settings = {**plant.settings, "profile": "general"}
     print(
         f"Demo activity: {activity['history']} past work orders, {activity['open']} open, {activity['requests']} new requests, "
         f"{activity['lube_overdue']} overdue lubrication tasks"

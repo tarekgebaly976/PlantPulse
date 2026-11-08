@@ -230,3 +230,30 @@ def generalize(db: Session, plant: Plant) -> None:
     for sv in db.execute(select(WOService).where(WOService.work_order_id.in_(wo_ids))).scalars():
         sv.description = to_general(sv.description) or sv.description
     db.flush()
+
+
+def generalize_existing_demo() -> str:
+    """Turn an already-loaded paper-mill DEMO organization into the general plant, in place (cli: generalize-demo).
+    Users, passwords, sessions, QR labels and everything testers added are kept; only names and codes change.
+    Safe to run twice: a plant already marked as general is left alone."""
+    from app.core.db import SessionLocal
+
+    with SessionLocal() as db, db.begin():
+        org = db.execute(select(Organization).where(Organization.code == "DEMO")).scalar_one_or_none()
+        if org is None:
+            return "No DEMO organization; nothing to do."
+        plants = list(db.execute(select(Plant).where(Plant.organization_id == org.id)).scalars())
+        done = []
+        for plant in plants:
+            settings = dict(plant.settings or {})
+            if not settings.get("demo"):
+                continue  # only sample plants are ever renamed
+            if settings.get("profile") == "general":
+                done.append(f"{plant.code} already general")
+                continue
+            generalize(db, plant)
+            settings["profile"] = "general"
+            plant.settings = settings
+            done.append(f"{plant.code} renamed to a general manufacturing plant")
+        return "; ".join(done) or "No sample plant in DEMO; nothing to do."
+

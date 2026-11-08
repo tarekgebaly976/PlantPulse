@@ -2,6 +2,7 @@
 
   python -m app.cli bootstrap --org-code ACME --org-name "Acme Paper" --plant-code PM1 --plant-name "Mill 1" \
         --admin-email admin@example.com           # password from CMMS_ADMIN_PASSWORD or interactive prompt
+  python -m app.cli generalize-demo                 # turn an existing paper-mill DEMO into the general plant, in place
   python -m app.cli seed-demo [--profile general]  # isolated DEMO organization (paper mill, or a general factory);
                                                    # password from CMMS_DEMO_PASSWORD
   python -m app.cli reset-password --email admin@example.com   # new password from CMMS_NEW_PASSWORD or prompt
@@ -144,6 +145,7 @@ def main() -> None:
     rp.add_argument("--email", required=True)
     sd = sub.add_parser("seed-demo")
     sd.add_argument("--profile", choices=["paper", "general"], default="paper", help="sample plant: paper mill or general factory")
+    sub.add_parser("generalize-demo")
     sub.add_parser("sync-rbac")
     r = sub.add_parser("run-scheduler")
     r.add_argument("--plant-code")
@@ -162,6 +164,10 @@ def main() -> None:
         from app.seed import seed_demo
 
         seed_demo(_password("CMMS_DEMO_PASSWORD"), a.profile)
+    elif a.cmd == "generalize-demo":
+        from app.demo_general import generalize_existing_demo
+
+        print(generalize_existing_demo())
     elif a.cmd == "sync-rbac":
         with SessionLocal() as db, db.begin():
             sync_rbac(db)
