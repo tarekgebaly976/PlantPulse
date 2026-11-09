@@ -10,6 +10,7 @@ import { DataTable, PageHeader, StatusBadge } from "@/components/ui";
 import { post } from "@/lib/api";
 import { fmtDate, fromLocalInput, useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { SearchBox, textMatch, useSearch } from "@/components/Search";
 
 export interface SD { id: string; code: string; name: string; scope: string | null; planned_start: string; planned_end: string; actual_start: string | null; actual_end: string | null; status: string; lessons_learned: string | null; completion_report: string | null }
 
@@ -18,6 +19,7 @@ function List() {
   const router = useRouter();
   const { can, plant } = useSession();
   const q = useQ<SD[]>("/shutdowns");
+  const [search, setSearch] = useSearch();
   const [open, setOpen] = useState(false);
   const [imp, setImp] = useState(false);
   const [f, setF] = useState({ code: "", name: "", scope: "", planned_start: "", planned_end: "" });
@@ -29,7 +31,9 @@ function List() {
         <Button onClick={() => setOpen(true)}>{t("sd.new")}</Button>
         <Button variant="light" onClick={() => setImp(true)}>{t("planning.importSd")}</Button></> : null} />
       <PlanImport kind="shutdown_plan" title={t("planning.importSd")} opened={imp} onClose={() => setImp(false)} help={t("planning.importSdHelp")} countLabel={t("planning.importSdCount")} />
-      <DataTable rows={q.data} onRow={(s) => router.push(`/shutdowns/${s.id}`)} columns={[
+      <SearchBox value={search} onChange={setSearch} />
+      <div style={{ height: 12 }} />
+      <DataTable rows={q.data?.filter((s) => textMatch(search, s.code, s.name, s.scope, s.status))} onRow={(s) => router.push(`/shutdowns/${s.id}`)} columns={[
         { key: "c", label: t("common.code"), render: (s) => s.code }, { key: "n", label: t("common.name"), render: (s) => s.name },
         { key: "s", label: t("common.start"), render: (s) => fmtDate(s.planned_start, plant?.timezone, true) }, { key: "e", label: t("common.end"), render: (s) => fmtDate(s.planned_end, plant?.timezone, true) },
         { key: "st", label: t("common.status"), render: (s) => <StatusBadge value={s.status} /> }]} />

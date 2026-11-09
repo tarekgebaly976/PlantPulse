@@ -157,6 +157,28 @@ export const en = {
     matchedParts: "lines matched to spare parts",
     historyHelp: "Work orders from the previous system are imported as closed records marked 'Migrated'. Import the work orders first, then the spare parts that reference them.",
     migrated: "Migrated" },
+  search: {
+    woHint: "WO number, title or equipment…",
+    pmHint: "Plan code, name or equipment…",
+    partHint: "Code, description, OEM P/N, maker…",
+    assetHint: "Code, name, location, OEM, serial…",
+    title: "Search",
+    placeholder: "Search equipment, work orders, parts, plans…",
+    hint: "Type at least 2 letters: a code, a name or a few words (e.g. “pump 3 bearing”). Arabic or English.",
+    none: "Nothing found for “{{q}}”.",
+    keys: "to move, Enter to open",
+    kinds: {
+      asset: "Equipment",
+      work_order: "Work orders",
+      request: "Work requests",
+      part: "Spare parts",
+      pm_plan: "PM plans",
+      lube_point: "Lubrication points",
+      pdm_point: "Condition monitoring points",
+      rca: "Root cause analyses",
+      shutdown: "Shutdowns"
+    }
+  },
   rca: {
     title: "Root cause analysis (RCA)",
     register: "RCA register",

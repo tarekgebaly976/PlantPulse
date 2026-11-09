@@ -6,7 +6,7 @@ import qrcode
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response, StreamingResponse
 from pydantic import Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from app.services import assets as svc
 from app.services import failure_modes as fm
 from app.services import labels
 from app.services.common import audit, utcnow
+from app.services.search import where_text
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -127,9 +128,9 @@ def list_assets(
     under: uuid.UUID | None = None,
 ) -> dict:
     stmt = _dept_filter(ctx, select(Asset).where(Asset.plant_id == ctx.plant_id))
-    if q:
-        like = f"%{q}%"
-        stmt = stmt.where(or_(Asset.code.ilike(like), Asset.name.ilike(like), Asset.serial_number.ilike(like)))
+    stmt = where_text(
+        stmt, q, Asset.code, Asset.name, Asset.name_ar, Asset.serial_number, Asset.location, Asset.oem, Asset.model, Asset.equipment_type
+    )
     if department_id:
         stmt = stmt.where(Asset.department_id == department_id)
     if level:

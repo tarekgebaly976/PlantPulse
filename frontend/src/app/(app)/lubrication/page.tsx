@@ -12,6 +12,7 @@ import { AssetPicker, DataTable, DeptSelect, PageHeader, StatusBadge, UserPicker
 import { post } from "@/lib/api";
 import { fmtDate, fmtNum, useAssetCodes, useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { SearchBox, textMatch, useSearch } from "@/components/Search";
 import type { Asset, Page } from "@/lib/types";
 
 interface Lub { id: string; code: string; manufacturer: string; product: string; kind: string; viscosity_grade: string | null; specification: string | null }
@@ -48,6 +49,12 @@ function Lube() {
   const addPoint = useMut(() => post("/lubrication/points", { ...pf, quantity: Number(pf.quantity), frequency_days: Number(pf.frequency_days), component: pf.component || null, method: pf.method || null }), { onDone: () => setModal(null) });
   const addAlt = useMut(() => post(`/lubrication/lubricants/${af.lub}/alternatives`, { alternative_id: af.alt, compatibility_note: af.note }), { onDone: () => setModal(null) });
   const today = new Date().toISOString().slice(0, 10);
+  const [search, setSearch] = useSearch();
+  const pointById = new Map((points.data ?? []).map((p) => [p.code, p]));
+  const fPoints = (points.data ?? []).filter((p) => textMatch(search, p.code, p.component, p.method, amap.get(p.asset_id), lmap.get(p.lubricant_id), p.route_id ? rmap.get(p.route_id) : ""));
+  const fRoutes = (routes.data ?? []).filter((r) => textMatch(search, r.code, r.name));
+  const fTasks = (tasks.data ?? []).filter((x) => { const pt = pointById.get(x.point_code); return textMatch(search, x.point_code, x.status, pt?.component, pt ? amap.get(pt.asset_id) : ""); });
+  const fLubs = (lubs.data ?? []).filter((l) => textMatch(search, l.code, l.manufacturer, l.product, l.kind, l.viscosity_grade, l.specification));
   return (
     <>
       <PageHeader title={t("nav.lubrication")} actions={can("lube.manage") ? <>
@@ -62,14 +69,15 @@ function Lube() {
       <LabelPrint kind="lube" opened={labels} onClose={() => setLabels(false)} />
       <Alert color="yellow" mb="md">{t("lube.mixWarning")}</Alert>
       {msg && <Alert color="teal" mb="md" withCloseButton onClose={() => setMsg(null)}>{msg}</Alert>}
-      <Tabs defaultValue="points">
+      <SearchBox value={search} onChange={setSearch} w={340} />
+      <Tabs defaultValue="points" mt="sm">
         <Tabs.List>
           <Tabs.Tab value="points">{t("lube.points")}</Tabs.Tab><Tabs.Tab value="routes">{t("lube.routes")}</Tabs.Tab>
           <Tabs.Tab value="tasks">{t("lube.tasks")}</Tabs.Tab><Tabs.Tab value="lubricants">{t("lube.lubricants")}</Tabs.Tab><Tabs.Tab value="consumption">{t("lube.consumption")}</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="points" pt="md">
           {can("lube.manage") && <Group mb="sm"><RemovePlans path="/lubrication/points/remove" ids={picked} onDone={() => setPicked([])} /></Group>}
-          <DataTable rows={points.data} selected={picked} onSelect={can("lube.manage") ? setPicked : undefined} columns={[
+          <DataTable rows={points.data && fPoints} selected={picked} onSelect={can("lube.manage") ? setPicked : undefined} columns={[
             { key: "c", label: t("common.code"), render: (p) => p.code }, { key: "a", label: t("common.asset"), render: (p) => <Link href={`/assets/${p.asset_id}`}>{amap.get(p.asset_id)}</Link> },
             { key: "m", label: "Component", render: (p) => p.component }, { key: "l", label: t("lube.lubricant"), render: (p) => lmap.get(p.lubricant_id) },
             { key: "q", label: t("common.quantity"), render: (p) => `${fmtNum(p.quantity)} ${p.unit}` },
@@ -77,20 +85,20 @@ function Lube() {
             { key: "d", label: t("pm.nextDue"), render: (p) => <span style={{ color: p.next_due_date && p.next_due_date < today ? "var(--mantine-color-red-7)" : undefined }}>{fmtDate(p.next_due_date)}</span> }]} />
         </Tabs.Panel>
         <Tabs.Panel value="routes" pt="md">
-          <DataTable rows={routes.data} columns={[
+          <DataTable rows={routes.data && fRoutes} columns={[
             { key: "c", label: t("common.code"), render: (r) => r.code }, { key: "n", label: t("common.name"), render: (r) => r.name },
             { key: "p", label: t("lube.points"), render: (r) => (points.data ?? []).filter((p) => p.route_id === r.id).length },
             { key: "g", label: t("common.actions"), render: (r) => can("lube.manage") && <Button size="xs" loading={gen.isPending} onClick={() => gen.mutate(r.id)}>{t("lube.generate")}</Button> }]} />
         </Tabs.Panel>
         <Tabs.Panel value="tasks" pt="md">
-          <DataTable rows={tasks.data} columns={[
+          <DataTable rows={tasks.data && fTasks} columns={[
             { key: "p", label: t("lube.points"), render: (x) => x.point_code }, { key: "d", label: t("common.dueDate"), render: (x) => x.due_date },
             { key: "s", label: t("common.status"), render: (x) => <StatusBadge value={x.status} /> }, { key: "dd", label: t("common.date"), render: (x) => fmtDate(x.done_date) },
             { key: "q", label: t("lube.actualQty"), render: (x) => fmtNum(x.quantity_actual) },
             { key: "w", label: "WO", render: (x) => (x.work_order_id ? <Link href={`/work-orders/${x.work_order_id}`}>→</Link> : "") }]} />
         </Tabs.Panel>
         <Tabs.Panel value="lubricants" pt="md">
-          <DataTable rows={lubs.data} columns={[
+          <DataTable rows={lubs.data && fLubs} columns={[
             { key: "c", label: t("common.code"), render: (l) => l.code }, { key: "p", label: t("lube.lubricant"), render: (l) => `${l.manufacturer} ${l.product}` },
             { key: "k", label: t("common.type"), render: (l) => l.kind }, { key: "v", label: t("lube.viscosity"), render: (l) => l.viscosity_grade ?? l.specification }]} />
         </Tabs.Panel>

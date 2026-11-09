@@ -12,6 +12,7 @@ import { AssetPicker, DataTable, PageHeader, Pager, StatusBadge, TradeInput } fr
 import { download, post, put } from "@/lib/api";
 import { fmtDate, useAssetCodes, useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { SearchBox, textMatch, useSearch } from "@/components/Search";
 import type { Page } from "@/lib/types";
 
 interface Plan { id: string; code: string; name: string; asset_id: string; job_plan_id: string; trigger: string; frequency_unit: string | null; frequency_interval: number | null;
@@ -162,13 +163,13 @@ function Modes() {
 }
 
 /** Occurrences without a work order: select and release now (Manual departments, or ahead of the lead window). */
-function Waiting({ amap }: { amap: Map<string, string> }) {
+function Waiting({ amap, search }: { amap: Map<string, string>; search?: string }) {
   const { t } = useTranslation();
   const { can } = useSession();
   const [off, setOff] = useState(0);
   const [sel, setSel] = useState<string[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
-  const q = useQ<Page<Occ>>("/pm/occurrences", { waiting: true, limit: 100, offset: off });
+  const q = useQ<Page<Occ>>("/pm/occurrences", { waiting: true, limit: 100, offset: off, q: search });
   const codes = useAssetCodes((q.data?.items ?? []).map((o) => o.asset_id));
   const rel = useMut(() => post<{ work_orders: string[] }>("/pm/occurrences/release", { occurrence_ids: sel }), { success: false,
     onDone: (r) => { setMsg(t("planning.released", { n: r.work_orders.length })); setSel([]); } });
@@ -201,15 +202,16 @@ function PM() {
   const [imp, setImp] = useState(false);
   const [woImp, setWoImp] = useState(false);
   const [runRes, setRunRes] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch, dq] = useSearch();
+  const sq = dq || undefined;
   const [planOff, setPlanOff] = useState(0);
   const [occOff, setOccOff] = useState(0);
   const [showOff, setShowOff] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
-  const plans = useQ<Page<Plan>>("/pm/plans", { limit: 100, offset: planOff, q: search, ...(showOff ? {} : { active: true }) });
+  const plans = useQ<Page<Plan>>("/pm/plans", { limit: 100, offset: planOff, q: sq, ...(showOff ? {} : { active: true }) });
   const jobs = useQ<JobPlan[]>("/pm/job-plans");
-  const occ = useQ<Page<Occ>>("/pm/occurrences", { limit: 100, offset: occOff, status: ["scheduled", "generated", "deferred", "deferral_requested", "cancellation_requested"] });
-  const approvals = useQ<Page<Occ>>("/pm/occurrences", { limit: 200, status: ["deferral_requested", "cancellation_requested"] });
+  const occ = useQ<Page<Occ>>("/pm/occurrences", { limit: 100, offset: occOff, q: sq, status: ["scheduled", "generated", "deferred", "deferral_requested", "cancellation_requested"] });
+  const approvals = useQ<Page<Occ>>("/pm/occurrences", { limit: 200, q: sq, status: ["deferral_requested", "cancellation_requested"] });
   const amap = useAssetCodes([...(plans.data?.items ?? []), ...(occ.data?.items ?? []), ...(approvals.data?.items ?? [])].map((x) => x.asset_id));
   const run = useMut(() => post<{ work_orders_created: number; occurrences_created: number }>("/pm/scheduler/run", {}), { success: false,
     onDone: (r) => setRunRes(`${r.occurrences_created} occurrences, ${r.work_orders_created} work orders created`) });
@@ -235,7 +237,8 @@ function PM() {
       <PlanImport kind="pm_plans" title={t("planImport.pm")} opened={imp} onClose={() => setImp(false)} />
       <PlanImport kind="work_orders" title={t("planning.importWoTitle")} opened={woImp} onClose={() => setWoImp(false)} help={t("planning.importWoHelp")} countLabel={t("planning.importWoCount")} />
       {runRes && <Alert color="teal" mb="md" withCloseButton onClose={() => setRunRes(null)}>{runRes}</Alert>}
-      <Tabs defaultValue={sp.get("tab") ?? "plans"}>
+      <SearchBox value={search} onChange={(v) => { setSearch(v); setPlanOff(0); setOccOff(0); }} placeholder={t("search.pmHint")} w={360} />
+      <Tabs defaultValue={sp.get("tab") ?? "plans"} mt="sm">
         <Tabs.List>
           <Tabs.Tab value="plans">{t("pm.plans")}</Tabs.Tab><Tabs.Tab value="schedule">{t("pm.occurrences")}</Tabs.Tab>
           <Tabs.Tab value="waiting">{t("planning.waiting")}</Tabs.Tab><Tabs.Tab value="modes">{t("planning.modesTab")}</Tabs.Tab>
@@ -243,7 +246,6 @@ function PM() {
         </Tabs.List>
         <Tabs.Panel value="plans" pt="md">
           <Group mb="sm" align="center">
-            <TextInput maw={360} placeholder={t("common.search")} value={search} onChange={(e) => { setSearch(e.currentTarget.value); setPlanOff(0); }} />
             <Switch label={t("removal.showInactive")} checked={showOff} onChange={(e) => { setShowOff(e.currentTarget.checked); setPlanOff(0); }} />
             {can("pm.manage") && <RemovePlans path="/pm/plans/remove" ids={picked} onDone={() => setPicked([])} />}
           </Group>
@@ -257,11 +259,11 @@ function PM() {
           <Pager page={plans.data} setPage={(p) => setPlanOff((p - 1) * 100)} />
         </Tabs.Panel>
         <Tabs.Panel value="schedule" pt="md"><DataTable rows={occ.data?.items} columns={occCols} /><Pager page={occ.data} setPage={(p) => setOccOff((p - 1) * 100)} /></Tabs.Panel>
-        <Tabs.Panel value="waiting" pt="md"><Waiting amap={amap} /></Tabs.Panel>
+        <Tabs.Panel value="waiting" pt="md"><Waiting amap={amap} search={sq} /></Tabs.Panel>
         <Tabs.Panel value="modes" pt="md"><Modes /></Tabs.Panel>
         <Tabs.Panel value="approvals" pt="md"><DataTable rows={approvals.data?.items} columns={occCols} /></Tabs.Panel>
         <Tabs.Panel value="jobs" pt="md">
-          <DataTable rows={jobs.data} columns={[
+          <DataTable rows={jobs.data?.filter((j) => textMatch(search, j.code, j.name, j.trade))} columns={[
             { key: "c", label: t("common.code"), render: (j) => j.code }, { key: "n", label: t("common.name"), render: (j) => j.name },
             { key: "t", label: t("pm.trade"), render: (j) => j.trade }, { key: "h", label: t("wo.estHours"), render: (j) => j.estimated_hours },
             { key: "s", label: t("wo.safety"), render: (j) => [j.requires_loto && "LOTO", j.requires_permit && "Permit", j.requires_testing && "Test"].filter(Boolean).join(", ") }]} />

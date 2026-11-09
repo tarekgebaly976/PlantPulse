@@ -4,7 +4,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import Field, model_validator
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,7 @@ from app.schemas.common import ORM, In
 from app.services import plan_removal
 from app.services import pm as svc
 from app.services.common import audit, plant_today
+from app.services.search import where_text
 from app.services.system import record_job
 
 router = APIRouter(prefix="/pm", tags=["preventive maintenance"])
@@ -219,8 +220,7 @@ def list_plans(
     q: str | None = None,
 ) -> dict:
     stmt = select(PMPlan).where(PMPlan.plant_id == ctx.plant_id, ctx.in_department(PMPlan.asset_id))
-    if q:
-        stmt = stmt.where(or_(PMPlan.code.ilike(f"%{q}%"), PMPlan.name.ilike(f"%{q}%")))
+    stmt = where_text(stmt, q, PMPlan.code, PMPlan.name, asset_col=PMPlan.asset_id, plant_id=ctx.plant_id)
     if asset_id:
         stmt = stmt.where(PMPlan.asset_id == asset_id)
     if active is not None:
@@ -298,8 +298,19 @@ def list_occurrences(
     due_from: date | None = None,
     due_to: date | None = None,
     waiting: bool = False,  # held for release: no work order yet (Manual departments, or not yet in the lead window)
+    search: str | None = Query(None, alias="q"),  # plan code / name or its equipment
 ) -> dict:
     q = select(PMOccurrence).where(PMOccurrence.plant_id == ctx.plant_id)
+    if search and search.strip():
+        plans = where_text(
+            select(PMPlan.id).where(PMPlan.plant_id == ctx.plant_id),
+            search,
+            PMPlan.code,
+            PMPlan.name,
+            asset_col=PMPlan.asset_id,
+            plant_id=ctx.plant_id,
+        )
+        q = q.where(PMOccurrence.pm_plan_id.in_(plans))
     if waiting:
         q = q.where(PMOccurrence.work_order_id.is_(None), PMOccurrence.status.in_([OccurrenceStatus.SCHEDULED, OccurrenceStatus.DEFERRED]))
     if ctx.department_ids:

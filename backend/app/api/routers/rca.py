@@ -28,6 +28,7 @@ from app.schemas.common import In
 from app.services import rca as svc
 from app.services.common import audit, plant_today, utcnow
 from app.services.notifications import notify, users_with_permission
+from app.services.search import where_text
 
 router = APIRouter(prefix="/rca", tags=["rca"])
 
@@ -187,9 +188,7 @@ def _list_query(db: Session, ctx: Ctx, status: str | None, q: str | None, mine: 
         stmt = stmt.where(RCA.status == RCAStatus(status))
     if asset_id:
         stmt = stmt.where(RCA.asset_id == asset_id)
-    if q:
-        like = f"%{q}%"
-        stmt = stmt.where(or_(RCA.number.ilike(like), RCA.title.ilike(like)))
+    stmt = where_text(stmt, q, RCA.number, RCA.title, asset_col=RCA.asset_id, plant_id=ctx.plant_id)
     if mine or not ctx.has("rca.view"):
         me = ctx.user.id
         stmt = stmt.where(

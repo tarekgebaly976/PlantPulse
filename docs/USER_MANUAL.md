@@ -18,6 +18,14 @@ if your account is department-restricted).
 ## 2. Install on a phone or tablet
 Open the site in Chrome/Edge (Android) or Safari (iOS) → *Add to Home screen*. The app opens on **My work**.
 
+## 2a. Searching
+The magnifier in the top bar (or **Ctrl+K**, or **/**) searches everything you are allowed to see at once: equipment,
+work orders, work requests, spare parts, PM plans, lubrication and condition-monitoring points, RCAs and shutdowns.
+Every list also has its own search box (in Assets it works in the hierarchy view too). Type a code, a name or a few
+words in any order — every word must be found, e.g. `crusher motor` or `MIX bearing`. Work orders, requests, plans and
+points are also found by their equipment's code or name. Arabic spellings of أ/إ/آ/ا, ة/ه and ى/ي are treated as the
+same letter. A word of one or two characters must be the start of a word (`OS` finds `OS1`, but `1` does not match the 1 inside `WO-P1-…`).
+
 ## 3. Reporting a problem (everyone with "Work requests")
 *Work requests → New work request* (or the red button on an asset page / after scanning its QR code). Choose the asset,
 describe the symptom, tick **Breakdown** if the machine is stopped — supervisors are alerted immediately.

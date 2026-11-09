@@ -11,6 +11,7 @@ import { DataTable, PageHeader, Pager, StatusBadge } from "@/components/ui";
 import { download, put } from "@/lib/api";
 import { fmtDate, fmtNum, useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { SearchBox, useSearch } from "@/components/Search";
 import type { FailureCode, Page } from "@/lib/types";
 
 export interface RcaRow {
@@ -100,10 +101,10 @@ function List() {
   const { can, plant } = useSession();
   const [status, setStatus] = useState("active");
   const [mine, setMine] = useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch, dsearch] = useSearch();
   const [page, setPage] = useState(0);
   const [rules, setRules] = useState(false);
-  const query = { status: status === "all" ? undefined : status, mine, q: search || undefined, limit: 50, offset: page * 50 };
+  const query = { status: status === "all" ? undefined : status, mine, q: dsearch || undefined, limit: 50, offset: page * 50 };
   const q = useQ<Page<RcaRow>>("/rca", query);
   const st = useQ<Stats>("/rca/stats");
   const s = st.data;
@@ -133,7 +134,7 @@ function List() {
           { value: "active", label: `${t("rca.filters.candidate")} + ${t("rca.filters.open")}` },
           { value: "candidate", label: t("rca.filters.candidate") }, { value: "open", label: t("rca.filters.open") },
           { value: "closed", label: t("rca.filters.closed") }, { value: "all", label: t("rca.filters.all") }]} />
-        <TextInput placeholder={t("common.search")} value={search} onChange={(e) => { setSearch(e.currentTarget.value); setPage(0); }} w={220} />
+        <SearchBox value={search} onChange={(v) => { setSearch(v); setPage(0); }} w={240} />
         <Checkbox label={t("rca.filters.mine")} checked={mine} onChange={(e) => { setMine(e.currentTarget.checked); setPage(0); }} />
       </Group>
       <DataTable rows={q.data?.items} onRow={(r) => router.push(`/rca/${r.id}`)} columns={[

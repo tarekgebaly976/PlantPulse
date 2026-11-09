@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import Ctx, require
@@ -33,6 +33,7 @@ from app.services import part_usage as usage
 from app.services import workorders as svc
 from app.services.common import audit, next_number, plant_today, utcnow
 from app.services.notifications import notify_permission
+from app.services.search import where_text
 from app.services.workflow import allowed_next
 
 router = APIRouter(tags=["work orders"])
@@ -116,8 +117,12 @@ def list_requests(
     page: PageQ = Depends(),
     status: RequestStatus | None = None,
     mine: bool = False,
+    search: str | None = Query(None, alias="q"),
 ) -> dict:
     q = select(WorkRequest).where(WorkRequest.plant_id == ctx.plant_id, ctx.in_department(WorkRequest.asset_id))
+    q = where_text(
+        q, search, WorkRequest.number, WorkRequest.title, WorkRequest.symptoms, asset_col=WorkRequest.asset_id, plant_id=ctx.plant_id
+    )
     if status:
         q = q.where(WorkRequest.status == status)
     if mine:
@@ -365,9 +370,9 @@ def list_work_orders(
 
     stmt = select(WorkOrder).where(WorkOrder.plant_id == ctx.plant_id)
     stmt = stmt.where(ctx.dept_where(WorkOrder.department_id))
-    if q:
-        like = f"%{q}%"
-        stmt = stmt.where(or_(WorkOrder.number.ilike(like), WorkOrder.title.ilike(like)))
+    stmt = where_text(
+        stmt, q, WorkOrder.number, WorkOrder.title, WorkOrder.external_ref, asset_col=WorkOrder.asset_id, plant_id=ctx.plant_id
+    )
     if status:
         stmt = stmt.where(WorkOrder.status.in_(status))
     if open_only:
@@ -624,7 +629,9 @@ def wo_detail(wo_id: uuid.UUID, ctx: Ctx = Depends(require("wo.view")), db: Sess
 def _rca_of(db: Session, wo_id: uuid.UUID) -> dict | None:
     from app.models.rca import RCA, RCAWorkOrder
 
-    r = db.execute(select(RCA).join(RCAWorkOrder, RCAWorkOrder.rca_id == RCA.id).where(RCAWorkOrder.work_order_id == wo_id)).scalar_one_or_none()
+    r = db.execute(
+        select(RCA).join(RCAWorkOrder, RCAWorkOrder.rca_id == RCA.id).where(RCAWorkOrder.work_order_id == wo_id)
+    ).scalar_one_or_none()
     return {"id": r.id, "number": r.number, "status": r.status} if r else None
 
 

@@ -11,6 +11,7 @@ import { DataTable, PageHeader, Pager, StatusBadge, UserPicker } from "@/compone
 import { download, post } from "@/lib/api";
 import { fmtDate, fmtMoney, useAssetCodes, useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { SearchBox, useSearch } from "@/components/Search";
 import type { Asset, Page, WorkOrder } from "@/lib/types";
 
 const STATUSES = ["triage", "awaiting_approval", "approved", "planned", "scheduled", "in_progress", "on_hold", "awaiting_review", "completed", "closed", "cancelled"];
@@ -21,7 +22,7 @@ function List() {
   const router = useRouter();
   const sp = useSearchParams();
   const { can, plant } = useSession();
-  const [q, setQ] = useState("");
+  const [q, setQ, dq] = useSearch();
   const [status, setStatus] = useState<string[]>(sp.get("status") ? [sp.get("status") as string] : []);
   const [type, setType] = useState<string[]>(sp.get("type") ? [sp.get("type") as string] : []);
   const [openOnly, setOpenOnly] = useState(sp.get("open") === "1");
@@ -30,7 +31,7 @@ function List() {
   const [sel, setSel] = useState<string[]>([]);
   const [bulk, setBulk] = useState(false);
   const [tech, setTech] = useState<string | null>(null);
-  const data = useQ<Page<WorkOrder>>("/work-orders", { q, status, type, open_only: openOnly, overdue, limit: 50, offset });
+  const data = useQ<Page<WorkOrder>>("/work-orders", { q: dq || undefined, status, type, open_only: openOnly, overdue, limit: 50, offset });
   const amap = useAssetCodes((data.data?.items ?? []).map((w) => w.asset_id));
   const [finish, setFinish] = useState(false);
   const [imp, setImp] = useState(false);
@@ -51,7 +52,7 @@ function List() {
         {can("report.export") && <Button variant="default" onClick={() => void download("/exports/work-orders.xlsx")}>{t("common.export")} XLSX</Button>}
       </>}>
         <Group gap="xs" wrap="wrap">
-          <TextInput placeholder={t("common.search")} value={q} onChange={(e) => { setQ(e.currentTarget.value); setOffset(0); }} w={200} />
+          <SearchBox value={q} onChange={(v) => { setQ(v); setOffset(0); }} placeholder={t("search.woHint")} w={280} />
           <MultiSelect placeholder={t("common.status")} data={STATUSES.map((s) => ({ value: s, label: t(`status.${s}`) }))} value={status} onChange={setStatus} w={240} clearable />
           <MultiSelect placeholder={t("common.type")} data={TYPES.map((s) => ({ value: s, label: t(`woType.${s}`) }))} value={type} onChange={setType} w={220} clearable />
           <Switch label={t("wo.openOnly")} checked={openOnly} onChange={(e) => setOpenOnly(e.currentTarget.checked)} />

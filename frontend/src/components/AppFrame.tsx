@@ -14,6 +14,7 @@ import { post } from "@/lib/api";
 import { useMut, useQ } from "@/lib/hooks";
 import { LANGS } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
+import { GlobalSearch } from "./Search";
 import { Loading } from "./ui";
 
 type NavItem = { href: string; key: string; icon: typeof IconDashboard; perm?: string };
@@ -104,6 +105,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
               <Select size="xs" w={150} aria-label={t("app.plant")} value={plant.plant_id} onChange={(v) => v && setPlant(v)} allowDeselect={false}
                 data={me.plants.map((p) => ({ value: p.plant_id, label: p.plant_code }))} />
             ) : <Badge variant="outline" visibleFrom="sm">{plant.plant_code}</Badge>}
+            <GlobalSearch />
             <Indicator disabled={!notif.data?.unread} label={notif.data?.unread} size={16} color="red">
               <ActionIcon variant="subtle" component={Link} href="/notifications" aria-label={t("nav.notifications")}><IconBell size={20} /></ActionIcon>
             </Indicator>

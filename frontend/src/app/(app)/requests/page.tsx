@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Checkbox, Modal, Select, Stack, Text, TextInput, Textarea } from "@mantine/core";
+import { Alert, Button, Checkbox, Group, Modal, Select, Stack, Text, TextInput, Textarea } from "@mantine/core";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -9,6 +9,7 @@ import { AssetPicker, DataTable, PageHeader, Pager, StatusBadge } from "@/compon
 import { post } from "@/lib/api";
 import { fmtDate, useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { SearchBox, useSearch } from "@/components/Search";
 import type { FailureCode, Page } from "@/lib/types";
 
 export interface WReq { id: string; number: string; asset_id: string; title: string; description: string | null; symptoms: string | null;
@@ -62,7 +63,8 @@ function List() {
   const [open, setOpen] = useState(sp.get("new") === "1");
   const [status, setStatus] = useState<string | null>(can("request.triage") ? "submitted" : null);
   const [offset, setOffset] = useState(0);
-  const q = useQ<Page<WReq>>("/work-requests", { status, limit: 50, offset, mine: !can("wo.view") });
+  const [search, setSearch, debounced] = useSearch();
+  const q = useQ<Page<WReq>>("/work-requests", { status, limit: 50, offset, mine: !can("wo.view"), q: debounced || undefined });
   const [sel, setSel] = useState<string[]>([]);
   const [closing, setClosing] = useState(false);
   const [comment, setComment] = useState("");
@@ -76,8 +78,11 @@ function List() {
       <PageHeader title={t("nav.requests")} actions={<>
         {canBulk && sel.length > 0 && <Button variant="light" color="orange" onClick={() => { setResult(null); setClosing(true); }}>{t("planning.reqClose")} ({sel.length})</Button>}
         <Button color="red" onClick={() => setOpen(true)}>{t("req.new")}</Button></>}>
-        <Select w={200} clearable value={status} onChange={setStatus} placeholder={t("common.status")}
+<Group gap="sm">
+        <SearchBox value={search} onChange={(v) => { setSearch(v); setOffset(0); }} />
+        <Select w={200} clearable value={status} onChange={(v) => { setStatus(v); setOffset(0); }} placeholder={t("common.status")}
           data={["submitted", "accepted", "rejected"].map((s) => ({ value: s, label: t(`status.${s}`) }))} />
+        </Group>
       </PageHeader>
       <DataTable rows={q.data?.items} onRow={(r) => router.push(`/requests/${r.id}`)} columns={[
         ...(canBulk ? [{ key: "sel", label: <Checkbox aria-label="select all" checked={items.some((r) => r.status === "submitted") && items.filter((r) => r.status === "submitted").every((r) => sel.includes(r.id))}
