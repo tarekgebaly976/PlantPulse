@@ -16,7 +16,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [demoUrl, setDemoUrl] = useState<string | null>(null);
   useEffect(() => { if (me) router.replace("/"); }, [me, router]);
+  useEffect(() => {
+    fetch("/api/v1/meta").then((r) => (r.ok ? r.json() : null)).then((m: { try_demo_url?: string | null } | null) => setDemoUrl(m?.try_demo_url ?? null)).catch(() => undefined);
+  }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -51,6 +55,13 @@ export default function LoginPage() {
             <PasswordInput label={t("auth.password")} autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.currentTarget.value)} name="password" />
             <Anchor component={Link} href="/forgot-password" size="sm" mt={-8} ta="end" data-testid="forgot-link">{t("auth.forgot")}</Anchor>
             <Button type="submit" loading={busy} fullWidth className="tap-target">{t("auth.submit")}</Button>
+            {demoUrl && (
+              <Paper withBorder p="sm" radius="md" bg="var(--pp-page-bg)" data-testid="try-demo">
+                <Text size="sm" fw={600}>{t("auth.noAccount")}</Text>
+                <Text size="xs" c="dimmed" mb={8}>{t("auth.tryDemoHint")}</Text>
+                <Button component="a" href={demoUrl} target="_blank" rel="noopener" variant="light" fullWidth>{t("auth.tryDemo")}</Button>
+              </Paper>
+            )}
             <Text size="xs" c="dimmed">{t("auth.sessionNote")}</Text>
             <Text size="xs" ta="center"><a href="/privacy" style={{ color: "inherit" }}>Privacy policy / سياسة الخصوصية</a></Text>
             <Group justify="center" gap="xs">

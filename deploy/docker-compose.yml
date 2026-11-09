@@ -18,6 +18,7 @@ x-api-env: &api-env
   CMMS_SMTP_FROM: ${CMMS_SMTP_FROM:-}
   CMMS_EMAIL_NOTIFICATIONS: ${CMMS_EMAIL_NOTIFICATIONS:-true}  # false: only password-reset e-mails (scripts/main-mail.sh)
   CMMS_PUBLIC_URL: https://${CMMS_DOMAIN:-localhost}
+  CMMS_PRODUCT_DOMAIN: ${PRODUCT_DOMAIN:-}  # sign-in page: "Try the demo" link to the website
 
 services:
   db:

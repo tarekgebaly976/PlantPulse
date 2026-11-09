@@ -146,7 +146,12 @@ def create_app() -> FastAPI:
     def meta() -> dict:
         """Public facts the sign-in page needs before anyone is logged in."""
         s = get_settings()
-        return {"instance_label": s.instance_label, "password_reset": s.password_reset_enabled}
+        demo = bool(s.product_domain) and not s.instance_label.strip()  # the real system only, not the demo / test copies
+        return {
+            "instance_label": s.instance_label,
+            "password_reset": s.password_reset_enabled,
+            "try_demo_url": f"https://{s.product_domain}/#try" if demo else None,
+        }
 
     @app.get(f"{API}/health/ready", tags=["health"])
     def ready() -> JSONResponse:
