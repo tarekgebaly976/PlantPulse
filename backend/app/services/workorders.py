@@ -268,6 +268,11 @@ def change_status(db: Session, ctx: Ctx, wo: WorkOrder, to: WOStatus, comment: s
     if to == WOStatus.CLOSED:
         wo.closed_at = now
         _release_reservations(db, wo)
+    if to in (WOStatus.COMPLETED, WOStatus.CLOSED):
+        from app.services.rca import evaluate as rca_evaluate
+
+        db.flush()
+        rca_evaluate(db, plant, wo, ctx.user.id)  # major breakdown? → RCA candidate (rules in plant settings)
     if to == WOStatus.CANCELLED:
         _release_reservations(db, wo)
         if wo.pm_occurrence_id:

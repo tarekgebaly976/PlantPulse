@@ -258,6 +258,49 @@ def _next_period(db: Session, s: k.Scope) -> dict[str, Any]:
     return {"start": n0.isoformat(), "end": n1.isoformat(), "pm_total": int(total), "pms": pms, "shutdowns": shutdowns}
 
 
+def _rca(db: Session, s: k.Scope) -> dict[str, Any]:
+    """RCA figures for the period and the RCAs proposed in it or still open (most recent first)."""
+    from app.models.assets import Asset, FailureCode
+    from app.models.enums import ACTIVE_RCA_STATUSES, RCAActionStatus, RCAStatus
+    from app.models.rca import RCA, RCAAction
+    from app.services import rca as rca_svc
+
+    where = s.dept(RCA.department_id) if s.scoped else None
+    st = rca_svc.stats(db, s.plant.id, s.start, s.end, where)
+    q = select(RCA).where(RCA.plant_id == s.plant.id, RCA.status != RCAStatus.NOT_REQUIRED)
+    if where is not None:
+        q = q.where(where)
+    rows = list(db.execute(q.order_by(RCA.created_at.desc())).scalars())
+    start_s, end_s = s.start.isoformat(), s.end.isoformat()
+    tz = s.plant.timezone
+    from zoneinfo import ZoneInfo
+
+    def local(dt: Any) -> str:
+        return dt.astimezone(ZoneInfo(tz)).date().isoformat() if dt else ""
+
+    keep = [
+        r
+        for r in rows
+        if r.status in ACTIVE_RCA_STATUSES or start_s <= local(r.created_at) <= end_s or start_s <= local(r.closed_at) <= end_s
+    ]
+    items = []
+    for r in keep[:10]:
+        a = db.get(Asset, r.asset_id)
+        fc = db.get(FailureCode, r.failure_code_id) if r.failure_code_id else None
+        acts = list(db.execute(select(RCAAction).where(RCAAction.rca_id == r.id)).scalars())
+        items.append(
+            {
+                "number": r.number,
+                "asset": a.code if a else "",
+                "mode": f"{fc.code} {fc.description}" if fc else "—",
+                "status": r.status.value,
+                "root_cause": "; ".join(c.get("text", "") for c in (r.root_causes or []))[:90] or "—",
+                "actions": f"{len([x for x in acts if x.status == RCAActionStatus.DONE])}/{len([x for x in acts if x.status != RCAActionStatus.CANCELLED])}",
+            }
+        )
+    return {**st, "items": items, "total": len(keep)}
+
+
 def collect(db: Session, s: k.Scope) -> dict[str, Any]:
     today = plant_today(s.plant)
     ps, pe = previous_period(s.start, s.end)
@@ -289,6 +332,7 @@ def collect(db: Session, s: k.Scope) -> dict[str, Any]:
             "budget_pct": cur["budget_vs_actual"]["value"],
         },
         "emergencies": _emergencies(db, s),
+        "rca": _rca(db, s),
         "next": _next_period(db, s),
     }
 
@@ -730,6 +774,27 @@ def build_pptx(d: dict[str, Any], lang: str) -> bytes:
             dk.text(s, M, Inches(6.8), W - 2 * M, Inches(0.4), dk.t("of_total", n=e["total"]), 11, color=MUTED)
     else:
         dk.text(s, M, Inches(1.6), W - 2 * M, Inches(0.6), dk.t("no_emergencies"), 16, color=MUTED)
+
+    # 8b. root cause analysis
+    rc = d.get("rca")
+    if rc and (rc["items"] or rc["opened"]):
+        s = dk.slide(dk.t("rca_title"), sub)
+        lines = [
+            f"{dk.t('rca_opened')}: {rc['opened']} ({dk.t('rca_started')} {rc['started']}) · {dk.t('rca_closed')}: {rc['closed']}",
+            f"{dk.t('rca_open_now')}: {rc['open_now']} · " + dk.t("rca_overdue", a=rc["overdue_analyses"], b=rc["actions_overdue"]),
+            f"{dk.t('rca_avg_days')}: {fmt_num(rc['avg_days_to_close'])} · {dk.t('rca_recurrence')}: "
+            + ("—" if rc["recurrence_pct"] is None else f"{fmt_num(rc['recurrence_pct'])}%"),
+        ]
+        dk.text(s, M, Inches(1.4), W - 2 * M, Inches(1.2), lines, 15, bullets=True)
+        if rc["items"]:
+            rows = [["RCA", dk.t("asset"), dk.t("rca_mode"), dk.t("status"), dk.t("root_cause"), dk.t("rca_actions")]]
+            rows += [
+                [i["number"], i["asset"], i["mode"][:40], name(WO_STATUS, i["status"], L), i["root_cause"], i["actions"]]
+                for i in rc["items"]
+            ]
+            dk.table(s, M, Inches(2.7), W - 2 * M, rows, [1.4, 1.2, 2.2, 1.5, 4.0, 0.9])
+            if rc["total"] > len(rc["items"]):
+                dk.text(s, M, Inches(6.9), W - 2 * M, Inches(0.4), dk.t("of_total", n=rc["total"]), 11, color=MUTED)
 
     # 9. lubrication and condition monitoring
     s = dk.slide(dk.t("condition"), sub)

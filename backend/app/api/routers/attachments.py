@@ -23,6 +23,7 @@ ENTITIES = {
     "shutdown": ("app.models.shutdowns:Shutdown", "shutdown.view"),
     "part": ("app.models.inventory:Part", "inventory.view"),
     "condition_alert": ("app.models.pdm:ConditionAlert", "pdm.view"),
+    "rca": ("app.models.rca:RCA", "rca.view"),
 }
 CATEGORIES = {"manual", "drawing", "photo", "report", "document", "certificate"}
 

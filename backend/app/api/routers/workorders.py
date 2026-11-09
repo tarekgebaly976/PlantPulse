@@ -233,6 +233,7 @@ class WOUpdate(In):
     recommendations: str | None = None
     root_cause: str | None = None
     corrective_action: str | None = None
+    safety_event: bool | None = None
     shutdown_package_id: uuid.UUID | None = None
     version: int | None = None  # optimistic concurrency: send the version you edited
 
@@ -249,8 +250,13 @@ EXECUTION_FIELDS = {
     "downtime_hours",
     "production_impact",
     "production_loss_tons",
+    "safety_event",
     "version",
 }
+
+
+# Corrected after completion → the RCA rules are checked again.
+RCA_FIELDS = {"downtime_hours", "production_loss_tons", "problem_code_id", "safety_event"}
 
 
 class AssignmentOut(ORM):
@@ -312,6 +318,7 @@ class WOOut(ORM):
     root_cause: str | None
     corrective_action: str | None
     is_repeat_failure: bool
+    safety_event: bool
     pm_occurrence_id: uuid.UUID | None
     condition_alert_id: uuid.UUID | None
     shutdown_package_id: uuid.UUID | None
@@ -610,7 +617,15 @@ def wo_detail(wo_id: uuid.UUID, ctx: Ctx = Depends(require("wo.view")), db: Sess
         ],
         "safety_signed_by": users.get(wo.safety_signed_by_id) if wo.safety_signed_by_id else None,
         "tested_by": users.get(wo.tested_by_id) if wo.tested_by_id else None,
+        "rca": _rca_of(db, wo.id),
     }
+
+
+def _rca_of(db: Session, wo_id: uuid.UUID) -> dict | None:
+    from app.models.rca import RCA, RCAWorkOrder
+
+    r = db.execute(select(RCA).join(RCAWorkOrder, RCAWorkOrder.rca_id == RCA.id).where(RCAWorkOrder.work_order_id == wo_id)).scalar_one_or_none()
+    return {"id": r.id, "number": r.number, "status": r.status} if r else None
 
 
 @router.patch("/work-orders/{wo_id}", response_model=WOOut)
@@ -640,6 +655,10 @@ def update_wo(
         setattr(wo, k, v)
     audit(db, "wo.update", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="work_order", entity_id=wo.id, data=data)
     db.flush()
+    if wo.status == WOStatus.COMPLETED and set(data) & RCA_FIELDS:
+        from app.services.rca import evaluate as rca_evaluate
+
+        rca_evaluate(db, ctx.plant, wo, ctx.user.id)  # downtime / loss / codes corrected after completion
     return wo
 
 

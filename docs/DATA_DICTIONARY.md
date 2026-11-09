@@ -2,7 +2,7 @@
 
 _Generated from the SQLAlchemy models by `scripts/gen_docs.py` — do not edit by hand._
 
-73 tables. Primary keys are UUIDv4 unless noted. All timestamps are `timestamptz` stored in UTC; due dates are plant-local calendar `date`s. Tables marked **append-only** reject UPDATE/DELETE via trigger and the runtime role has no UPDATE/DELETE privilege on them.
+83 tables. Primary keys are UUIDv4 unless noted. All timestamps are `timestamptz` stored in UTC; due dates are plant-local calendar `date`s. Tables marked **append-only** reject UPDATE/DELETE via trigger and the runtime role has no UPDATE/DELETE privilege on them.
 
 ## Tenancy & identity
 
@@ -34,6 +34,9 @@ Unique: (code)
 | `working_hours_per_day` | double | no |  |
 | `settings` | jsonb | no |  |
 | `is_active` | boolean | no |  |
+| `daily_summary_enabled` | boolean | no |  |
+| `daily_summary_time` | time | no |  |
+| `daily_summary_days` | jsonb | no |  |
 | `created_at` | datetime | no |  |
 | `updated_at` | datetime | no |  |
 
@@ -62,8 +65,12 @@ Indexes: ix_plant_holidays_plant_id (plant_id)
 | `code` | varchar(32) | no |  |
 | `name` | varchar(200) | no |  |
 | `name_ar` | varchar(200) | yes |  |
-| `type` | enum(PM, SP, FH, WWTP, EAI, UTIL) | no |  |
+| `type` | enum(PRODUCTION, MAINTENANCE, UTILITIES, FACILITIES, QUALITY, WAREHOUSE, OTHER, PM, SP, FH, WWTP, EAI, UTIL) | no |  |
 | `is_active` | boolean | no |  |
+| `pm_auto_wo` | boolean | no |  |
+| `pdm_auto_wo` | boolean | no |  |
+| `lube_auto_wo` | boolean | no |  |
+| `pdm_alert_action` | varchar(8) | no |  |
 | `plant_id` | uuid | no | FK → plants.id (on delete RESTRICT) |
 | `created_at` | datetime | no |  |
 | `updated_at` | datetime | no |  |
@@ -145,6 +152,8 @@ Indexes: ix_users_organization_id (organization_id)
 | `code` | varchar(40) | no |  |
 | `name` | varchar(120) | no |  |
 | `description` | varchar(400) | yes |  |
+| `customized` | boolean | no |  |
+| `organization_id` | uuid | yes | FK → organizations.id (on delete CASCADE) |
 
 Unique: (code)
 
@@ -164,7 +173,7 @@ Unique: (code)
 
 ### `memberships`
 
-Grants a user a role within one plant, optionally restricted to one department.
+Grants a user a role within one plant, optionally restricted to one or more departments (department_id = the main one, extra ones in membership_departments; none = whole plant).
 
 | Column | Type | Null | Key / reference |
 |---|---|---|---|
@@ -174,12 +183,13 @@ Grants a user a role within one plant, optionally restricted to one department.
 | `role_id` | uuid | no | FK → roles.id (on delete RESTRICT) |
 | `department_id` | uuid | yes | FK → departments.id (on delete SET NULL) |
 | `is_active` | boolean | no |  |
+| `daily_summary` | boolean | no |  |
 | `created_at` | datetime | no |  |
 | `updated_at` | datetime | no |  |
 
 Unique: (user_id, plant_id)
 
-Indexes: ix_memberships_plant_id (plant_id); ix_memberships_role_id (role_id); ix_memberships_user_id (user_id); ix_memberships_department_id (department_id)
+Indexes: ix_memberships_user_id (user_id); ix_memberships_plant_id (plant_id); ix_memberships_department_id (department_id); ix_memberships_role_id (role_id)
 
 ### `user_sessions`
 
@@ -212,7 +222,7 @@ Indexes: ix_user_sessions_user_id (user_id)
 | `success` | boolean | no |  |
 | `at` | datetime | no |  |
 
-Indexes: ix_login_attempts_at (at); ix_login_attempts_email (email); ix_login_attempts_ip (ip)
+Indexes: ix_login_attempts_ip (ip); ix_login_attempts_at (at); ix_login_attempts_email (email)
 
 ### `user_skills`
 
@@ -252,6 +262,7 @@ Asset hierarchy node: Production Line -> Unit -> Assembly -> Sub-Assembly -> Com
 | `criticality` | enum(A, B, C) | no |  |
 | `status` | enum(in_service, standby, under_maintenance, out_of_service, decommissioned) | no |  |
 | `location` | varchar(200) | yes |  |
+| `equipment_type` | varchar(60) | yes |  |
 | `specifications` | jsonb | no |  |
 | `operating_limits` | jsonb | no |  |
 | `operating_hours` | numeric(14, 2) | no |  |
@@ -264,7 +275,7 @@ Asset hierarchy node: Production Line -> Unit -> Assembly -> Sub-Assembly -> Com
 
 Unique: (qr_token); (plant_id, code)
 
-Indexes: ix_assets_department_id (department_id); ix_assets_plant_parent (plant_id, parent_id); ix_assets_plant_id (plant_id); ix_assets_path (path)
+Indexes: ix_assets_path (path); ix_assets_plant_parent (plant_id, parent_id); ix_assets_department_id (department_id); ix_assets_plant_id (plant_id)
 
 ### `asset_status_history`
 
@@ -332,10 +343,12 @@ Indexes: ix_meter_readings_meter_time (meter_id, read_at)
 | Column | Type | Null | Key / reference |
 |---|---|---|---|
 | `id` | uuid | no | PK |
-| `kind` | enum(problem, cause, remedy) | no |  |
+| `kind` | enum(symptom, problem, cause, remedy) | no |  |
 | `code` | varchar(32) | no |  |
 | `description` | varchar(200) | no |  |
 | `description_ar` | varchar(200) | yes |  |
+| `equipment_type` | varchar(60) | yes |  |
+| `category` | varchar(30) | yes |  |
 | `is_active` | boolean | no |  |
 | `plant_id` | uuid | no | FK → plants.id (on delete RESTRICT) |
 
@@ -363,7 +376,7 @@ Equipment downtime. `is_failure` events count toward MTBF; breakdown hours towar
 | `updated_at` | datetime | no |  |
 | `created_by_id` | uuid | yes | FK → users.id (on delete SET NULL) |
 
-Indexes: ix_downtime_asset_time (asset_id, started_at); ix_downtime_events_work_order_id (work_order_id); ix_downtime_events_plant_id (plant_id)
+Indexes: ix_downtime_events_work_order_id (work_order_id); ix_downtime_events_plant_id (plant_id); ix_downtime_asset_time (asset_id, started_at)
 
 ## Work management
 
@@ -377,6 +390,8 @@ Indexes: ix_downtime_asset_time (asset_id, started_at); ix_downtime_events_work_
 | `title` | varchar(200) | no |  |
 | `description` | text | yes |  |
 | `symptoms` | text | yes |  |
+| `symptom_code_id` | uuid | yes | FK → failure_codes.id (on delete RESTRICT) |
+| `problem_code_id` | uuid | yes | FK → failure_codes.id (on delete RESTRICT) |
 | `suggested_priority` | enum(P1, P2, P3, P4) | no |  |
 | `is_breakdown` | boolean | no |  |
 | `status` | enum(submitted, accepted, rejected) | no |  |
@@ -391,7 +406,7 @@ Indexes: ix_downtime_asset_time (asset_id, started_at); ix_downtime_events_work_
 
 Unique: (plant_id, number)
 
-Indexes: ix_work_requests_asset_id (asset_id); ix_work_requests_work_order_id (work_order_id); ix_work_requests_plant_id (plant_id)
+Indexes: ix_work_requests_plant_id (plant_id); ix_work_requests_asset_id (asset_id); ix_work_requests_work_order_id (work_order_id)
 
 ### `work_orders`
 
@@ -399,6 +414,8 @@ Indexes: ix_work_requests_asset_id (asset_id); ix_work_requests_work_order_id (w
 |---|---|---|---|
 | `id` | uuid | no | PK |
 | `number` | varchar(40) | no |  |
+| `source` | varchar(20) | no |  |
+| `external_ref` | varchar(60) | yes |  |
 | `type` | enum(preventive, predictive, corrective, emergency, inspection, improvement, shutdown, lubrication) | no |  |
 | `status` | enum(triage, awaiting_approval, approved, planned, scheduled, in_progress, on_hold, awaiting_review, completed, closed, cancelled) | no |  |
 | `priority` | enum(P1, P2, P3, P4) | no |  |
@@ -407,6 +424,7 @@ Indexes: ix_work_requests_asset_id (asset_id); ix_work_requests_work_order_id (w
 | `title` | varchar(200) | no |  |
 | `description` | text | yes |  |
 | `symptoms` | text | yes |  |
+| `symptom_code_id` | uuid | yes | FK → failure_codes.id (on delete RESTRICT) |
 | `problem_code_id` | uuid | yes | FK → failure_codes.id (on delete RESTRICT) |
 | `cause_code_id` | uuid | yes | FK → failure_codes.id (on delete RESTRICT) |
 | `remedy_code_id` | uuid | yes | FK → failure_codes.id (on delete RESTRICT) |
@@ -431,6 +449,8 @@ Indexes: ix_work_requests_asset_id (asset_id); ix_work_requests_work_order_id (w
 | `requires_loto` | boolean | no |  |
 | `requires_permit` | boolean | no |  |
 | `permit_reference` | varchar(80) | yes |  |
+| `permit_types` | varchar(200) | yes |  |
+| `permit_valid_until` | datetime | yes |  |
 | `safety_requirements` | text | yes |  |
 | `safety_signed_by_id` | uuid | yes | FK → users.id (on delete NO ACTION) |
 | `safety_signed_at` | datetime | yes |  |
@@ -444,6 +464,7 @@ Indexes: ix_work_requests_asset_id (asset_id); ix_work_requests_work_order_id (w
 | `root_cause` | text | yes |  |
 | `corrective_action` | text | yes |  |
 | `is_repeat_failure` | boolean | no |  |
+| `safety_event` | boolean | no |  |
 | `pm_occurrence_id` | uuid | yes | FK → pm_occurrences.id (on delete RESTRICT) |
 | `condition_alert_id` | uuid | yes | FK → condition_alerts.id (on delete RESTRICT) |
 | `shutdown_package_id` | uuid | yes | FK → shutdown_packages.id (on delete RESTRICT) |
@@ -454,9 +475,9 @@ Indexes: ix_work_requests_asset_id (asset_id); ix_work_requests_work_order_id (w
 | `updated_at` | datetime | no |  |
 | `created_by_id` | uuid | yes | FK → users.id (on delete SET NULL) |
 
-Unique: (pm_occurrence_id); (plant_id, number)
+Unique: (plant_id, number); (pm_occurrence_id)
 
-Indexes: ix_work_orders_plant_id (plant_id); ix_wo_plant_created (plant_id, created_at); ix_work_orders_department_id (department_id); ix_work_orders_condition_alert_id (condition_alert_id); ix_wo_plant_status (plant_id, status); ix_work_orders_supervisor_id (supervisor_id); ix_work_orders_shutdown_package_id (shutdown_package_id); ix_wo_plant_asset (plant_id, asset_id); ix_work_orders_due_date (due_date)
+Indexes: ix_wo_plant_created (plant_id, created_at); ix_work_orders_supervisor_id (supervisor_id); ix_work_orders_shutdown_package_id (shutdown_package_id); ix_wo_plant_status (plant_id, status); ix_wo_external_ref (plant_id, external_ref); ix_work_orders_due_date (due_date); ix_work_orders_plant_id (plant_id); ix_wo_plant_asset (plant_id, asset_id); ix_work_orders_department_id (department_id); ix_work_orders_condition_alert_id (condition_alert_id)
 
 ### `wo_assignments`
 
@@ -471,7 +492,7 @@ Indexes: ix_work_orders_plant_id (plant_id); ix_wo_plant_created (plant_id, crea
 
 Unique: (work_order_id, user_id)
 
-Indexes: ix_wo_assignments_user_id (user_id); ix_wo_assignments_work_order_id (work_order_id)
+Indexes: ix_wo_assignments_work_order_id (work_order_id); ix_wo_assignments_user_id (user_id)
 
 ### `wo_status_history` — append-only
 
@@ -522,7 +543,7 @@ Indexes: ix_wo_status_transitions_plant_id (plant_id)
 | `created_at` | datetime | no |  |
 | `created_by_id` | uuid | yes | FK → users.id (on delete SET NULL) |
 
-Indexes: ix_wo_labor_work_order_id (work_order_id); ix_wo_labor_user_id (user_id)
+Indexes: ix_wo_labor_user_id (user_id); ix_wo_labor_work_order_id (work_order_id)
 
 ### `wo_services`
 
@@ -539,7 +560,7 @@ Contractor / external services.
 | `created_at` | datetime | no |  |
 | `created_by_id` | uuid | yes | FK → users.id (on delete SET NULL) |
 
-Indexes: ix_wo_services_work_order_id (work_order_id); ix_wo_services_supplier_id (supplier_id)
+Indexes: ix_wo_services_supplier_id (supplier_id); ix_wo_services_work_order_id (work_order_id)
 
 ### `wo_checklist_items`
 
@@ -597,6 +618,7 @@ Reusable PM task template / job plan.
 | `safety_precautions` | text | yes |  |
 | `requires_loto` | boolean | no |  |
 | `requires_permit` | boolean | no |  |
+| `permit_types` | varchar(200) | yes |  |
 | `requires_testing` | boolean | no |  |
 | `is_active` | boolean | no |  |
 | `plant_id` | uuid | no | FK → plants.id (on delete RESTRICT) |
@@ -637,7 +659,7 @@ Indexes: ix_job_plan_tasks_job_plan_id (job_plan_id)
 
 Unique: (job_plan_id, part_id)
 
-Indexes: ix_job_plan_materials_job_plan_id (job_plan_id); ix_job_plan_materials_part_id (part_id)
+Indexes: ix_job_plan_materials_part_id (part_id); ix_job_plan_materials_job_plan_id (job_plan_id)
 
 ### `pm_plans`
 
@@ -671,7 +693,7 @@ Indexes: ix_job_plan_materials_job_plan_id (job_plan_id); ix_job_plan_materials_
 
 Unique: (plant_id, code)
 
-Indexes: ix_pm_plans_job_plan_id (job_plan_id); ix_pm_plans_plant_id (plant_id); ix_pm_plans_meter_id (meter_id); ix_pm_plans_asset_id (asset_id)
+Indexes: ix_pm_plans_asset_id (asset_id); ix_pm_plans_plant_id (plant_id); ix_pm_plans_job_plan_id (job_plan_id); ix_pm_plans_meter_id (meter_id)
 
 ### `pm_occurrences`
 
@@ -700,7 +722,7 @@ One scheduled instance of a PM plan. (pm_plan_id, occurrence_key) is unique, so 
 
 Unique: (pm_plan_id, occurrence_key)
 
-Indexes: ix_pm_occurrences_plant_id (plant_id); ix_pm_occ_plant_due (plant_id, due_date); ix_pm_occ_status (status)
+Indexes: ix_pm_occ_status (status); ix_pm_occurrences_plant_id (plant_id); ix_pm_occ_plant_due (plant_id, due_date)
 
 ## Lubrication
 
@@ -723,7 +745,7 @@ Indexes: ix_pm_occurrences_plant_id (plant_id); ix_pm_occ_plant_due (plant_id, d
 
 Unique: (plant_id, code)
 
-Indexes: ix_lubricants_plant_id (plant_id); ix_lubricants_part_id (part_id)
+Indexes: ix_lubricants_part_id (part_id); ix_lubricants_plant_id (plant_id)
 
 ### `lubricant_alternatives`
 
@@ -740,7 +762,7 @@ An alternative is usable only once compatibility has been verified and technical
 
 Unique: (lubricant_id, alternative_id)
 
-Indexes: ix_lubricant_alternatives_lubricant_id (lubricant_id); ix_lubricant_alternatives_alternative_id (alternative_id)
+Indexes: ix_lubricant_alternatives_alternative_id (alternative_id); ix_lubricant_alternatives_lubricant_id (lubricant_id)
 
 ### `lube_routes`
 
@@ -758,7 +780,7 @@ Indexes: ix_lubricant_alternatives_lubricant_id (lubricant_id); ix_lubricant_alt
 
 Unique: (plant_id, code)
 
-Indexes: ix_lube_routes_department_id (department_id); ix_lube_routes_plant_id (plant_id)
+Indexes: ix_lube_routes_plant_id (plant_id); ix_lube_routes_department_id (department_id)
 
 ### `lubrication_points`
 
@@ -791,7 +813,7 @@ Indexes: ix_lube_routes_department_id (department_id); ix_lube_routes_plant_id (
 
 Unique: (plant_id, code); (qr_token)
 
-Indexes: ix_lubrication_points_lubricant_id (lubricant_id); ix_lubrication_points_next_due_date (next_due_date); ix_lubrication_points_route_id (route_id); ix_lubrication_points_plant_id (plant_id); ix_lubrication_points_asset_id (asset_id); ix_lubrication_points_responsible_user_id (responsible_user_id)
+Indexes: ix_lubrication_points_route_id (route_id); ix_lubrication_points_plant_id (plant_id); ix_lubrication_points_asset_id (asset_id); ix_lubrication_points_responsible_user_id (responsible_user_id); ix_lubrication_points_lubricant_id (lubricant_id); ix_lubrication_points_next_due_date (next_due_date)
 
 ### `lube_tasks`
 
@@ -816,7 +838,7 @@ Indexes: ix_lubrication_points_lubricant_id (lubricant_id); ix_lubrication_point
 
 Unique: (point_id, due_date)
 
-Indexes: ix_lube_tasks_route_id (route_id); ix_lube_tasks_plant_id (plant_id); ix_lube_tasks_work_order_id (work_order_id); ix_lube_tasks_point_id (point_id); ix_lube_tasks_lubricant_used_id (lubricant_used_id)
+Indexes: ix_lube_tasks_point_id (point_id); ix_lube_tasks_lubricant_used_id (lubricant_used_id); ix_lube_tasks_route_id (route_id); ix_lube_tasks_plant_id (plant_id); ix_lube_tasks_work_order_id (work_order_id)
 
 ## Shifts & manpower
 
@@ -870,7 +892,7 @@ Indexes: ix_shift_patterns_plant_id (plant_id)
 
 Unique: (plant_id, code)
 
-Indexes: ix_teams_supervisor_id (supervisor_id); ix_teams_pattern_id (pattern_id); ix_teams_department_id (department_id); ix_teams_plant_id (plant_id)
+Indexes: ix_teams_pattern_id (pattern_id); ix_teams_department_id (department_id); ix_teams_plant_id (plant_id); ix_teams_supervisor_id (supervisor_id)
 
 ### `team_members`
 
@@ -907,7 +929,7 @@ One person on one day. A person can have at most one entry per day (prevents dou
 
 Unique: (user_id, work_date)
 
-Indexes: ix_roster_entries_shift_id (shift_id); ix_roster_entries_team_id (team_id); ix_roster_entries_plant_id (plant_id); ix_roster_plant_date (plant_id, work_date)
+Indexes: ix_roster_plant_date (plant_id, work_date); ix_roster_entries_team_id (team_id); ix_roster_entries_shift_id (shift_id); ix_roster_entries_plant_id (plant_id)
 
 ### `shift_handovers`
 
@@ -940,7 +962,7 @@ Indexes: ix_roster_entries_shift_id (shift_id); ix_roster_entries_team_id (team_
 
 Unique: (plant_id, department_id, shift_date, shift_id)
 
-Indexes: ix_shift_handovers_department_id (department_id); ix_shift_handovers_outgoing_user_id (outgoing_user_id); ix_shift_handovers_incoming_user_id (incoming_user_id); ix_shift_handovers_plant_id (plant_id); ix_shift_handovers_shift_id (shift_id)
+Indexes: ix_shift_handovers_shift_id (shift_id); ix_shift_handovers_outgoing_user_id (outgoing_user_id); ix_shift_handovers_plant_id (plant_id); ix_shift_handovers_department_id (department_id); ix_shift_handovers_incoming_user_id (incoming_user_id)
 
 ## Inventory & purchasing
 
@@ -1010,7 +1032,7 @@ Indexes: ix_warehouses_plant_id (plant_id)
 
 Unique: (plant_id, code)
 
-Indexes: ix_parts_oem_pn (plant_id, oem_part_number); ix_parts_preferred_supplier_id (preferred_supplier_id); ix_parts_plant_id (plant_id)
+Indexes: ix_parts_preferred_supplier_id (preferred_supplier_id); ix_parts_plant_id (plant_id); ix_parts_oem_pn (plant_id, oem_part_number)
 
 ### `part_substitutes`
 
@@ -1024,7 +1046,7 @@ Indexes: ix_parts_oem_pn (plant_id, oem_part_number); ix_parts_preferred_supplie
 
 Unique: (part_id, substitute_id)
 
-Indexes: ix_part_substitutes_substitute_id (substitute_id); ix_part_substitutes_part_id (part_id)
+Indexes: ix_part_substitutes_part_id (part_id); ix_part_substitutes_substitute_id (substitute_id)
 
 ### `stock_levels`
 
@@ -1066,7 +1088,7 @@ Append-only stock ledger (UPDATE/DELETE blocked by trigger).
 | `created_at` | datetime | no |  |
 | `plant_id` | uuid | no | FK → plants.id (on delete RESTRICT) |
 
-Indexes: ix_inv_txn_part_time (part_id, created_at); ix_inventory_transactions_work_order_id (work_order_id); ix_inventory_transactions_warehouse_id (warehouse_id); ix_inventory_transactions_po_line_id (po_line_id); ix_inventory_transactions_plant_id (plant_id)
+Indexes: ix_inventory_transactions_plant_id (plant_id); ix_inv_txn_part_time (part_id, created_at); ix_inventory_transactions_work_order_id (work_order_id); ix_inventory_transactions_warehouse_id (warehouse_id); ix_inventory_transactions_po_line_id (po_line_id)
 
 ### `reservations`
 
@@ -1085,7 +1107,7 @@ Indexes: ix_inv_txn_part_time (part_id, created_at); ix_inventory_transactions_w
 | `updated_at` | datetime | no |  |
 | `created_by_id` | uuid | yes | FK → users.id (on delete SET NULL) |
 
-Indexes: ix_reservations_plant_id (plant_id); ix_reservations_work_order_id (work_order_id); ix_reservations_part_id (part_id); ix_reservations_warehouse_id (warehouse_id)
+Indexes: ix_reservations_plant_id (plant_id); ix_reservations_work_order_id (work_order_id); ix_reservations_warehouse_id (warehouse_id); ix_reservations_part_id (part_id)
 
 ### `purchase_orders`
 
@@ -1108,7 +1130,7 @@ Local purchase requisition / PO reference. Not an ERP integration.
 
 Unique: (plant_id, number)
 
-Indexes: ix_purchase_orders_supplier_id (supplier_id); ix_purchase_orders_plant_id (plant_id)
+Indexes: ix_purchase_orders_plant_id (plant_id); ix_purchase_orders_supplier_id (supplier_id)
 
 ### `purchase_order_lines`
 
@@ -1122,7 +1144,7 @@ Indexes: ix_purchase_orders_supplier_id (supplier_id); ix_purchase_orders_plant_
 | `unit_price` | numeric(14, 4) | no |  |
 | `work_order_id` | uuid | yes | FK → work_orders.id (on delete RESTRICT) |
 
-Indexes: ix_purchase_order_lines_work_order_id (work_order_id); ix_purchase_order_lines_purchase_order_id (purchase_order_id); ix_purchase_order_lines_part_id (part_id)
+Indexes: ix_purchase_order_lines_part_id (part_id); ix_purchase_order_lines_work_order_id (work_order_id); ix_purchase_order_lines_purchase_order_id (purchase_order_id)
 
 ### `stockout_events`
 
@@ -1138,7 +1160,7 @@ Recorded when an issue/reservation request could not be met from stock (KPI: sto
 | `created_at` | datetime | no |  |
 | `plant_id` | uuid | no | FK → plants.id (on delete RESTRICT) |
 
-Indexes: ix_stockout_events_work_order_id (work_order_id); ix_stockout_events_plant_id (plant_id); ix_stockout_events_part_id (part_id)
+Indexes: ix_stockout_events_plant_id (plant_id); ix_stockout_events_part_id (part_id); ix_stockout_events_work_order_id (work_order_id)
 
 ## Condition monitoring
 
@@ -1168,13 +1190,14 @@ Rule-based condition monitoring point with transparent limits (no ML claims).
 | `last_value` | numeric(14, 4) | yes |  |
 | `last_reading_at` | datetime | yes |  |
 | `is_active` | boolean | no |  |
+| `priority` | smallint | no |  |
 | `plant_id` | uuid | no | FK → plants.id (on delete RESTRICT) |
 | `created_at` | datetime | no |  |
 | `updated_at` | datetime | no |  |
 
 Unique: (plant_id, code)
 
-Indexes: ix_measurement_points_asset_id (asset_id); ix_measurement_points_plant_id (plant_id)
+Indexes: ix_measurement_points_plant_id (plant_id); ix_measurement_points_asset_id (asset_id)
 
 ### `condition_readings` — append-only
 
@@ -1214,11 +1237,12 @@ Indexes: ix_condition_readings_plant_id (plant_id); ix_cond_read_point_time (poi
 | `resolved_by_id` | uuid | yes | FK → users.id (on delete NO ACTION) |
 | `resolved_at` | datetime | yes |  |
 | `work_order_id` | uuid | yes |  |
+| `work_request_id` | uuid | yes |  |
 | `plant_id` | uuid | no | FK → plants.id (on delete RESTRICT) |
 | `created_at` | datetime | no |  |
 | `updated_at` | datetime | no |  |
 
-Indexes: ix_condition_alerts_asset_id (asset_id); ix_alert_point_status (point_id, status); ix_condition_alerts_reading_id (reading_id); ix_condition_alerts_plant_id (plant_id)
+Indexes: ix_condition_alerts_plant_id (plant_id); ix_alert_point_status (point_id, status); ix_condition_alerts_asset_id (asset_id); ix_condition_alerts_reading_id (reading_id)
 
 ## Shutdowns
 
@@ -1245,7 +1269,7 @@ Indexes: ix_condition_alerts_asset_id (asset_id); ix_alert_point_status (point_i
 
 Unique: (plant_id, code)
 
-Indexes: ix_shutdowns_department_id (department_id); ix_shutdowns_plant_id (plant_id)
+Indexes: ix_shutdowns_plant_id (plant_id); ix_shutdowns_department_id (department_id)
 
 ### `shutdown_packages`
 
@@ -1280,7 +1304,7 @@ Indexes: ix_shutdowns_department_id (department_id); ix_shutdowns_plant_id (plan
 
 Unique: (shutdown_id, code)
 
-Indexes: ix_shutdown_packages_contractor_id (contractor_id); ix_shutdown_packages_plant_id (plant_id); ix_shutdown_packages_shutdown_id (shutdown_id); ix_shutdown_packages_owner_id (owner_id); ix_shutdown_packages_asset_id (asset_id)
+Indexes: ix_shutdown_packages_asset_id (asset_id); ix_shutdown_packages_contractor_id (contractor_id); ix_shutdown_packages_plant_id (plant_id); ix_shutdown_packages_shutdown_id (shutdown_id); ix_shutdown_packages_owner_id (owner_id)
 
 ### `package_dependencies`
 
@@ -1349,7 +1373,7 @@ Daily production per department/line: needed for cost-per-ton and OEE (never est
 
 Unique: (plant_id, department_id, asset_id, record_date)
 
-Indexes: ix_production_records_plant_id (plant_id); ix_production_records_department_id (department_id); ix_production_records_asset_id (asset_id)
+Indexes: ix_production_records_department_id (department_id); ix_production_records_asset_id (asset_id); ix_production_records_plant_id (plant_id)
 
 ### `maintenance_budgets`
 
@@ -1421,7 +1445,7 @@ Indexes: ix_kpi_snapshots_plant_id (plant_id)
 
 Unique: (user_id, dedupe_key)
 
-Indexes: ix_notifications_plant_id (plant_id); ix_notif_user_unread (user_id, read_at)
+Indexes: ix_notif_user_unread (user_id, read_at); ix_notifications_plant_id (plant_id)
 
 ### `email_outbox`
 
@@ -1439,7 +1463,7 @@ Indexes: ix_notifications_plant_id (plant_id); ix_notif_user_unread (user_id, re
 | `sent_at` | datetime | yes |  |
 | `created_at` | datetime | no |  |
 
-Indexes: ix_email_outbox_notification_id (notification_id); ix_outbox_status (status, next_attempt_at)
+Indexes: ix_outbox_status (status, next_attempt_at); ix_email_outbox_notification_id (notification_id)
 
 ### `attachments`
 
@@ -1461,7 +1485,7 @@ Indexes: ix_email_outbox_notification_id (notification_id); ix_outbox_status (st
 
 Unique: (storage_key)
 
-Indexes: ix_attach_entity (entity_type, entity_id); ix_attachments_plant_id (plant_id)
+Indexes: ix_attachments_plant_id (plant_id); ix_attach_entity (entity_type, entity_id)
 
 ### `audit_logs` — append-only
 
@@ -1480,7 +1504,7 @@ Append-only (UPDATE/DELETE blocked by trigger). Bigint PK preserves insertion or
 | `data` | jsonb | no |  |
 | `ip` | varchar(64) | yes |  |
 
-Indexes: ix_audit_entity (entity_type, entity_id); ix_audit_plant_time (plant_id, at)
+Indexes: ix_audit_plant_time (plant_id, at); ix_audit_entity (entity_type, entity_id)
 
 ### `job_runs`
 
@@ -1497,3 +1521,213 @@ Observability for background jobs.
 | `error` | text | yes |  |
 
 Indexes: ix_job_runs_job_time (job, started_at)
+
+## Other
+
+### `kpi_scorecard`
+
+A KPI the plant reports (e.g. from a management KPI sheet), with monthly targets and actuals entered by people. Optionally linked to a calculated CMMS KPI (`kpi_code`, same department) so both appear in the same trend.
+
+| Column | Type | Null | Key / reference |
+|---|---|---|---|
+| `id` | uuid | no | PK |
+| `name` | varchar(120) | no |  |
+| `unit` | varchar(20) | yes |  |
+| `department_id` | uuid | yes | FK → departments.id (on delete RESTRICT) |
+| `kpi_code` | varchar(40) | yes | FK → kpi_definitions.code (on delete NO ACTION) |
+| `higher_is_better` | boolean | no |  |
+| `frequency` | varchar(20) | no |  |
+| `sort` | integer | no |  |
+| `plant_id` | uuid | no | FK → plants.id (on delete RESTRICT) |
+
+Unique: (plant_id, name)
+
+Indexes: ix_kpi_scorecard_plant_id (plant_id)
+
+### `kpi_scorecard_values`
+
+| Column | Type | Null | Key / reference |
+|---|---|---|---|
+| `id` | uuid | no | PK |
+| `scorecard_id` | uuid | no | FK → kpi_scorecard.id (on delete CASCADE) |
+| `period_start` | date | no |  |
+| `target` | numeric(18, 4) | yes |  |
+| `actual` | numeric(18, 4) | yes |  |
+| `plant_id` | uuid | no | FK → plants.id (on delete RESTRICT) |
+
+Unique: (scorecard_id, period_start)
+
+Indexes: ix_kpi_scorecard_values_plant_id (plant_id)
+
+### `loto_isolations`
+
+One isolation point of a work order's LOTO: locked when recorded, released before the work order can complete.
+
+| Column | Type | Null | Key / reference |
+|---|---|---|---|
+| `id` | uuid | no | PK |
+| `work_order_id` | uuid | no | FK → work_orders.id (on delete CASCADE) |
+| `point` | varchar(200) | no |  |
+| `energy_type` | varchar(20) | no |  |
+| `lock_number` | varchar(40) | yes |  |
+| `zero_energy_verified` | boolean | no |  |
+| `applied_by_id` | uuid | yes | FK → users.id (on delete NO ACTION) |
+| `applied_at` | datetime | no |  |
+| `removed_by_id` | uuid | yes | FK → users.id (on delete NO ACTION) |
+| `removed_at` | datetime | yes |  |
+| `plant_id` | uuid | no | FK → plants.id (on delete RESTRICT) |
+
+Indexes: ix_loto_wo (work_order_id); ix_loto_isolations_plant_id (plant_id)
+
+### `membership_departments`
+
+Extra departments of an area-restricted member (the first one is Membership.department_id).
+
+| Column | Type | Null | Key / reference |
+|---|---|---|---|
+| `membership_id` | uuid | no | PK; FK → memberships.id (on delete CASCADE) |
+| `department_id` | uuid | no | PK; FK → departments.id (on delete CASCADE) |
+
+### `part_usages`
+
+Spare parts used on a work order, recorded without moving warehouse stock. For plants whose store system is not connected: it answers "which part, how many, on which work order and machine, at what cost" while stock levels stay untouched. The machine is copied from the work order so the record keeps its history if the work order is later re-pointed.
+
+| Column | Type | Null | Key / reference |
+|---|---|---|---|
+| `id` | uuid | no | PK |
+| `work_order_id` | uuid | no | FK → work_orders.id (on delete CASCADE) |
+| `asset_id` | uuid | no | FK → assets.id (on delete NO ACTION) |
+| `part_id` | uuid | yes | FK → parts.id (on delete NO ACTION) |
+| `description` | varchar(300) | yes |  |
+| `quantity` | numeric(14, 3) | no |  |
+| `uom` | varchar(16) | no |  |
+| `unit_cost` | numeric(14, 4) | no |  |
+| `total_cost` | numeric(14, 2) | no |  |
+| `used_on` | date | no |  |
+| `note` | text | yes |  |
+| `created_at` | datetime | no |  |
+| `plant_id` | uuid | no | FK → plants.id (on delete RESTRICT) |
+| `created_by_id` | uuid | yes | FK → users.id (on delete SET NULL) |
+
+Indexes: ix_part_usages_plant_id (plant_id); ix_part_usage_asset_time (asset_id, used_on); ix_part_usage_wo (work_order_id)
+
+### `password_resets`
+
+A "forgot password" link: single use, short-lived, stored only as a SHA-256 digest of the token in the link.
+
+| Column | Type | Null | Key / reference |
+|---|---|---|---|
+| `id` | uuid | no | PK |
+| `user_id` | uuid | no | FK → users.id (on delete CASCADE) |
+| `token_hash` | varchar(64) | no |  |
+| `created_at` | datetime | no |  |
+| `expires_at` | datetime | no |  |
+| `used_at` | datetime | yes |  |
+| `ip` | varchar(64) | yes |  |
+
+Unique: (token_hash)
+
+Indexes: ix_password_resets_user_id (user_id); ix_password_resets_created_at (created_at)
+
+### `rca_actions`
+
+| Column | Type | Null | Key / reference |
+|---|---|---|---|
+| `id` | uuid | no | PK |
+| `rca_id` | uuid | no | FK → rcas.id (on delete CASCADE) |
+| `seq` | integer | no |  |
+| `description` | text | no |  |
+| `kind` | enum(containment, corrective, preventive) | no |  |
+| `root_cause_ref` | varchar(40) | yes |  |
+| `owner_id` | uuid | yes | FK → users.id (on delete RESTRICT) |
+| `due_date` | date | yes |  |
+| `status` | enum(open, in_progress, done, cancelled) | no |  |
+| `completion_note` | text | yes |  |
+| `done_at` | datetime | yes |  |
+| `done_by_id` | uuid | yes | FK → users.id (on delete RESTRICT) |
+| `work_order_id` | uuid | yes | FK → work_orders.id (on delete RESTRICT) |
+| `pm_plan_id` | uuid | yes | FK → pm_plans.id (on delete RESTRICT) |
+| `plant_id` | uuid | no | FK → plants.id (on delete RESTRICT) |
+| `created_at` | datetime | no |  |
+| `updated_at` | datetime | no |  |
+| `created_by_id` | uuid | yes | FK → users.id (on delete SET NULL) |
+
+Indexes: ix_rca_action_owner_status (owner_id, status); ix_rca_actions_rca_id (rca_id); ix_rca_actions_plant_id (plant_id)
+
+### `rca_members`
+
+| Column | Type | Null | Key / reference |
+|---|---|---|---|
+| `id` | uuid | no | PK |
+| `rca_id` | uuid | no | FK → rcas.id (on delete CASCADE) |
+| `user_id` | uuid | no | FK → users.id (on delete RESTRICT) |
+| `role_note` | varchar(80) | yes |  |
+
+Unique: (rca_id, user_id)
+
+Indexes: ix_rca_members_rca_id (rca_id); ix_rca_members_user_id (user_id)
+
+### `rca_work_orders`
+
+Breakdown work orders analysed by an RCA. A work order belongs to at most one RCA.
+
+| Column | Type | Null | Key / reference |
+|---|---|---|---|
+| `id` | uuid | no | PK |
+| `rca_id` | uuid | no | FK → rcas.id (on delete CASCADE) |
+| `work_order_id` | uuid | no | FK → work_orders.id (on delete RESTRICT) |
+| `note` | varchar(200) | yes |  |
+| `added_at` | datetime | no |  |
+
+Unique: (work_order_id)
+
+Indexes: ix_rca_work_orders_rca_id (rca_id)
+
+### `rcas`
+
+| Column | Type | Null | Key / reference |
+|---|---|---|---|
+| `id` | uuid | no | PK |
+| `number` | varchar(40) | no |  |
+| `title` | varchar(200) | no |  |
+| `status` | enum(candidate, not_required, investigation, awaiting_approval, action_plan, monitoring, closed, cancelled) | no |  |
+| `source` | varchar(10) | no |  |
+| `asset_id` | uuid | no | FK → assets.id (on delete RESTRICT) |
+| `department_id` | uuid | no | FK → departments.id (on delete RESTRICT) |
+| `failure_code_id` | uuid | yes | FK → failure_codes.id (on delete RESTRICT) |
+| `trigger_reasons` | jsonb | no |  |
+| `request_note` | text | yes |  |
+| `decided_by_id` | uuid | yes | FK → users.id (on delete RESTRICT) |
+| `decided_at` | datetime | yes |  |
+| `decision_note` | text | yes |  |
+| `leader_id` | uuid | yes | FK → users.id (on delete RESTRICT) |
+| `started_at` | datetime | yes |  |
+| `due_date` | date | yes |  |
+| `problem` | jsonb | no |  |
+| `problem_statement` | text | yes |  |
+| `timeline` | jsonb | no |  |
+| `whys` | jsonb | no |  |
+| `fishbone` | jsonb | no |  |
+| `root_causes` | jsonb | no |  |
+| `analysis_summary` | text | yes |  |
+| `lessons_learned` | text | yes |  |
+| `submitted_at` | datetime | yes |  |
+| `approved_by_id` | uuid | yes | FK → users.id (on delete RESTRICT) |
+| `approved_at` | datetime | yes |  |
+| `review_note` | text | yes |  |
+| `actions_done_at` | datetime | yes |  |
+| `effectiveness_due` | date | yes |  |
+| `effectiveness_result` | varchar(20) | yes |  |
+| `effectiveness_note` | text | yes |  |
+| `recurrence_count` | integer | no |  |
+| `last_recurrence_wo_id` | uuid | yes | FK → work_orders.id (on delete RESTRICT) |
+| `closed_by_id` | uuid | yes | FK → users.id (on delete RESTRICT) |
+| `closed_at` | datetime | yes |  |
+| `plant_id` | uuid | no | FK → plants.id (on delete RESTRICT) |
+| `created_at` | datetime | no |  |
+| `updated_at` | datetime | no |  |
+| `created_by_id` | uuid | yes | FK → users.id (on delete SET NULL) |
+
+Unique: (plant_id, number)
+
+Indexes: ix_rca_plant_status (plant_id, status); ix_rcas_failure_code_id (failure_code_id); ix_rcas_asset_id (asset_id); ix_rcas_leader_id (leader_id); ix_rcas_department_id (department_id); ix_rcas_plant_id (plant_id)

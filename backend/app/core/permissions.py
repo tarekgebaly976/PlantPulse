@@ -53,6 +53,11 @@ PERMISSIONS: dict[str, str] = {
     "report.export": "Export reports",
     "report.management": "Generate the management presentation (PowerPoint) for a period",
     "attachment.upload": "Upload attachments",
+    "rca.view": "View root cause analyses (RCA)",
+    "rca.edit": "Work on RCAs: request one for a breakdown, write the analysis, plan and update actions",
+    "rca.lead": "Can be chosen as RCA leader (engineering positions)",
+    "rca.approve": "Decide which RCA candidates go ahead, approve analyses and close RCAs",
+    "rca.settings": "Set the RCA rules (what counts as a major breakdown)",
 }
 
 _ALL = set(PERMISSIONS)
@@ -81,6 +86,8 @@ _SUPERVISOR = _VIEW | {
     "shutdown.manage",
     "attachment.upload",
     "shift.manage",
+    "rca.edit",
+    "rca.lead",
 }
 
 ROLES: dict[str, tuple[str, set[str]]] = {
@@ -111,6 +118,7 @@ ROLES: dict[str, tuple[str, set[str]]] = {
             "shift.manage",
             "kpi.manage",
             "report.management",
+            "rca.edit",
         },
     ),
     "mech_supervisor": ("Mechanical Supervisor", _SUPERVISOR),
@@ -135,6 +143,8 @@ ROLES: dict[str, tuple[str, set[str]]] = {
             "asset.edit",
             "attachment.upload",
             "kpi.manage",
+            "rca.edit",
+            "rca.lead",
         },
     ),
     "engineer": (
@@ -153,6 +163,8 @@ ROLES: dict[str, tuple[str, set[str]]] = {
             "asset.edit",
             "attachment.upload",
             "handover.create",
+            "rca.edit",
+            "rca.lead",
         },
     ),
     "technician": (
@@ -172,6 +184,7 @@ ROLES: dict[str, tuple[str, set[str]]] = {
             "pdm.record",
             "handover.create",
             "attachment.upload",
+            "rca.view",
         },
     ),
     "storekeeper": (
@@ -189,6 +202,6 @@ ROLES: dict[str, tuple[str, set[str]]] = {
             "lube.view",
         },
     ),
-    "production_user": ("Production User", {"asset.view", "wo.view", "request.create", "pdm.view", "kpi.view"}),
+    "production_user": ("Production User", {"asset.view", "wo.view", "request.create", "pdm.view", "kpi.view", "rca.view"}),
     "management_viewer": ("Management Viewer", _VIEW - {"audit.view"}),
 }

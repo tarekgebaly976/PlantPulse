@@ -57,3 +57,8 @@ _This is the **default** matrix. A System Administrator can change it (and add c
 | `report.export` | Export reports | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ |  | ✓ |
 | `report.management` | Generate the management presentation (PowerPoint) for a period | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |
 | `attachment.upload` | Upload attachments | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |
+| `rca.view` | View root cause analyses (RCA) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ |
+| `rca.edit` | Work on RCAs: request one for a breakdown, write the analysis, plan and update actions | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |
+| `rca.lead` | Can be chosen as RCA leader (engineering positions) | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ |  |  |  |  |
+| `rca.approve` | Decide which RCA candidates go ahead, approve analyses and close RCAs | ✓ | ✓ |  |  |  |  |  |  |  |  |  |
+| `rca.settings` | Set the RCA rules (what counts as a major breakdown) | ✓ | ✓ |  |  |  |  |  |  |  |  |  |

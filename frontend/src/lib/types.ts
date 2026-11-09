@@ -28,13 +28,14 @@ export interface WorkOrder {
   source: string; external_ref: string | null;
   safety_signed_by_id: UUID | null; safety_signed_at: string | null; requires_testing: boolean; test_result: string | null;
   test_passed: boolean | null; tested_at: string | null; findings: string | null; recommendations: string | null; root_cause: string | null;
-  corrective_action: string | null; is_repeat_failure: boolean; pm_occurrence_id: UUID | null; condition_alert_id: UUID | null;
+  corrective_action: string | null; is_repeat_failure: boolean; safety_event: boolean; pm_occurrence_id: UUID | null; condition_alert_id: UUID | null;
   shutdown_package_id: UUID | null; work_request_id: UUID | null; version: number; created_at: string;
   assignments: { user_id: UUID; is_lead: boolean }[];
 }
 export interface ChecklistItem { id: UUID; seq: number; description: string; kind: "check" | "reading"; is_required: boolean; unit: string | null;
   min_value: number | null; max_value: number | null; is_done: boolean; is_ok: boolean | null; reading_value: number | null; remark: string | null; done_by: string | null }
 export interface WODetail {
+  rca: { id: UUID; number: string; status: string } | null;
   work_order: WorkOrder; asset: { id: UUID; code: string; name: string; location: string | null; criticality: string } | null;
   allowed_transitions: string[]; assignees: { user_id: UUID; name: string; is_lead: boolean }[]; checklist: ChecklistItem[];
   labor: { id: UUID; name: string; work_date: string; hours: number; is_overtime: boolean; cost: number; notes: string | null }[];

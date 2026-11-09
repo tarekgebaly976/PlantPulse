@@ -67,3 +67,18 @@ body { background: var(--mantine-color-body); -webkit-font-smoothing: antialiase
 
 /* Empty states and loading placeholders */
 .pp-empty { border: 1px dashed var(--mantine-color-default-border); border-radius: var(--mantine-radius-md); background: var(--pp-surface); }
+
+/* RCA report: A4 sheet on screen, clean page when printed (also "Save as PDF"). */
+.rca-sheet { background: #fff; color: #111; max-width: 210mm; margin: 0 auto; padding: 12mm; box-shadow: 0 2px 12px rgba(0, 0, 0, .08); font-size: 12px; }
+.rca-sheet h1 { font-size: 18px; margin: 0; color: #17324D; }
+.rca-sheet h2 { font-size: 13px; margin: 14px 0 4px; padding: 3px 6px; background: #17324D; color: #fff; border-radius: 3px; break-after: avoid; }
+.rca-sheet table { width: 100%; border-collapse: collapse; }
+.rca-sheet td, .rca-sheet th { border: 1px solid #ced4da; padding: 3px 5px; vertical-align: top; text-align: start; }
+.rca-sheet th { background: #f1f3f5; font-weight: 600; }
+.rca-sheet .rca-keep { break-inside: avoid; }
+@media print {
+  @page { size: A4; margin: 10mm; }
+  .pp-main, .mantine-AppShell-main { padding: 0 !important; background: #fff !important; min-height: 0 !important; }
+  .rca-sheet { box-shadow: none; padding: 0; max-width: none; }
+  .pp-bottom-nav, .mantine-AppShell-navbar, .mantine-AppShell-header { display: none !important; }
+}

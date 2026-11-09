@@ -121,6 +121,34 @@ references — there is no ERP connection.
 gateway); status Normal / Warning / Critical / Unknown is a transparent limit comparison (no prediction is claimed).
 Alerts can be acknowledged, turned into a predictive work order and resolved. Trend charts show limits.
 
+### Root cause analysis (RCA) of major breakdowns
+*Root cause analysis* in the menu. **What is a major breakdown** is set in *RCA rules* (administrator and maintenance
+manager; permission `rca.settings`): downtime at or above a limit per asset criticality (default A 2 h, B 3 h, C 5 h;
+blank switches a class off), the same failure mode (problem code) on the same asset N times within D days (default
+2 in 30), failure modes that always need an RCA, production loss, repair cost, and a *Safety / environment event*
+ticked on the work order. The rules are checked when a corrective or emergency work order is completed or closed,
+and again if its downtime, loss or codes are corrected later.
+
+1. **Waiting for decision** — a rule matched (or an engineer / supervisor pressed *Request RCA* on a work order).
+   The maintenance manager is notified and presses *Start RCA* (leader from the engineering positions —
+   permission `rca.lead` — team members, analysis due date; default 7 days) or *Not required* with a reason.
+2. **Investigation** — the team fills in the tabs: *Problem (5W1H)* (pre-filled from the work orders) and the
+   timeline, *5 Whys* (each answer can be asked "why?" again or get a second branch; mark the root causes),
+   *Fishbone* (causes under Man, Machine, Method, Material, Measurement, Environment, each possible / verified /
+   ruled out; the diagram draws itself), *Root causes* (physical, human, system/latent), *Action plan*
+   (containment, corrective, preventive; owner and due date) and *Evidence* (photos, files). Press *Save*.
+   The leader presses *Submit for approval*.
+3. **Awaiting approval** — the manager approves or returns it to the team with a note.
+4. **Action plan** — owners finish their actions with the result. *Create work order* raises a work order for an
+   action; completing that work order finishes the action. A changed PM plan can be linked to the action.
+5. **Effectiveness check** — starts when the last action is done (default 90 days). If the same failure mode
+   comes back on the asset, the investigation reopens automatically. At the end the manager is told the RCA can be
+   *closed as effective*.
+
+Overdue analyses and actions are reminded on the first overdue day and then weekly. *Print report* gives a one-page
+A4 report (print or save as PDF, in the interface language). The register can be exported to Excel, and the
+management presentation has an RCA slide.
+
 ## 9. Managers: KPIs and reports
 *KPIs & reports*: 20 KPIs for a period and department. Click a KPI for its formula, inclusion rules, numerator /
 denominator, 12-month trend and the underlying records. If data is missing the KPI says **Not available** and why —

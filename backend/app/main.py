@@ -24,6 +24,7 @@ from app.api.routers import (
     notifications,
     pdm,
     pm,
+    rca,
     shifts,
     shutdowns,
     workorders,
@@ -177,6 +178,7 @@ def create_app() -> FastAPI:
         attachments.router,
         io.router,
         dashboard.router,
+        rca.router,
     ):
         app.include_router(r, prefix=API)
 

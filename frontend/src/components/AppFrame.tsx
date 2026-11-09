@@ -3,7 +3,7 @@
 import { ActionIcon, AppShell, Avatar, Badge, Box, useComputedColorScheme, useMantineColorScheme, Burger, Button, Group, Indicator, Menu, Modal, NavLink, PasswordInput, ScrollArea, Select, Stack, Text, Tooltip } from "@mantine/core";
 import { useDisclosure, useNetwork } from "@mantine/hooks";
 import {
-  IconAlertTriangle, IconBell, IconBox, IconCalendarTime, IconChartBar, IconClipboardList, IconDashboard, IconDroplet, IconHeartRateMonitor,
+  IconAlertTriangle, IconBell, IconBox, IconCalendarTime, IconChartBar, IconClipboardList, IconDashboard, IconDroplet, IconFishBone, IconHeartRateMonitor,
   IconKey, IconLanguage, IconLogout, IconMoon, IconPlus, IconSun, IconQrcode, IconSettings, IconSitemap, IconTool, IconToolsKitchen, IconUserCheck, IconWifi, IconWifiOff,
 } from "@tabler/icons-react";
 import Link from "next/link";
@@ -30,6 +30,7 @@ const NAV_GROUPS: { key: string | null; items: NavItem[] }[] = [
     { href: "/lubrication", key: "nav.lubrication", icon: IconDroplet, perm: "lube.view" },
     { href: "/pdm", key: "nav.pdm", icon: IconHeartRateMonitor, perm: "pdm.view" },
     { href: "/shutdowns", key: "nav.shutdowns", icon: IconTool, perm: "shutdown.view" },
+    { href: "/rca", key: "nav.rca", icon: IconFishBone, perm: "rca.view" },
   ] },
   { key: "navGroup.resources", items: [
     { href: "/assets", key: "nav.assets", icon: IconSitemap, perm: "asset.view" },
