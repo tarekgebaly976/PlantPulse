@@ -223,3 +223,25 @@ def test_company_kpi_month_entry_in_app(world):
     assert admin.put("/kpis/scorecard/month", {"period": "2026-13", "values": []}).status_code == 422
     bad = {"period": "2026-11", "values": [{"id": "00000000-0000-0000-0000-000000000000", "actual": 1}]}
     assert admin.put("/kpis/scorecard/month", bad).status_code == 422
+
+
+def test_company_kpi_added_in_app_without_template(world):
+    admin, viewer = world.api("admin"), world.api("viewer")
+    body = {"name": "Safety incidents", "unit": "count", "higher_is_better": False, "department_id": str(world.depts["PM"].id)}
+    assert viewer.post("/kpis/scorecard", body).status_code == 403
+    cid = admin.ok("post", "/kpis/scorecard", body)["id"]
+    assert admin.post("/kpis/scorecard", {**body, "name": "safety INCIDENTS"}).status_code == 422  # same name
+    assert admin.post("/kpis/scorecard", {"name": "Bad link", "kpi_code": "nope"}).status_code == 422
+    assert admin.post("/kpis/scorecard", {"name": "Bad dept", "department_id": "00000000-0000-0000-0000-000000000000"}).status_code == 422
+    admin.ok("put", "/kpis/scorecard/month", {"period": "2026-03", "values": [{"id": cid, "actual": 1, "target": 0}]})
+    (c,) = viewer.ok("get", "/kpis/scorecard", params={"year": 2026})
+    assert (c["name"], c["department"], c["unit"], c["higher_is_better"]) == ("Safety incidents", "PM", "count", False)
+    assert c["months"][2] == {"target": 0.0, "actual": 1.0}
+    admin.ok(
+        "patch",
+        f"/kpis/scorecard/{cid}",
+        {"name": "Safety incidents (LTI)", "unit": "count", "kpi_code": "mttr", "higher_is_better": False},
+    )
+    (c,) = viewer.ok("get", "/kpis/scorecard", params={"year": 2026})
+    assert (c["name"], c["department"], c["kpi_code"]) == ("Safety incidents (LTI)", None, "mttr") and c["months"][2]["actual"] == 1.0
+    assert viewer.patch(f"/kpis/scorecard/{cid}", {"name": "x"}).status_code == 403

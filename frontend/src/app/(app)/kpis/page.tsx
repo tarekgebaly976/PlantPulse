@@ -1,13 +1,16 @@
 "use client";
 
 import { BarChart } from "@mantine/charts";
-import { Alert, Button, Card, FileInput, Group, Modal, NumberInput, ScrollArea, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput } from "@mantine/core";
+import { Alert, Anchor, Button, Card, FileInput, Group, Modal, NumberInput, ScrollArea, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
 import { FailurePareto } from "@/components/FailureModes";
 import { DeptSelect, Loading, PageHeader } from "@/components/ui";
-import { api, download, put } from "@/lib/api";
+import { IconPlus } from "@tabler/icons-react";
+import { KpiControlChart, StatusLegend } from "@/components/KpiControlChart";
+import { api, download, patch, post, put } from "@/lib/api";
+import { status, STATUS_COLOR, type KpiCard } from "@/lib/kpiStatus";
 import { fmtNum, useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import type { KPI } from "@/lib/types";
@@ -52,12 +55,61 @@ function Drill({ code, start, end, dept, onClose }: { code: string; start: strin
   );
 }
 
-interface KpiCard { id: string; name: string; unit: string | null; department: string | null; kpi_code: string | null; higher_is_better: boolean;
-  months: { target: number | null; actual: number | null }[] }
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-const met = (c: KpiCard, a: number | null, tg: number | null) => (a === null || tg === null ? null : c.higher_is_better ? a >= tg : a <= tg);
 const avg = (xs: (number | null)[]) => { const v = xs.filter((x): x is number => x !== null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+
+/** Add a company KPI in the app (no Excel needed), or change its name, department, unit, direction or CMMS link. */
+function KpiForm({ card, defs, onClose }: { card: KpiCard | null; defs: Def[]; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [f, setF] = useState({
+    name: card?.name ?? "", unit: card?.unit ?? "", department_id: card?.department_id ?? null, kpi_code: card?.kpi_code ?? null,
+    higher_is_better: card ? card.higher_is_better : true,
+  });
+  const body = { ...f, name: f.name.trim(), unit: f.unit.trim() || null };
+  const save = useMut(() => (card ? patch(`/kpis/scorecard/${card.id}`, body) : post("/kpis/scorecard", body)), { onDone: onClose });
+  return (
+    <Modal opened onClose={onClose} title={card ? t("kpi.editKpi") : t("kpi.addKpi")}>
+      <Stack>
+        <TextInput label={t("kpi.kpiName")} required maxLength={120} value={f.name} onChange={(e) => setF({ ...f, name: e.currentTarget.value })} data-autofocus />
+        <DeptSelect value={f.department_id} onChange={(v) => setF({ ...f, department_id: v })} clearable label={`${t("common.department")} (${t("kpi.blankPlant")})`} />
+        <SimpleGrid cols={2}>
+          <TextInput label={t("kpi.unit")} placeholder="h, %, count" maxLength={20} value={f.unit} onChange={(e) => setF({ ...f, unit: e.currentTarget.value })} />
+          <Select label={t("kpi.direction")} allowDeselect={false} value={f.higher_is_better ? "up" : "down"} onChange={(v) => setF({ ...f, higher_is_better: v === "up" })}
+            data={[{ value: "up", label: `↑ ${t("kpi.higherBetter")}` }, { value: "down", label: `↓ ${t("kpi.lowerBetter")}` }]} />
+        </SimpleGrid>
+        <Select label={`${t("kpi.cmmsLink")} (${t("common.optional")})`} clearable searchable value={f.kpi_code} onChange={(v) => setF({ ...f, kpi_code: v })}
+          data={defs.map((d) => ({ value: d.code, label: d.name }))} description={t("kpi.cmmsLinkHint")} />
+        <Group justify="flex-end"><Button variant="default" onClick={onClose}>{t("common.cancel")}</Button>
+          <Button disabled={!body.name} loading={save.isPending} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button></Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+/** One company KPI over the last 24 months: actual vs target on a control chart with Nelson rules. */
+function KpiChart({ card, year, onClose }: { card: KpiCard; year: number; onClose: () => void }) {
+  const { t } = useTranslation();
+  const prev = useQ<KpiCard[]>("/kpis/scorecard", { year: year - 1 });
+  const now = new Date();
+  const last = year === now.getFullYear() ? now.getMonth() : 11;
+  const before = prev.data?.find((c) => c.id === card.id)?.months ?? [];
+  const points = [
+    ...before.map((m, i) => ({ period: `${year - 1}-${String(i + 1).padStart(2, "0")}`, ...m })),
+    ...card.months.slice(0, last + 1).map((m, i) => ({ period: `${year}-${String(i + 1).padStart(2, "0")}`, ...m })),
+  ];
+  const first = points.findIndex((p) => p.actual !== null || p.target !== null);
+  return (
+    <Modal opened onClose={onClose} size="xl" title={card.name}>
+      {!prev.data ? <Loading /> : (
+        <Stack>
+          <Text size="xs" c="dimmed">{[card.department, card.unit, card.higher_is_better ? `↑ ${t("kpi.higherBetter")}` : `↓ ${t("kpi.lowerBetter")}`].filter(Boolean).join(" · ")}</Text>
+          <StatusLegend />
+          <KpiControlChart points={first < 0 ? [] : points.slice(first)} higherIsBetter={card.higher_is_better} unit={card.unit} />
+        </Stack>
+      )}
+    </Modal>
+  );
+}
 
 type Num = number | string;
 const num = (v: Num) => (v === "" ? null : Number(v));
@@ -102,7 +154,7 @@ function MonthEntry({ cards, year, onClose }: { cards: KpiCard[]; year: number; 
   );
 }
 
-/** Company KPI scorecard (e.g. the management KPI sheet): target and actual per month, entered by the team via Excel. */
+/** Company KPI scorecard (e.g. the management KPI sheet): target and actual per month, added and entered in the app or via Excel. */
 function CompanyKPIs() {
   const { t } = useTranslation();
   const { can } = useSession();
@@ -114,13 +166,21 @@ function CompanyKPIs() {
   const preview = useMut(() => api<NonNullable<typeof res>>("POST", "/kpis/scorecard/preview", fd()), { success: false, onDone: setRes });
   const commit = useMut(() => api("POST", "/kpis/scorecard/commit", fd()), { onDone: () => { setFile(null); setRes(null); } });
   const remove = useMut((id: string) => api("DELETE", `/kpis/scorecard/${id}`));
+  const defs = useQ<Def[]>("/kpis/definitions");
   const [entry, setEntry] = useState(false);
+  const [form, setForm] = useState<KpiCard | "new" | null>(null);
+  const [chart, setChart] = useState<KpiCard | null>(null);
+  const cell = (c: KpiCard, a: number | null, tg: number | null) => {
+    const s = status(c.higher_is_better, a, tg);
+    return s ? { background: STATUS_COLOR[s].bg, color: STATUS_COLOR[s].fg } : undefined;
+  };
   return (
     <Stack>
       <Text size="sm" c="dimmed">{t("kpi.manualHint")}</Text>
       <Group align="end" wrap="wrap">
         <NumberInput label={t("kpi.year")} w={110} min={2000} max={2100} value={year} onChange={setYear} />
-        {can("kpi.manage") && (cards.data ?? []).length > 0 && <Button onClick={() => setEntry(true)}>{t("kpi.enterMonth")}</Button>}
+        {can("kpi.manage") && <Button variant="light" leftSection={<IconPlus size={16} />} onClick={() => setForm("new")}>{t("kpi.addKpi")}</Button>}
+        {can("kpi.manage") && <Button disabled={(cards.data ?? []).length === 0} title={(cards.data ?? []).length === 0 ? t("kpi.addFirst") : undefined} onClick={() => setEntry(true)}>{t("kpi.enterMonth")}</Button>}
         <Button variant="light" onClick={() => void download("/kpis/scorecard/template.xlsx", { year: Number(year) }, `kpi_scorecard_${year}.xlsx`)}>{t("kpi.downloadTemplate")}</Button>
       </Group>
       {can("kpi.manage") && (
@@ -136,22 +196,28 @@ function CompanyKPIs() {
           {res.errors.slice(0, 50).map((e, i) => <div key={i}>Row {e.row}: {e.errors.join("; ")}</div>)}
         </Alert>
       )}
+      {form && <KpiForm card={form === "new" ? null : form} defs={defs.data ?? []} onClose={() => setForm(null)} />}
+      {chart && <KpiChart card={chart} year={Number(year)} onClose={() => setChart(null)} />}
+      {(cards.data ?? []).length > 0 && <StatusLegend />}
       {entry && cards.data && <MonthEntry cards={cards.data} year={Number(year)} onClose={() => setEntry(false)} />}
-      {(cards.data ?? []).length === 0 ? <Text size="sm" c="dimmed">{t("common.noData")}</Text> : (
+      {(cards.data ?? []).length === 0 ? <Text size="sm" c="dimmed">{can("kpi.manage") ? t("kpi.emptyManage") : t("common.noData")}</Text> : (
         <ScrollArea>
           <Table striped fz="sm" withColumnBorders>
             <Table.Thead><Table.Tr><Table.Th>KPI</Table.Th><Table.Th /><Table.Th>{t("kpi.ytd")}</Table.Th>{MONTHS.map((m) => <Table.Th key={m}>{m}</Table.Th>)}{can("kpi.manage") && <Table.Th />}</Table.Tr></Table.Thead>
             <Table.Tbody>{(cards.data ?? []).map((c) => {
-              const ya = avg(c.months.map((m) => m.actual)), yt = avg(c.months.map((m) => m.target)), ok = met(c, ya, yt);
+              const ya = avg(c.months.map((m) => m.actual)), yt = avg(c.months.map((m) => m.target));
               return (
                 <Table.Tr key={c.id}>
-                  <Table.Td><b>{c.name}</b><Text size="xs" c="dimmed">{[c.department, c.unit, c.higher_is_better ? "↑" : "↓"].filter(Boolean).join(" · ")}</Text></Table.Td>
+                  <Table.Td><Anchor component="button" fw={700} size="sm" ta="start" onClick={() => setChart(c)} title={t("kpi.openChart")}>{c.name}</Anchor>
+                    <Text size="xs" c="dimmed">{[c.department, c.unit, c.higher_is_better ? "↑" : "↓"].filter(Boolean).join(" · ")}</Text></Table.Td>
                   <Table.Td><Text size="xs">{t("kpi.actual")}</Text><Text size="xs" c="dimmed">{t("kpi.target")}</Text></Table.Td>
-                  <Table.Td><Text size="sm" fw={700} c={ok === null ? undefined : ok ? "teal" : "red"}>{ya === null ? "—" : fmtNum(ya)}</Text><Text size="xs" c="dimmed">{yt === null ? "—" : fmtNum(yt)}</Text></Table.Td>
-                  {c.months.map((m, i) => { const g = met(c, m.actual, m.target); return (
-                    <Table.Td key={i}><Text size="sm" fw={600} c={g === null ? undefined : g ? "teal" : "red"}>{m.actual === null ? "—" : fmtNum(m.actual)}</Text>
-                      <Text size="xs" c="dimmed">{m.target === null ? "" : fmtNum(m.target)}</Text></Table.Td>); })}
-                  {can("kpi.manage") && <Table.Td><Button size="compact-xs" variant="subtle" color="red" onClick={() => { if (window.confirm(t("kpi.deleteConfirm", { name: c.name }))) remove.mutate(c.id); }}>{t("common.delete")}</Button></Table.Td>}
+                  <Table.Td style={cell(c, ya, yt)}><Text size="sm" fw={700} c="inherit">{ya === null ? "—" : fmtNum(ya)}</Text><Text size="xs" c="dimmed">{yt === null ? "—" : fmtNum(yt)}</Text></Table.Td>
+                  {c.months.map((m, i) => (
+                    <Table.Td key={i} style={cell(c, m.actual, m.target)}><Text size="sm" fw={600} c="inherit">{m.actual === null ? "—" : fmtNum(m.actual)}</Text>
+                      <Text size="xs" c="dimmed">{m.target === null ? "" : fmtNum(m.target)}</Text></Table.Td>))}
+                  {can("kpi.manage") && <Table.Td><Group gap={4} wrap="nowrap">
+                    <Button size="compact-xs" variant="subtle" onClick={() => setForm(c)}>{t("common.edit")}</Button>
+                    <Button size="compact-xs" variant="subtle" color="red" onClick={() => { if (window.confirm(t("kpi.deleteConfirm", { name: c.name }))) remove.mutate(c.id); }}>{t("common.delete")}</Button></Group></Table.Td>}
                 </Table.Tr>);
             })}</Table.Tbody>
           </Table>

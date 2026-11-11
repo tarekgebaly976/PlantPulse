@@ -291,3 +291,29 @@ def save_month(db: Session, plant: Plant, month: date, values: list[dict[str, An
             db.delete(v)
     db.flush()
     return changed
+
+
+def save_card(db: Session, plant: Plant, data: dict[str, Any], card: KPIScorecard | None = None) -> KPIScorecard:
+    """Create a company KPI from the app (no Excel), or change its name, department, unit, direction or link."""
+    name = data["name"].strip()
+    if not name:
+        raise ValueError("Name is required")
+    dup = db.execute(select(KPIScorecard).where(KPIScorecard.plant_id == plant.id)).scalars()
+    if any(c.name.lower() == name.lower() and (card is None or c.id != card.id) for c in dup):
+        raise ValueError(f"A KPI named {name} already exists")
+    dept = data.get("department_id")
+    if dept is not None and dept not in _depts(db, plant):
+        raise ValueError("Department not found")
+    code = data.get("kpi_code") or None
+    if code and code not in {d["code"] for d in KPI_DEFINITIONS}:
+        raise ValueError(f"Unknown CMMS KPI {code}")
+    if card is None:
+        last = db.execute(select(KPIScorecard.sort).where(KPIScorecard.plant_id == plant.id)).scalars().all()
+        card = KPIScorecard(plant_id=plant.id, name=name, sort=max(last, default=-1) + 1)
+        db.add(card)
+    card.name, card.department_id, card.kpi_code = name, dept, code
+    card.unit = (data.get("unit") or "").strip() or None
+    card.higher_is_better = bool(data.get("higher_is_better", True))
+    card.frequency = (data.get("frequency") or "").strip() or "Monthly"
+    db.flush()
+    return card

@@ -191,6 +191,41 @@ def scorecard_month(body: MonthIn, ctx: Ctx = Depends(require("kpi.manage")), db
     return {"changed": n}
 
 
+class CardIn(In):
+    name: str = Field(min_length=1, max_length=120)
+    unit: str | None = Field(None, max_length=20)
+    department_id: uuid.UUID | None = None
+    kpi_code: str | None = Field(None, max_length=40)
+    higher_is_better: bool = True
+    frequency: str | None = Field(None, max_length=20)
+
+
+@router.post("/scorecard", status_code=201)
+def scorecard_create(body: CardIn, ctx: Ctx = Depends(require("kpi.manage")), db: Session = Depends(get_db, scope="function")) -> dict:
+    """Add a company KPI from the app, so monthly results can be entered without uploading the Excel template first."""
+    try:
+        c = sc.save_card(db, ctx.plant, body.model_dump())
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    audit(db, "kpi.scorecard_create", user_id=ctx.user.id, plant_id=ctx.plant_id, data={"name": c.name})
+    return {"id": str(c.id)}
+
+
+@router.patch("/scorecard/{card_id}")
+def scorecard_update(
+    card_id: uuid.UUID, body: CardIn, ctx: Ctx = Depends(require("kpi.manage")), db: Session = Depends(get_db, scope="function")
+) -> dict:
+    c = db.get(KPIScorecard, card_id)
+    if c is None or c.plant_id != ctx.plant_id:
+        raise HTTPException(404, "KPI not found")
+    try:
+        sc.save_card(db, ctx.plant, body.model_dump(), c)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    audit(db, "kpi.scorecard_update", user_id=ctx.user.id, plant_id=ctx.plant_id, data={"name": c.name})
+    return {"id": str(c.id)}
+
+
 @router.delete("/scorecard/{card_id}", status_code=204)
 def scorecard_delete(
     card_id: uuid.UUID, ctx: Ctx = Depends(require("kpi.manage")), db: Session = Depends(get_db, scope="function")
