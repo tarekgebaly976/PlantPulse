@@ -7,14 +7,15 @@ import {
   IconCircleCheck, IconEye, IconHeartRateMonitor, IconPlus, IconQrcode, IconUserCheck,
 } from "@tabler/icons-react";
 import Link from "next/link";
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { fmtDate, fmtNum, useAssetCodes, useMut, useQ } from "@/lib/hooks";
 import type { Page, WorkOrder } from "@/lib/types";
 import { useSession } from "@/lib/session";
 import { latestMonth, status, STATUS_COLOR, type KpiCard, type Status } from "@/lib/kpiStatus";
-import { CM_COLOR, ConditionLegend, StatusLegend } from "@/components/KpiControlChart";
+import { CM_COLOR, ConditionLegend } from "@/components/KpiControlChart";
+import { useKpiTargets } from "@/lib/kpiTargets";
 import { put } from "@/lib/api";
 
 interface Summary {
@@ -23,19 +24,44 @@ interface Summary {
   open_alerts?: { critical: number; warning: number }; timezone?: string;
 }
 
-function Stat({ label, value, href, color, icon: Icon, alert, sub }: {
-  label: string; value: number | undefined; href: string; color: string; icon: typeof IconUserCheck; alert?: boolean; sub?: string;
+/** One colour code for the whole dashboard: red = act now, amber = needs attention or waiting for someone,
+ *  green = all clear / target met, grey = information only. */
+type Level = "bad" | "warn" | "ok" | "info";
+const LEVEL: Record<Level, { fg: string; bg: string; border: string; mantine: string }> = {
+  bad: { fg: "#c92a2a", bg: "#fff5f5", border: "#e03131", mantine: "red" },
+  warn: { fg: "#d9480f", bg: "#fff9db", border: "#f08c00", mantine: "orange" },
+  ok: { fg: "#2b8a3e", bg: "#ebfbee", border: "#37b24d", mantine: "green" },
+  info: { fg: "var(--pp-strong)", bg: "transparent", border: "#adb5bd", mantine: "gray" },
+};
+
+function DashLegend() {
+  const { t } = useTranslation();
+  return (
+    <Group gap="lg" mb="md" data-testid="dash-legend">
+      <Text size="xs" fw={700} c="dimmed">{t("dash.colourKey")}:</Text>
+      {(["bad", "warn", "ok", "info"] as const).map((k) => (
+        <Group key={k} gap={6} wrap="nowrap"><span style={{ width: 14, height: 14, borderRadius: 3, background: LEVEL[k].bg, border: `3px solid ${LEVEL[k].border}` }} />
+          <Text size="xs">{t(`dash.level_${k}`)}</Text></Group>))}
+    </Group>
+  );
+}
+
+function Stat({ label, value, href, level, icon: Icon, sub }: {
+  label: string; value: number | undefined; href: string; level: Level; icon: typeof IconUserCheck; sub?: string;
 }) {
   if (value === undefined) return null;
-  const on = value > 0;
+  const L = LEVEL[level];
   return (
-    <Card withBorder component={Link} href={href} padding="sm" data-testid={`stat-${href}`} className="pp-stat"
-      data-alert={alert && on ? true : undefined} style={{ "--pp-stat-color": `var(--mantine-color-${color}-6)` } as CSSProperties}>
+    <Card withBorder component={Link} href={href} padding="sm" data-testid={`stat-${href}`} data-level={level} className="pp-stat"
+      style={{ borderInlineStart: `5px solid ${L.border}`, background: level === "info" ? undefined : L.bg }}>
       <Group justify="space-between" align="flex-start" wrap="nowrap">
         <Text size="sm" c="dimmed" fw={500} lh={1.3} lineClamp={2}>{label}</Text>
-        <ThemeIcon variant="light" color={on ? color : "gray"} size={30} radius="md" style={{ flexShrink: 0 }}><Icon size={17} stroke={1.8} /></ThemeIcon>
+        <ThemeIcon variant="light" color={L.mantine} size={30} radius="md" style={{ flexShrink: 0 }}><Icon size={17} stroke={1.8} /></ThemeIcon>
       </Group>
-      <Text fz={{ base: 26, sm: 32 }} fw={800} lh={1.1} mt={6} c={on && alert ? `${color}.7` : on ? "var(--pp-strong)" : "gray.5"}>{value}</Text>
+      <Group gap={6} align="baseline" mt={6}>
+        <Text fz={{ base: 26, sm: 32 }} fw={800} lh={1.1} c={L.fg}>{value}</Text>
+        {level === "ok" && <IconCircleCheck size={18} color={L.fg} />}
+      </Group>
       {sub && <Text size="xs" c="dimmed" mt={2} lineClamp={2}>{sub}</Text>}
     </Card>
   );
@@ -124,23 +150,30 @@ function useDashPrefs() {
   return { prefs: q.data ?? DEFAULT_PREFS, loaded: !!q.data, save: (p: DashPrefs) => save.mutate(p) };
 }
 
-interface TileDef { key: string; label: string; href: string; color: string; icon: typeof IconUserCheck; value: (s: Summary) => number | undefined; alert?: boolean;
-  sub?: (s: Summary, t: (k: string, o?: Record<string, unknown>) => string) => string | undefined }
+interface TileDef { key: string; label: string; href: string; icon: typeof IconUserCheck; value: (s: Summary) => number | undefined;
+  /** colour when the count is above zero; zero = green (all clear) unless info */
+  level: Level | ((s: Summary) => Level); sub?: (s: Summary, t: (k: string, o?: Record<string, unknown>) => string) => string | undefined }
 const TILES: TileDef[] = [
-  { key: "my_open", label: "dash.myOpen", href: "/my-work", color: "brand", icon: IconUserCheck, value: (s) => s.my_open_work },
-  { key: "emergencies", label: "dash.emergencies", href: "/work-orders?type=emergency&open=1", color: "red", icon: IconAlertOctagon, value: (s) => s.open_emergencies, alert: true },
-  { key: "overdue", label: "dash.overdue", href: "/work-orders?overdue=1", color: "orange", icon: IconClockExclamation, value: (s) => s.overdue_work_orders, alert: true },
-  { key: "open", label: "dash.open", href: "/work-orders?open=1", color: "brand", icon: IconClipboardList, value: (s) => s.open_work_orders },
-  { key: "new_requests", label: "dash.newRequests", href: "/requests", color: "yellow", icon: IconAlertTriangle, value: (s) => s.new_requests, alert: true },
-  { key: "awaiting_approval", label: "dash.awaitingApproval", href: "/work-orders?status=awaiting_approval", color: "yellow", icon: IconChecklist, value: (s) => s.awaiting_approval, alert: true },
-  { key: "awaiting_review", label: "dash.awaitingReview", href: "/work-orders?status=awaiting_review", color: "violet", icon: IconEye, value: (s) => s.awaiting_review, alert: true },
-  { key: "pm_approvals", label: "dash.pmApprovals", href: "/pm?tab=approvals", color: "yellow", icon: IconCalendarTime, value: (s) => s.pm_pending_approvals, alert: true },
-  { key: "lube_overdue", label: "dash.lubeOverdue", href: "/lubrication", color: "orange", icon: IconDroplet, value: (s) => s.lube_overdue, alert: true },
+  { key: "my_open", label: "dash.myOpen", href: "/my-work", icon: IconUserCheck, value: (s) => s.my_open_work, level: "info" },
+  { key: "emergencies", label: "dash.emergencies", href: "/work-orders?type=emergency&open=1", icon: IconAlertOctagon, value: (s) => s.open_emergencies, level: "bad" },
+  { key: "overdue", label: "dash.overdue", href: "/work-orders?overdue=1", icon: IconClockExclamation, value: (s) => s.overdue_work_orders, level: "bad" },
+  { key: "open", label: "dash.open", href: "/work-orders?open=1", icon: IconClipboardList, value: (s) => s.open_work_orders, level: "info" },
+  { key: "new_requests", label: "dash.newRequests", href: "/requests", icon: IconAlertTriangle, value: (s) => s.new_requests, level: "warn" },
+  { key: "awaiting_approval", label: "dash.awaitingApproval", href: "/work-orders?status=awaiting_approval", icon: IconChecklist, value: (s) => s.awaiting_approval, level: "warn" },
+  { key: "awaiting_review", label: "dash.awaitingReview", href: "/work-orders?status=awaiting_review", icon: IconEye, value: (s) => s.awaiting_review, level: "warn" },
+  { key: "pm_approvals", label: "dash.pmApprovals", href: "/pm?tab=approvals", icon: IconCalendarTime, value: (s) => s.pm_pending_approvals, level: "warn" },
+  { key: "lube_overdue", label: "dash.lubeOverdue", href: "/lubrication", icon: IconDroplet, value: (s) => s.lube_overdue, level: "bad" },
   // Every open condition-monitoring alarm (the number matches the list it opens), split into alarm and warning limit.
-  { key: "cm_alarms", label: "dash.cmAlarms", href: "/pdm?tab=alerts", color: "red", icon: IconHeartRateMonitor, alert: true,
+  { key: "cm_alarms", label: "dash.cmAlarms", href: "/pdm?tab=alerts", icon: IconHeartRateMonitor,
     value: (s) => (s.open_alerts ? s.open_alerts.critical + s.open_alerts.warning : undefined),
+    level: (s) => ((s.open_alerts?.critical ?? 0) > 0 ? "bad" : "warn"),
     sub: (s, t) => (s.open_alerts ? t("dash.cmAlarmsSplit", { a: s.open_alerts.critical, w: s.open_alerts.warning }) : undefined) },
 ];
+const tileLevel = (x: TileDef, s: Summary): Level => {
+  const v = x.value(s) ?? 0;
+  if (x.level === "info") return "info";
+  return v > 0 ? (typeof x.level === "function" ? x.level(s) : x.level) : "ok";
+};
 const SECTIONS = ["quick", "tiles", "attention", "activity", "kpis", "condition"] as const;
 
 /** One place to choose everything the dashboard shows: sections, counters, and the KPIs with their targets. */
@@ -192,13 +225,39 @@ function Customise({ prefs, summary, defs, cards, onSave, onClose }: {
   );
 }
 
-function Swatch({ s }: { s: Status | null }) {
+function Chip({ s }: { s: Status | null }) {
   const { t } = useTranslation();
-  return s ? <Badge size="xs" variant="filled" color={STATUS_COLOR[s].mantine === "yellow" ? "orange" : STATUS_COLOR[s].mantine}>{t(`kpi.short_${s}`)}</Badge> : null;
+  if (!s) return null;
+  const c = s === "met" ? "green" : s === "near" ? "orange" : "red";
+  return <Badge size="sm" variant="filled" color={c} style={{ flexShrink: 0 }}>{t(`kpi.short_${s}`)}</Badge>;
+}
+const LV: Record<Status, Level> = { met: "ok", near: "warn", miss: "bad" };
+
+/** One KPI as a dashboard tile, same look as the counters: result (big), target, and status colour. */
+function KpiTile({ name, value, unit, target, st, sub, href, testid }: {
+  name: string; value: number | null; unit?: string | null; target: number | null; st: Status | null; sub?: string; href: string; testid?: string;
+}) {
+  const { t } = useTranslation();
+  const L = LEVEL[st ? LV[st] : "info"];
+  return (
+    <Card withBorder component={Link} href={href} padding="sm" className="pp-stat" data-testid={testid} data-level={st ?? "none"}
+      style={{ borderInlineStart: `5px solid ${L.border}`, background: st ? L.bg : undefined }}>
+      <Group justify="space-between" align="flex-start" wrap="nowrap" gap={4}>
+        <Text size="sm" c="dimmed" fw={500} lh={1.3} lineClamp={2}>{name}</Text><Chip s={st} />
+      </Group>
+      <Text fz={{ base: 24, sm: 30 }} fw={800} lh={1.1} mt={6} c={L.fg}>
+        {value === null ? "—" : fmtNum(value, 1)} {value !== null && unit && <Text span size="sm" c="dimmed" fw={500}>{unit}</Text>}
+      </Text>
+      <Text size="xs" mt={4} fw={600} c={target === null ? "dimmed" : undefined}>
+        {target === null ? t("dash.noTarget") : `${t("kpi.target")}: ${fmtNum(target, 1)}${unit ? ` ${unit}` : ""}`}
+      </Text>
+      {sub && <Text size="xs" c="dimmed">{sub}</Text>}
+    </Card>
+  );
 }
 
-/** KPI card on the dashboard: each user picks the KPIs; every KPI shows its result next to its target, coloured by status. */
-function KpiBoard({ today, prefs, onCustomise }: { today: string; prefs: DashPrefs; onCustomise: () => void }) {
+/** KPIs against their targets, as tiles like the counters: calculated KPIs (last 6 months) and company KPIs (latest month). */
+function KpiTiles({ today, prefs, onCustomise }: { today: string; prefs: DashPrefs; onCustomise: () => void }) {
   const { t } = useTranslation();
   const calcCodes = prefs.calc ?? DEFAULT_TILES;
   const d = new Date(`${today}T00:00:00`);
@@ -207,63 +266,35 @@ function KpiBoard({ today, prefs, onCustomise }: { today: string; prefs: DashPre
   const year = Number(today.slice(0, 4)), month = Number(today.slice(5, 7)) - 1;
   const q = useQ<{ kpis: Kpi[] }>("/kpis", { start, end: today }, { staleTime: 300_000 });
   const defs = useQ<{ code: string; name: string }[]>("/kpis/definitions", undefined, { staleTime: 3_600_000 });
-  const sc = useQ<KpiCard[]>("/kpis/scorecard", { year }, { staleTime: 300_000 });
+  const { resolve, cards } = useKpiTargets(year, month);
   const by = new Map((q.data?.kpis ?? []).map((k) => [k.code, k]));
   const names = new Map((defs.data ?? []).map((x) => [x.code, x.name]));
-  const cards = sc.data ?? [];
   const company = cards.filter((c) => prefs.company === null || prefs.company.includes(c.id));
-  // Target of a calculated KPI: the latest target of the plant-level company KPI linked to it.
-  const targetOf = (code: string) => {
-    const c = cards.find((x) => x.kpi_code === code && !x.department_id);
-    const m = c ? [...c.months.slice(0, month + 1)].reverse().find((x) => x.target !== null) : undefined;
-    return c && m ? { target: m.target as number, hib: c.higher_is_better } : null;
-  };
+  const missing = calcCodes.filter((c) => by.get(c)?.available && !resolve(c)).length;
   return (
-    <Card withBorder padding="md">
-      <Group justify="space-between" mb="sm">
-        <Anchor component={Link} href="/kpis" fw={700} c="var(--pp-strong)">{t("nav.kpis")}</Anchor>
-        <Group gap="xs"><Text size="xs" c="dimmed">{t("dash.last6")}</Text>
-          <Button size="compact-xs" variant="subtle" leftSection={<IconAdjustments size={14} />} onClick={onCustomise}>{t("dash.customise")}</Button></Group>
+    <Card withBorder padding="md" mb="lg" data-testid="dash-kpis">
+      <Group justify="space-between" mb="sm" wrap="wrap">
+        <Group gap="xs"><Anchor component={Link} href="/kpis" fw={700} c="var(--pp-strong)">{t("dash.kpiTitle")}</Anchor>
+          <Text size="xs" c="dimmed">{t("dash.last6")}</Text></Group>
+        <Button size="compact-sm" variant="subtle" leftSection={<IconAdjustments size={14} />} onClick={onCustomise}>{t("dash.customise")}</Button>
       </Group>
       {!q.data ? <Loading /> : (
-        <SimpleGrid cols={2} spacing="sm" verticalSpacing="sm">
+        <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing={{ base: "xs", sm: "md" }}>
           {calcCodes.map((code) => {
-            const k = by.get(code), tg = targetOf(code);
-            const s = k?.available && tg ? status(tg.hib, k.value, tg.target) : null;
-            return (
-              <div key={code} data-testid={`dash-kpi-${code}`} style={{ borderInlineStart: `4px solid ${s ? STATUS_COLOR[s].fg : "#dee2e6"}`, paddingInlineStart: 8 }}>
-                <Text size="xs" c="dimmed" lineClamp={1}>{TILE_LABEL[code] ? t(TILE_LABEL[code]) : names.get(code) ?? code}</Text>
-                <Text fz={22} fw={800} c={s ? STATUS_COLOR[s].fg : "var(--pp-strong)"} lh={1.2}>
-                  {k?.available ? fmtNum(k.value, 1) : "—"} {k?.available && <Text span size="sm" c="dimmed" fw={500}>{k.unit}</Text>}
-                </Text>
-                {tg && <Group gap={4}><Text size="xs" c="dimmed">{t("kpi.target")} {fmtNum(tg.target, 1)}</Text><Swatch s={s} /></Group>}
-              </div>
-            );
+            const k = by.get(code), tg = resolve(code);
+            const v = k?.available ? k.value : null;
+            return <KpiTile key={code} testid={`dash-kpi-${code}`} href="/kpis" name={TILE_LABEL[code] ? t(TILE_LABEL[code]) : names.get(code) ?? code}
+              value={v} unit={k?.unit} target={tg?.target ?? null} st={tg && v !== null ? status(tg.hib, v, tg.target) : null} />;
+          })}
+          {company.map((c) => {
+            const i = latestMonth(c, month);
+            const m = i === null ? null : c.months[i] ?? null;
+            return <KpiTile key={c.id} testid={`dash-ckpi-${c.id}`} href="/kpis" name={c.name} value={m?.actual ?? null} unit={c.unit} target={m?.target ?? null}
+              st={m ? status(c.higher_is_better, m.actual, m.target) : null} sub={[c.department, i === null ? null : MONTHS[i]].filter(Boolean).join(" · ")} />;
           })}
         </SimpleGrid>
       )}
-      {company.length > 0 && (
-        <>
-          <Text fw={600} size="sm" mt="md" mb={4}>{t("kpi.manual")}</Text>
-          <Table fz="xs" verticalSpacing={4} data-testid="dash-company-kpis">
-            <Table.Thead><Table.Tr><Table.Th>KPI</Table.Th><Table.Th>{t("kpi.month")}</Table.Th><Table.Th ta="end">{t("kpi.result")}</Table.Th><Table.Th ta="end">{t("kpi.target")}</Table.Th><Table.Th /></Table.Tr></Table.Thead>
-            <Table.Tbody>{company.map((c) => {
-              const i = latestMonth(c, month);
-              const m = i === null ? null : c.months[i] ?? null;
-              const s = m ? status(c.higher_is_better, m.actual, m.target) : null;
-              return (
-                <Table.Tr key={c.id} style={s ? { background: STATUS_COLOR[s].bg } : undefined}>
-                  <Table.Td><Text size="xs" fw={600} lineClamp={1}>{c.name}</Text>{c.department && <Text size="xs" c="dimmed">{c.department}</Text>}</Table.Td>
-                  <Table.Td>{i === null ? "—" : MONTHS[i]}</Table.Td>
-                  <Table.Td ta="end"><Text size="xs" fw={700} c={s ? STATUS_COLOR[s].fg : undefined}>{m?.actual == null ? "—" : fmtNum(m.actual)}{c.unit ? ` ${c.unit}` : ""}</Text></Table.Td>
-                  <Table.Td ta="end">{m?.target == null ? "—" : fmtNum(m.target)}</Table.Td>
-                  <Table.Td><Swatch s={s} /></Table.Td>
-                </Table.Tr>);
-            })}</Table.Tbody>
-          </Table>
-        </>
-      )}
-      <Group mt="sm"><StatusLegend compact /></Group>
+      {missing > 0 && <Text size="xs" c="dimmed" mt="sm">{t("dash.setTargets")} <Anchor component={Link} href="/kpis" size="xs">{t("nav.kpis")}</Anchor></Text>}
     </Card>
   );
 }
@@ -288,7 +319,8 @@ function ConditionBoard() {
             <Table.Tr key={p.id} style={{ cursor: "pointer", borderInlineStart: `4px solid ${CM_COLOR[p.last_status] ?? "#dee2e6"}` }}>
               <Table.Td><Anchor component={Link} href={`/pdm?point=${p.id}`} size="xs" fw={600}>{p.code}</Anchor><Text size="xs" c="dimmed" lineClamp={1}>{p.name}</Text></Table.Td>
               <Table.Td ta="end"><Text size="xs" fw={700} c={CM_COLOR[p.last_status]}>{fmtNum(p.last_value)} {p.unit}</Text></Table.Td>
-              <Table.Td>{sig.data?.[p.id] && <Badge color="red" variant="light" size="xs">{t("kpi.rule")} {sig.data[p.id]?.join(",")}</Badge>}</Table.Td>
+              <Table.Td w={1}>{sig.data?.[p.id] && <Badge color="red" variant="light" size="xs" styles={{ root: { overflow: "visible", maxWidth: "none" }, label: { overflow: "visible" } }}
+                title={sig.data[p.id]?.map((x) => `${x}: ${t(`kpi.nelson${x}`)}`).join("\n")}>R{sig.data[p.id]?.join(",")}</Badge>}</Table.Td>
             </Table.Tr>))}</Table.Tbody>
         </Table>
       )}
@@ -313,7 +345,6 @@ export default function Dashboard() {
   const mine = !can("wo.approve") && !can("wo.plan");
   const side = [
     on("section.activity") && <Activity key="a" />,
-    on("section.kpis") && can("kpi.view") && <KpiBoard key="k" today={s.today} prefs={prefs} onCustomise={() => setEdit(true)} />,
     on("section.condition") && can("pdm.view") && <ConditionBoard key="c" />,
   ].filter(Boolean);
   const attention = s.my_open_work !== undefined && on("section.attention");
@@ -337,10 +368,12 @@ export default function Dashboard() {
           {can("wo.create") && <Button component={Link} href="/work-orders/new" leftSection={<IconPlus size={18} />} className="tap-target">{t("wo.new")}</Button>}
           <Button component={Link} href="/scan" variant="default" leftSection={<IconQrcode size={18} />} className="tap-target">{t("nav.scan")}</Button>
       </Group>}
+      <DashLegend />
       {mine && work}
       {on("section.tiles") && tiles.length > 0 && <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} mb="lg" spacing={{ base: "xs", sm: "md" }}>
-        {tiles.map((x) => <Stat key={x.key} label={t(x.label)} value={x.value(s)} href={x.href} color={x.color} icon={x.icon} alert={x.alert} sub={x.sub?.(s, t)} />)}
+        {tiles.map((x) => <Stat key={x.key} label={t(x.label)} value={x.value(s)} href={x.href} level={tileLevel(x, s)} icon={x.icon} sub={x.sub?.(s, t)} />)}
       </SimpleGrid>}
+      {on("section.kpis") && can("kpi.view") && <KpiTiles today={s.today} prefs={prefs} onCustomise={() => setEdit(true)} />}
       {!mine && work}
       {edit && <Customise prefs={prefs} summary={s} defs={defs.data ?? []} cards={sc.data ?? []} onSave={save} onClose={() => setEdit(false)} />}
     </>

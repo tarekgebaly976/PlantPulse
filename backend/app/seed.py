@@ -418,6 +418,9 @@ def seed_demo(password: str, profile: str = "paper") -> None:
         from app.demo_rca import add_demo_rcas
 
         add_demo_rcas(db, plant)
+        from app.services.kpi_targets import add_demo_targets
+
+        add_demo_targets(db, plant)
     print(
         f"Demo activity: {activity['history']} past work orders, {activity['open']} open, {activity['requests']} new requests, "
         f"{activity['lube_overdue']} overdue lubrication tasks"

@@ -53,3 +53,21 @@ def test_dashboard_prefs_are_per_user(world):
     assert b.ok("get", "/dashboard/prefs")["hidden"] == []  # another user's layout is untouched
     assert a.put("/dashboard/prefs", {"hidden": ["<script>"]}).status_code == 422
     assert a.put("/dashboard/prefs", {"other": 1}).status_code == 422
+
+
+def test_kpi_targets_plant_and_department(world):
+    admin, viewer = world.api("admin"), world.api("viewer")
+    assert viewer.put("/kpis/targets", {"kpi_code": "mttr", "target": 4}).status_code == 403
+    t = admin.ok("put", "/kpis/targets", {"kpi_code": "mttr", "target": 4})["target"]
+    assert t == {"kpi_code": "mttr", "department_id": None, "target": 4.0, "higher_is_better": False}  # MTTR: lower is better
+    pm = str(world.depts["PM"].id)
+    admin.ok("put", "/kpis/targets", {"kpi_code": "mttr", "department_id": pm, "target": 3})
+    admin.ok("put", "/kpis/targets", {"kpi_code": "mtbf", "target": 250})
+    admin.ok("put", "/kpis/targets", {"kpi_code": "mttr", "target": 5})  # changes the plant target, keeps the department one
+    got = {(x["kpi_code"], x["department_id"]): (x["target"], x["higher_is_better"]) for x in viewer.ok("get", "/kpis/targets")}
+    assert got == {("mttr", None): (5.0, False), ("mttr", pm): (3.0, False), ("mtbf", None): (250.0, True)}
+    admin.ok("put", "/kpis/targets", {"kpi_code": "mtbf", "target": None})  # removed
+    assert {x["kpi_code"] for x in viewer.ok("get", "/kpis/targets")} == {"mttr"}
+    assert admin.put("/kpis/targets", {"kpi_code": "nope", "target": 1}).status_code == 422
+    bad_dept = {"kpi_code": "mttr", "department_id": "00000000-0000-0000-0000-000000000000", "target": 1}
+    assert admin.put("/kpis/targets", bad_dept).status_code == 422

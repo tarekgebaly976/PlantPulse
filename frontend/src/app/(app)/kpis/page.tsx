@@ -11,6 +11,7 @@ import { IconPlus } from "@tabler/icons-react";
 import { ControlChart, KpiControlChart, StatusLegend } from "@/components/KpiControlChart";
 import { api, download, patch, post, put } from "@/lib/api";
 import { status, STATUS_COLOR, type KpiCard } from "@/lib/kpiStatus";
+import { LOWER_IS_BETTER, useKpiTargets, type KpiTarget } from "@/lib/kpiTargets";
 import { fmtNum, useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import type { KPI } from "@/lib/types";
@@ -229,6 +230,33 @@ function CompanyKPIs() {
   );
 }
 
+/** Target of a calculated KPI for the whole plant, or for the department selected at the top of the page. */
+function TargetForm({ code, name, unit, dept, current, onClose }: {
+  code: string; name: string; unit: string; dept: string | null; current: KpiTarget | null; onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [v, setV] = useState<number | string>(current?.target ?? "");
+  const [hib, setHib] = useState(current ? current.higher_is_better : !LOWER_IS_BETTER.has(code));
+  const save = useMut((target: number | null) => put("/kpis/targets", { kpi_code: code, department_id: dept, target, higher_is_better: hib }), { onDone: onClose });
+  return (
+    <Modal opened onClose={onClose} title={`${t("kpi.target")}: ${name}`}>
+      <Stack>
+        <Text size="sm" c="dimmed">{dept ? t("kpi.targetDept") : t("kpi.targetPlant")}</Text>
+        <SimpleGrid cols={2}>
+          <NumberInput label={`${t("kpi.target")}${unit ? ` (${unit})` : ""}`} value={v} onChange={setV} decimalScale={4} data-autofocus />
+          <Select label={t("kpi.direction")} allowDeselect={false} value={hib ? "up" : "down"} onChange={(x) => setHib(x === "up")}
+            data={[{ value: "up", label: `↑ ${t("kpi.higherBetter")}` }, { value: "down", label: `↓ ${t("kpi.lowerBetter")}` }]} />
+        </SimpleGrid>
+        <Group justify="space-between">
+          {current ? <Button variant="subtle" color="red" onClick={() => save.mutate(null)}>{t("kpi.removeTarget")}</Button> : <span />}
+          <Group><Button variant="default" onClick={onClose}>{t("common.cancel")}</Button>
+            <Button disabled={v === ""} loading={save.isPending} onClick={() => save.mutate(Number(v))}>{t("common.save")}</Button></Group>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 function KPIs() {
   const { t, i18n } = useTranslation();
   const { can } = useSession();
@@ -249,13 +277,10 @@ function KPIs() {
   const q = useQ<{ kpis: KPI[]; currency: string }>("/kpis", { start, end, department_id: dept });
   const defs = useQ<Def[]>("/kpis/definitions");
   const names = new Map((defs.data ?? []).map((d) => [d.code, d.name]));
-  // Target of a calculated KPI: the latest target of the company KPI linked to it (selected department, else whole plant).
-  const sc = useQ<KpiCard[]>("/kpis/scorecard", { year: Number(end.slice(0, 4)) }, { staleTime: 300_000 });
-  const targetOf = (code: string) => {
-    const c = (sc.data ?? []).find((x) => x.kpi_code === code && (x.department_id ?? null) === dept);
-    const m = c ? [...c.months.slice(0, Number(end.slice(5, 7)))].reverse().find((x) => x.target !== null) : undefined;
-    return c && m ? { target: m.target as number, hib: c.higher_is_better } : null;
-  };
+  // Target: the department's own, else the plant's, else a linked company KPI (see lib/kpiTargets).
+  const { resolve, targets } = useKpiTargets(Number(end.slice(0, 4)), Number(end.slice(5, 7)) - 1);
+  const targetOf = (code: string) => resolve(code, dept);
+  const [setting, setSetting] = useState<string | null>(null);
   const [prod, setProd] = useState({ department_id: null as string | null, record_date: today, tons_produced: 0 as number | string, good_tons: "" as number | string, planned_production_hours: 24 as number | string, run_hours: "" as number | string, ideal_rate_tph: "" as number | string });
   const [bud, setBud] = useState({ department_id: null as string | null, year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)), amount: 0 as number | string });
   const n = (v: number | string) => (v === "" ? null : Number(v));
@@ -297,7 +322,12 @@ function KPIs() {
                     <Text size="xs" c="dimmed" lineClamp={1}>{names.get(k.code) ?? k.code}</Text>
                     {k.available ? <Text fz={22} fw={700} c={st ? STATUS_COLOR[st].fg : undefined}>{fmtNum(k.value)} <Text span size="sm" c="dimmed">{k.unit}</Text></Text>
                       : <Text size="xs" c="orange" lineClamp={3} title={k.reason ?? ""}>{t("common.unavailable")}: {k.reason}</Text>}
-                    {tg && <Text component="div" size="xs" fw={600}>{t("kpi.target")} {fmtNum(tg.target)} {st && <Badge size="xs" color={STATUS_COLOR[st].mantine === "yellow" ? "orange" : STATUS_COLOR[st].mantine}>{t(`kpi.short_${st}`)}</Badge>}</Text>}
+                    <Group gap={4} mt={2} wrap="nowrap">
+                      <Text component="div" size="xs" fw={600} c={tg ? undefined : "dimmed"}>{tg ? `${t("kpi.target")} ${fmtNum(tg.target)}` : t("dash.noTarget")}</Text>
+                      {st && <Badge size="xs" color={STATUS_COLOR[st].mantine === "yellow" ? "orange" : STATUS_COLOR[st].mantine}>{t(`kpi.short_${st}`)}</Badge>}
+                      {can("kpi.manage") && <Button size="compact-xs" variant="subtle" ml="auto" onClick={(e) => { e.stopPropagation(); setSetting(k.code); }}
+                        data-testid={`set-target-${k.code}`}>{tg ? t("kpi.changeTarget") : t("kpi.setTarget")}</Button>}
+                    </Group>
                     {typeof k.details.note === "string" && <Text size="xs" c="dimmed" lineClamp={2} title={k.details.note}>ⓘ {k.details.note}</Text>}
                     {k.code === "backlog" && k.details.weeks !== undefined && k.details.weeks !== null && <Text size="xs" c="dimmed">≈ {String(k.details.weeks)} weeks</Text>}
                   </Card>); })}
@@ -331,6 +361,8 @@ function KPIs() {
           </SimpleGrid>
         </Tabs.Panel>
       </Tabs>
+      {setting && <TargetForm code={setting} name={names.get(setting) ?? setting} unit={q.data?.kpis.find((k) => k.code === setting)?.unit ?? ""} dept={dept}
+        current={targets.find((x) => x.kpi_code === setting && x.department_id === dept) ?? null} onClose={() => setSetting(null)} />}
       {drill && <Drill code={drill} start={start} end={end} dept={dept} onClose={() => setDrill(null)} />}
     </>
   );

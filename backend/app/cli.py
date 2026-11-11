@@ -147,6 +147,7 @@ def main() -> None:
     sd.add_argument("--profile", choices=["paper", "general"], default="paper", help="sample plant: paper mill or general factory")
     sub.add_parser("generalize-demo")
     sub.add_parser("demo-rca", help="add sample root cause analyses to the DEMO plant (once)")
+    sub.add_parser("demo-kpi-targets", help="add sample KPI targets to the DEMO plant (keeps targets already set)")
     sub.add_parser("sync-rbac")
     r = sub.add_parser("run-scheduler")
     r.add_argument("--plant-code")
@@ -169,6 +170,10 @@ def main() -> None:
         from app.demo_general import generalize_existing_demo
 
         print(generalize_existing_demo())
+    elif a.cmd == "demo-kpi-targets":
+        from app.services.kpi_targets import run_for_demo as kpi_targets_demo
+
+        print(kpi_targets_demo())
     elif a.cmd == "demo-rca":
         from app.demo_rca import run_for_demo
 

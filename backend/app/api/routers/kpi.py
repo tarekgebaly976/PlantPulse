@@ -18,6 +18,7 @@ from app.schemas.common import In
 from app.services import failure_modes as fm
 from app.services import kpi as svc
 from app.services import kpi_scorecard as sc
+from app.services import kpi_targets as kt
 from app.services import mgmt_report as mr
 from app.services.common import audit, plant_today, utcnow
 
@@ -266,6 +267,29 @@ def scorecard_delete(
     audit(db, "kpi.scorecard_delete", user_id=ctx.user.id, plant_id=ctx.plant_id, data={"name": c.name})
     db.delete(c)
     return Response(status_code=204)
+
+
+@router.get("/targets")
+def targets(ctx: Ctx = Depends(require("kpi.view")), db: Session = Depends(get_db, scope="function")) -> list[dict]:
+    """Targets of calculated KPIs: department_id null = whole plant."""
+    return kt.list_targets(db, ctx.plant)
+
+
+class TargetIn(In):
+    kpi_code: str = Field(max_length=40)
+    department_id: uuid.UUID | None = None
+    target: float | None = None  # None removes the target
+    higher_is_better: bool | None = None  # None = the KPI's usual direction
+
+
+@router.put("/targets")
+def set_target(body: TargetIn, ctx: Ctx = Depends(require("kpi.manage")), db: Session = Depends(get_db, scope="function")) -> dict:
+    try:
+        t = kt.save_target(db, ctx.plant, body.kpi_code, body.department_id, body.target, body.higher_is_better)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    audit(db, "kpi.target", user_id=ctx.user.id, plant_id=ctx.plant_id, data=body.model_dump(mode="json"))
+    return {"target": t}
 
 
 @router.get("/failure-modes")

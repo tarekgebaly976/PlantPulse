@@ -200,3 +200,18 @@ class DashboardPrefs(Base, PlantScoped):
     user_id: Mapped[uuid.UUID] = fk("users.id", ondelete="CASCADE", index=False)
     prefs: Mapped[dict] = mapped_column(JSONB, default=dict)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class KPITarget(Base, PlantScoped):
+    """Target for a KPI the CMMS calculates, for the whole plant (scope_key "plant") or one department (its id), so
+    results are shown against a target without building a company KPI sheet."""
+
+    __tablename__ = "kpi_targets"
+    __table_args__ = (UniqueConstraint("plant_id", "kpi_code", "scope_key"),)
+    id: Mapped[uuid.UUID] = uuid_pk()
+    kpi_code: Mapped[str] = mapped_column(String(40), ForeignKey("kpi_definitions.code"))
+    scope_key: Mapped[str] = mapped_column(String(40))
+    department_id: Mapped[uuid.UUID | None] = fk("departments.id", nullable=True, ondelete="CASCADE", index=False)
+    target: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    higher_is_better: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
