@@ -21,6 +21,11 @@ body { background: var(--mantine-color-body); -webkit-font-smoothing: antialiase
 .pp-navlink[data-active]:hover { background: rgba(255, 255, 255, .14); }
 .pp-navlink .mantine-NavLink-label { font-size: 14px; }
 .pp-user { border-top: 1px solid rgba(255, 255, 255, .1); padding: 12px 8px 4px; }
+/* Side menu scrollbar: only while scrolling, thin and in the menu colours (no pale bar beside the page). */
+.pp-nav-scroll .mantine-ScrollArea-scrollbar { background: transparent; padding: 0; }
+.pp-nav-scroll .mantine-ScrollArea-scrollbar:hover { background: rgba(255, 255, 255, .06); }
+.pp-nav-scroll .mantine-ScrollArea-thumb { background: rgba(255, 255, 255, .28); }
+.pp-nav-scroll .mantine-ScrollArea-thumb:hover { background: rgba(255, 255, 255, .45); }
 
 /* Tables as white cards on the grey page. */
 .pp-table { background: var(--mantine-color-body); border: 1px solid var(--mantine-color-default-border); border-radius: var(--mantine-radius-md); overflow: hidden; }

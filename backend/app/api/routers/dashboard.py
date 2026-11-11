@@ -1,6 +1,8 @@
 from datetime import timedelta
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import Field, StringConstraints
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -19,8 +21,10 @@ from app.models.enums import (
 from app.models.lubrication import LubeTask
 from app.models.pdm import ConditionAlert
 from app.models.pm import PMOccurrence
+from app.models.system import DashboardPrefs
 from app.models.workorders import WOAssignment, WorkOrder, WorkRequest
-from app.services.common import plant_today
+from app.schemas.common import In
+from app.services.common import plant_today, utcnow
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -109,3 +113,39 @@ def activity(
         ws = first + timedelta(days=7 * i)
         out.append({"week": ws.isoformat(), "opened": opened.get(ws, 0), "completed": done.get(ws, 0)})
     return out
+
+
+Key = Annotated[str, StringConstraints(max_length=60, pattern=r"^[A-Za-z0-9_.:-]+$")]
+
+
+class PrefsIn(In):
+    """hidden: sections and tiles the user switched off; calc: calculated KPI codes on the KPI card (None = default);
+    company: company KPI ids on the KPI card (None = all)."""
+
+    hidden: list[Key] = Field(default_factory=list, max_length=60)
+    calc: list[Key] | None = Field(None, max_length=60)
+    company: list[Key] | None = Field(None, max_length=200)
+
+
+def _prefs(db: Session, ctx: Ctx) -> DashboardPrefs | None:
+    return db.execute(
+        select(DashboardPrefs).where(DashboardPrefs.user_id == ctx.user.id, DashboardPrefs.plant_id == ctx.plant_id)
+    ).scalar_one_or_none()
+
+
+@router.get("/prefs")
+def get_prefs(ctx: Ctx = Depends(get_ctx), db: Session = Depends(get_db, scope="function")) -> dict:
+    """The caller's own dashboard layout in this plant; defaults when never customised."""
+    p = _prefs(db, ctx)
+    return PrefsIn.model_validate(p.prefs if p else {}).model_dump()
+
+
+@router.put("/prefs")
+def put_prefs(body: PrefsIn, ctx: Ctx = Depends(get_ctx), db: Session = Depends(get_db, scope="function")) -> dict:
+    p = _prefs(db, ctx)
+    if p is None:
+        p = DashboardPrefs(user_id=ctx.user.id, plant_id=ctx.plant_id)
+        db.add(p)
+    p.prefs, p.updated_at = body.model_dump(), utcnow()
+    db.flush()
+    return p.prefs

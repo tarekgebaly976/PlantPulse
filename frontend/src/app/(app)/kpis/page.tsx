@@ -1,14 +1,14 @@
 "use client";
 
 import { BarChart } from "@mantine/charts";
-import { Alert, Anchor, Button, Card, FileInput, Group, Modal, NumberInput, ScrollArea, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Card, FileInput, Group, Modal, NumberInput, ScrollArea, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
 import { FailurePareto } from "@/components/FailureModes";
 import { DeptSelect, Loading, PageHeader } from "@/components/ui";
 import { IconPlus } from "@tabler/icons-react";
-import { KpiControlChart, StatusLegend } from "@/components/KpiControlChart";
+import { ControlChart, KpiControlChart, StatusLegend } from "@/components/KpiControlChart";
 import { api, download, patch, post, put } from "@/lib/api";
 import { status, STATUS_COLOR, type KpiCard } from "@/lib/kpiStatus";
 import { fmtNum, useMut, useQ } from "@/lib/hooks";
@@ -21,7 +21,7 @@ function Drill({ code, start, end, dept, onClose }: { code: string; start: strin
   const { t } = useTranslation();
   const q = useQ<KPI & { definition: Def; records: Record<string, unknown>[]; records_truncated: boolean }>(`/kpis/${code}`, { start, end, department_id: dept });
   const trend = useQ<{ period: string; value: number | null; available: boolean; manual: number | null; target: number | null }[]>(`/kpis/trend/${code}`, { months: 12, department_id: dept });
-  const hasManual = (trend.data ?? []).some((x) => x.manual !== null && x.manual !== undefined);
+  const hasManual = (trend.data ?? []).some((x) => x.target !== null && x.target !== undefined);
   const rows = q.data?.records ?? [];
   const cols = rows[0] ? Object.keys(rows[0]).filter((k) => !k.endsWith("_id") && k !== "id") : [];
   return (
@@ -34,9 +34,11 @@ function Drill({ code, start, end, dept, onClose }: { code: string; start: strin
           <Group><Text fw={700}>{q.data.available ? `${fmtNum(q.data.value)} ${q.data.unit}` : `${t("common.unavailable")}: ${q.data.reason}`}</Text>
             {q.data.denominator !== null && <Text size="sm" c="dimmed">{t("kpi.numerator")} {fmtNum(q.data.numerator)} · {t("kpi.denominator")} {fmtNum(q.data.denominator)}</Text>}</Group>
           {Object.keys(q.data.details ?? {}).length > 0 && <Text size="xs" className="mono">{JSON.stringify(q.data.details)}</Text>}
-          {trend.data && <BarChart h={180} withLegend={hasManual} dataKey="period"
-            data={trend.data.map((x) => ({ period: x.period, [t("kpi.calculated")]: x.value ?? 0, [t("kpi.manualSeries")]: x.manual ?? 0, [t("kpi.target")]: x.target ?? 0 }))}
-            series={[{ name: t("kpi.calculated"), color: "indigo.6" }, ...(hasManual ? [{ name: t("kpi.manualSeries"), color: "orange.5" }, { name: t("kpi.target"), color: "gray.5" }] : [])]} />}
+          {trend.data && <>
+            <Text fw={600} size="sm">{t("kpi.trend12")}</Text>
+            <ControlChart height={260} unit={q.data.unit} showTarget={hasManual}
+              points={trend.data.map((x) => ({ label: x.period, value: x.available ? x.value : null, target: x.target }))} />
+          </>}
           <Text fw={600}>{t("kpi.drill")} ({rows.length}{q.data.records_truncated ? "+" : ""})</Text>
           <ScrollArea h={300}>
             <Table fz="xs" striped>
@@ -247,6 +249,13 @@ function KPIs() {
   const q = useQ<{ kpis: KPI[]; currency: string }>("/kpis", { start, end, department_id: dept });
   const defs = useQ<Def[]>("/kpis/definitions");
   const names = new Map((defs.data ?? []).map((d) => [d.code, d.name]));
+  // Target of a calculated KPI: the latest target of the company KPI linked to it (selected department, else whole plant).
+  const sc = useQ<KpiCard[]>("/kpis/scorecard", { year: Number(end.slice(0, 4)) }, { staleTime: 300_000 });
+  const targetOf = (code: string) => {
+    const c = (sc.data ?? []).find((x) => x.kpi_code === code && (x.department_id ?? null) === dept);
+    const m = c ? [...c.months.slice(0, Number(end.slice(5, 7)))].reverse().find((x) => x.target !== null) : undefined;
+    return c && m ? { target: m.target as number, hib: c.higher_is_better } : null;
+  };
   const [prod, setProd] = useState({ department_id: null as string | null, record_date: today, tons_produced: 0 as number | string, good_tons: "" as number | string, planned_production_hours: 24 as number | string, run_hours: "" as number | string, ideal_rate_tph: "" as number | string });
   const [bud, setBud] = useState({ department_id: null as string | null, year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)), amount: 0 as number | string });
   const n = (v: number | string) => (v === "" ? null : Number(v));
@@ -277,15 +286,21 @@ function KPIs() {
         <Tabs.Panel value="dash" pt="md">
           {!q.data ? <Loading /> : (
             <>
+              <Group justify="space-between" mb="sm"><StatusLegend /><Text size="xs" c="dimmed">{t("kpi.targetHint")}</Text></Group>
               <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }}>
-                {q.data.kpis.map((k) => (
-                  <Card key={k.code} withBorder padding="sm" style={{ cursor: "pointer" }} onClick={() => setDrill(k.code)} data-testid={`kpi-${k.code}`}>
+                {q.data.kpis.map((k) => {
+                  const tg = targetOf(k.code);
+                  const st = k.available && tg ? status(tg.hib, k.value, tg.target) : null;
+                  return (
+                  <Card key={k.code} withBorder padding="sm" style={{ cursor: "pointer", borderInlineStart: `5px solid ${st ? STATUS_COLOR[st].fg : "#dee2e6"}`, background: st ? STATUS_COLOR[st].bg : undefined }}
+                    onClick={() => setDrill(k.code)} data-testid={`kpi-${k.code}`}>
                     <Text size="xs" c="dimmed" lineClamp={1}>{names.get(k.code) ?? k.code}</Text>
-                    {k.available ? <Text fz={22} fw={700}>{fmtNum(k.value)} <Text span size="sm" c="dimmed">{k.unit}</Text></Text>
+                    {k.available ? <Text fz={22} fw={700} c={st ? STATUS_COLOR[st].fg : undefined}>{fmtNum(k.value)} <Text span size="sm" c="dimmed">{k.unit}</Text></Text>
                       : <Text size="xs" c="orange" lineClamp={3} title={k.reason ?? ""}>{t("common.unavailable")}: {k.reason}</Text>}
+                    {tg && <Text component="div" size="xs" fw={600}>{t("kpi.target")} {fmtNum(tg.target)} {st && <Badge size="xs" color={STATUS_COLOR[st].mantine === "yellow" ? "orange" : STATUS_COLOR[st].mantine}>{t(`kpi.short_${st}`)}</Badge>}</Text>}
                     {typeof k.details.note === "string" && <Text size="xs" c="dimmed" lineClamp={2} title={k.details.note}>ⓘ {k.details.note}</Text>}
                     {k.code === "backlog" && k.details.weeks !== undefined && k.details.weeks !== null && <Text size="xs" c="dimmed">≈ {String(k.details.weeks)} weeks</Text>}
-                  </Card>))}
+                  </Card>); })}
               </SimpleGrid>
               {costDept && Object.keys(costDept).length > 0 && (
                 <Card withBorder mt="md"><Text fw={600} mb="xs">{names.get("cost_by_department")} ({q.data.currency})</Text>

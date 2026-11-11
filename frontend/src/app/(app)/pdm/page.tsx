@@ -1,12 +1,12 @@
 "use client";
 
-import { LineChart } from "@mantine/charts";
 import { Alert, Badge, Button, Checkbox, CloseButton, FileInput, Group, Modal, NumberInput, Paper, SegmentedControl, Select, SimpleGrid, Stack, Tabs, Text, TextInput } from "@mantine/core";
 import { useDebouncedValue, useMediaQuery } from "@mantine/hooks";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
+import { CM_COLOR, ConditionLegend, ControlChart, type CPoint, type SpecLine } from "@/components/KpiControlChart";
 import { NewAsset } from "@/components/NewAsset";
 import { PlanImport } from "@/components/PlanImport";
 import { RemovePlans } from "@/components/RemovePlans";
@@ -27,18 +27,19 @@ const TECH = ["vibration", "temperature", "motor_current", "power", "oil_analysi
 function Trend({ point }: { point: MPoint }) {
   const { t } = useTranslation();
   const { can } = useSession();
-  const q = useQ<{ readings: { value: number; measured_at: string; status: string }[] }>(`/pdm/points/${point.id}/readings`, { limit: 500 });
+  // The last 100 readings: enough history for the control chart, short enough to read on a phone.
+  const q = useQ<{ readings: { value: number; measured_at: string; status: string }[] }>(`/pdm/points/${point.id}/readings`, { limit: 100 });
   const [v, setV] = useState<number | string>("");
   const [res, setRes] = useState<string | null>(null);
   const add = useMut(() => post<{ status: string; message?: string }>(`/pdm/points/${point.id}/readings`, { value: Number(v) }), { success: false,
     onDone: (r) => { setRes(`${t(`status.${r.status}`)}${r.message ? ` — ${r.message}` : ""}`); setV(""); } });
-  const data = (q.data?.readings ?? []).map((r) => ({ at: new Date(r.measured_at).toLocaleDateString(), value: Number(r.value) }));
+  const data: CPoint[] = (q.data?.readings ?? []).map((r) => ({ label: new Date(r.measured_at).toLocaleDateString(undefined, { day: "numeric", month: "short" }), value: Number(r.value), color: CM_COLOR[r.status] }));
   const refs = [
-    point.warning_high !== null && { y: Number(point.warning_high), label: t("pdm.warnHigh"), color: "orange.6" },
-    point.alarm_high !== null && { y: Number(point.alarm_high), label: t("pdm.alarmHigh"), color: "red.7" },
-    point.warning_low !== null && { y: Number(point.warning_low), label: t("pdm.warnLow"), color: "orange.6" },
-    point.alarm_low !== null && { y: Number(point.alarm_low), label: t("pdm.alarmLow"), color: "red.7" },
-  ].filter(Boolean) as { y: number; label: string; color: string }[];
+    point.warning_high !== null && { y: Number(point.warning_high), label: t("pdm.warnHigh"), color: CM_COLOR.warning },
+    point.alarm_high !== null && { y: Number(point.alarm_high), label: t("pdm.alarmHigh"), color: CM_COLOR.critical },
+    point.warning_low !== null && { y: Number(point.warning_low), label: t("pdm.warnLow"), color: CM_COLOR.warning },
+    point.alarm_low !== null && { y: Number(point.alarm_low), label: t("pdm.alarmLow"), color: CM_COLOR.critical },
+  ].filter(Boolean) as SpecLine[];
   return (
     <Stack>
       {can("pdm.record") && (
@@ -48,8 +49,10 @@ function Trend({ point }: { point: MPoint }) {
         </Group>
       )}
       {res && <Alert color={res.startsWith(t("status.normal")) ? "teal" : "orange"} data-testid="reading-result">{res}</Alert>}
-      {data.length > 0 ? <LineChart h={260} data={data} dataKey="at" series={[{ name: "value", color: "indigo.6", label: point.unit }]} referenceLines={refs} curveType="linear" withDots />
-        : <Text c="dimmed" size="sm">{t("common.noData")}</Text>}
+      {data.length > 0 ? <>
+        <ConditionLegend />
+        <ControlChart points={data} unit={point.unit} specs={refs} />
+      </> : <Text c="dimmed" size="sm">{t("common.noData")}</Text>}
     </Stack>
   );
 }
@@ -158,6 +161,7 @@ function PdM() {
   const [hist, setHist] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   const all = useQ<MPoint[]>("/pdm/points", { q: q || undefined, under });
+  const signals = useQ<Record<string, number[]>>("/pdm/signals", undefined, { staleTime: 60_000 });
   const points = { ...all, data: prioOnly ? all.data?.filter((p) => p.priority < 3 || p.last_status === "critical") : all.data };
   const chosen = useQ<Asset>(f.asset_id ? `/assets/${f.asset_id}` : null);
   const alerts = useQ<Page<CAlert>>("/pdm/alerts", { open_only: openOnly, limit: 50, offset, q: aqd || undefined });
@@ -198,11 +202,12 @@ function PdM() {
             {can("pdm.manage") && <RemovePlans path="/pdm/points/remove" ids={picked} onDone={() => { setPicked([]); setSel(null); }} />}
           </Group>
           {(all.data?.length ?? 0) >= 2000 && <Alert color="blue" mb="sm">{t("pdm.capped")}</Alert>}
-          <SimpleGrid cols={wide && point ? 2 : 1}>
+          <SimpleGrid cols={1} style={wide && point ? { gridTemplateColumns: "minmax(0, 5fr) minmax(0, 7fr)" } : undefined}>
             <DataTable rows={points.data} onRow={(p) => setSel(p.id)} selected={picked} onSelect={can("pdm.manage") ? setPicked : undefined} columns={[
               { key: "c", label: t("common.code"), render: (p) => <Group gap={6} wrap="nowrap"><PrioBadge p={p.priority} /><b>{p.code}</b></Group> }, { key: "a", label: t("common.asset"), render: (p) => amap.get(p.asset_id) },
               { key: "t", label: t("pdm.technique"), render: (p) => p.technique }, { key: "v", label: t("pdm.lastValue"), render: (p) => `${fmtNum(p.last_value)} ${p.unit}` },
-              { key: "s", label: t("common.status"), render: (p) => <StatusBadge value={p.last_status} /> }]} />
+              { key: "s", label: t("common.status"), render: (p) => <StatusBadge value={p.last_status} /> },
+              { key: "n", label: t("pdm.nelson"), render: (p) => { const r = signals.data?.[p.id]; return r ? <Badge color="red" variant="light" size="sm" title={r.map((x) => `${x}: ${t(`kpi.nelson${x}`)}`).join("\n")}>{t("kpi.rule")} {r.join(",")}</Badge> : null; } }]} />
             {wide && detail ? (
               <Paper withBorder p="md" pos="relative">
                 <CloseButton pos="absolute" top={8} right={8} aria-label={t("common.close")} title={t("common.close")} onClick={() => setSel(null)} />

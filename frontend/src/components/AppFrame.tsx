@@ -131,7 +131,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
         </Group>
       </AppShell.Header>
       <AppShell.Navbar p="xs" className="pp-nav">
-        <AppShell.Section grow component={ScrollArea} scrollbarSize={6}>
+        <AppShell.Section grow component={ScrollArea} scrollbarSize={5} type="scroll" scrollHideDelay={600} className="pp-nav-scroll">
           {NAV_GROUPS.map((g) => {
             const items = g.items.filter((n) => !n.perm || can(n.perm));
             if (items.length === 0) return null;

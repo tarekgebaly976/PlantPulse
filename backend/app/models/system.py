@@ -188,3 +188,15 @@ class KPIScorecardValue(Base, PlantScoped):
     period_start: Mapped[date] = mapped_column(Date)
     target: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     actual: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+
+
+class DashboardPrefs(Base, PlantScoped):
+    """What each user chose to see on their dashboard in a plant (sections, tiles, KPIs); kept on the server so it
+    follows the user to every device."""
+
+    __tablename__ = "dashboard_prefs"
+    __table_args__ = (UniqueConstraint("user_id", "plant_id"),)
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = fk("users.id", ondelete="CASCADE", index=False)
+    prefs: Mapped[dict] = mapped_column(JSONB, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
