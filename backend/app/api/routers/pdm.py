@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import Field
-from sqlalchemy import case, func, select
+from sqlalchemy import case, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,7 +20,7 @@ from app.schemas.common import ORM, In
 from app.services import pdm as svc
 from app.services import pdm_history, pdm_priority, plan_removal
 from app.services.common import audit, utcnow
-from app.services.nelson import nelson
+from app.services.nelson import point_signals
 from app.services.search import where_text
 
 router = APIRouter(prefix="/pdm", tags=["condition monitoring"])
@@ -308,33 +308,10 @@ class AlertOut(ORM):
     resolved_at: datetime | None
 
 
-SIGNAL_WINDOW, SIGNAL_RECENT = 30, 3
-
-
 @router.get("/signals")
 def signals(ctx: Ctx = Depends(require("pdm.view")), db: Session = Depends(get_db, scope="function")) -> dict[str, list[int]]:
-    """Nelson rules each point breaks now: rules run on its last 30 readings and count when the pattern ends on one
-    of the last 3 readings. Points without a signal are left out."""
-    rn = func.row_number().over(partition_by=ConditionReading.point_id, order_by=ConditionReading.measured_at.desc()).label("rn")
-    sub = (
-        select(ConditionReading.point_id, ConditionReading.value, ConditionReading.measured_at, rn)
-        .join(MeasurementPoint, MeasurementPoint.id == ConditionReading.point_id)
-        .where(
-            ConditionReading.plant_id == ctx.plant_id,
-            MeasurementPoint.is_active.is_(True),
-            ctx.in_department(MeasurementPoint.asset_id),
-        )
-        .subquery()
-    )
-    series: dict[uuid.UUID, list[float]] = {}
-    for pid, value, _, _ in db.execute(select(sub).where(sub.c.rn <= SIGNAL_WINDOW).order_by(sub.c.point_id, sub.c.measured_at)):
-        series.setdefault(pid, []).append(float(value))
-    out: dict[str, list[int]] = {}
-    for pid, xs in series.items():
-        recent = sorted({k for t in nelson(xs).triggers[-SIGNAL_RECENT:] for k in t})
-        if recent:
-            out[str(pid)] = recent
-    return out
+    """Nelson rules each point breaks now (see services/nelson.point_signals)."""
+    return point_signals(db, ctx.plant_id, ctx.in_department(MeasurementPoint.asset_id))
 
 
 @router.get("/alerts")

@@ -26,6 +26,15 @@ words in any order — every word must be found, e.g. `crusher motor` or `MIX be
 points are also found by their equipment's code or name. Arabic spellings of أ/إ/آ/ا, ة/ه and ى/ي are treated as the
 same letter. A word of one or two characters must be the start of a word (`OS` finds `OS1`, but `1` does not match the 1 inside `WO-P1-…`).
 
+## 2b. The dashboard
+One colour code, shown as a key under the quick buttons: **red** = act now, **amber** = needs attention or waiting
+for someone, **green** = all clear / target met (a counter at zero turns green with a tick), **grey** = information.
+Each counter opens exactly the list it counts. *Condition monitoring alarms (open)* counts every open alarm and splits
+it into alarm limit and warning limit underneath. *KPIs: result vs target* shows each KPI as a tile with its result
+(last 6 months), its target and **Met** / **Close** (missed by up to 10 %) / **Missed**.
+*Customise dashboard* (top right): choose sections, counters, calculated KPIs and company KPIs. The layout is saved on
+the server for you and the plant, so phone and computer show the same; *Reset to default* restores it.
+
 ## 3. Reporting a problem (everyone with "Work requests")
 *Work requests → New work request* (or the red button on an asset page / after scanning its QR code). Choose the asset,
 describe the symptom, tick **Breakdown** if the machine is stopped — supervisors are alerted immediately.
@@ -126,7 +135,13 @@ references — there is no ERP connection.
 
 ## 8. Reliability engineers
 *Condition monitoring*: measurement points with warning/alarm limits; enter readings (or receive them from the plant
-gateway); status Normal / Warning / Critical / Unknown is a transparent limit comparison (no prediction is claimed).
+gateway); the level **Normal / Warning limit / Alarm limit** (internally normal / warning / critical) or Unknown is a
+transparent limit comparison (no prediction is claimed). Each point has a **control chart** of its last 100 readings:
+CL (average), UCL/LCL at ±3σ (σ from the average moving range), zones A/B/C, and the eight **Nelson rules** of the
+plant's control-chart sheet (1: 1 point beyond 3σ; 2: 7 in a row on one side; 3: 7 rising or falling; 4: 14
+alternating; 5: 2 of 3 beyond 2σ; 6: 4 of 5 beyond 1σ; 7: 14 within 1σ; 8: 8 beyond 1σ either side) with their probable
+cause. The *Nelson* column of the point list shows the rules broken now (last 30 readings, pattern ending in the last 3).
+The Alerts tab filters by level (All open / Alarm limit exceeded / Warning limit exceeded).
 Alerts can be acknowledged, turned into a predictive work order and resolved. Trend charts show limits.
 
 ### Root cause analysis (RCA) of major breakdowns
@@ -158,7 +173,10 @@ A4 report (print or save as PDF, in the interface language). The register can be
 management presentation has an RCA slide.
 
 ## 9. Managers: KPIs and reports
-*KPIs & reports*: 20 KPIs for a period and department. Click a KPI for its formula, inclusion rules, numerator /
+*KPIs & reports*: 20 KPIs for a period and department. **Targets**: *Set target* on a KPI card (KPI management) for
+the whole plant, or for the department chosen at the top; the direction is preset per KPI. The target used is the
+department's, else the plant's, else a linked company KPI's. Cards are coloured green (met), amber (missed by up to
+10 %) or red (missed); the drill-down shows a 12-month control chart with the target. Click a KPI for its formula, inclusion rules, numerator /
 denominator, 12-month trend and the underlying records. If data is missing the KPI says **Not available** and why —
 values are never estimated. Export XLSX/PDF. Work order PDF reports are on each work order.
 *Management presentation* (planners and managers): choose the period and, optionally, a department, then click the

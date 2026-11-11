@@ -1,5 +1,6 @@
 """PlantPulse – step-by-step work instructions (English PDF). argv: out.pdf paper|general"""
 
+import os
 import sys
 
 from reportlab.lib import colors
@@ -22,6 +23,7 @@ from reportlab.platypus import (
 )
 
 OUT = sys.argv[1]
+DOCS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 ED = sys.argv[2]
 PAPER = ED == "paper"
 
@@ -86,6 +88,29 @@ def code(text: str):
     return [Spacer(1, 4), t]
 
 
+def grid(rows, widths):
+    """Table; a cell written "#RRGGBB|text" gets that background (colour keys)."""
+    style = [("BACKGROUND", (0, 0), (-1, 0), TIP_BG), ("GRID", (0, 0), (-1, -1), 0.5, LINE), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+             ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]
+    data = []
+    for i, r in enumerate(rows):
+        line = []
+        for j, c in enumerate(r):
+            if c.startswith("#") and "|" in c:
+                hx, c = c.split("|", 1)
+                style.append(("BACKGROUND", (j, i), (j, i), colors.HexColor(hx)))
+                c = f'<font color="white"><b>{c}</b></font>'
+            line.append(Paragraph(f"<b>{c}</b>" if i == 0 else c, S["box"]))
+        data.append(line)
+    t = Table(data, colWidths=[w * mm for w in widths], repeatRows=1)
+    t.setStyle(TableStyle(style))
+    return [Spacer(1, 4), t]
+
+
+def sw(hex_, text):
+    return f"{hex_}|{text}"
+
+
 # ---- Content: parts → procedures (title, who, where, steps, extras) -------------------------------------------------
 P = []
 
@@ -100,7 +125,7 @@ def proc(title, who, where, items, *extras):
 
 part("Getting started", "Signing in, installing the app on a phone and finding your way around. For everyone.")
 proc("Sign in and change your password", "Everyone", "Any browser",
-     ["Open <b>https://84-8-106-22.sslip.io</b> in Chrome (computer or phone).",
+     ["Open <b>https://app.plantpulse-cmms.com</b> in Chrome (computer or phone). The older address https://84-8-106-22.sslip.io still works.",
       "Enter the e-mail and the temporary password the administrator gave you, then press <b>Sign in</b>.",
       "Change the password at once: tap the <b>person icon</b> (top right) › <b>Change password</b>.",
       "Type the current password, the new password twice, and press <b>Save</b>."],
@@ -115,9 +140,29 @@ proc("Find your way around", "Everyone", "Top bar and menu",
      ["<b>Menu</b> (left, or the three lines on a phone): Dashboard, My work, Scan QR, Work requests, Work orders, Assets, Preventive maintenance, Lubrication, Condition monitoring, Shifts and handover, Spare parts, Shutdowns, KPIs and reports, Administration.",
       "<b>ONLINE</b> badge: green means connected. Reconnect before saving if it shows offline.",
       "<b>Bell</b>: your notifications (breakdowns, jobs assigned to you, approvals waiting). Tap one to open the record.",
-      "<b>Language button</b> (next to the bell): English, Arabic (right to left) or Bengali; your choice is remembered on every device."],
+      "<b>Language button</b> (next to the bell): English, Arabic (right to left) or Bengali; your choice is remembered on every device.",
+      "<b>Magnifier</b> (top bar, or Ctrl+K on a computer): one search over equipment, work orders, requests, spare parts, plans, measurement points, RCAs and shutdowns. Type a code or a few words in any order (e.g. <i>crusher motor</i>)."],
      ("note", "You only see the menus and buttons your role allows, and if your account has one or more departments (e.g. " + v("PM + SP", "PROD + UTIL") + ") you only see those areas’ equipment, jobs and alerts. If something is missing, ask the administrator; do not use someone else’s account."),
      ("tip", "Any field where you choose an asset has a small <b>tree</b> button: open the levels with the arrows and click a code, or simply type part of the code or name."))
+
+proc("Read the dashboard (colour key)", "Everyone", "Dashboard",
+     ["The <b>colour key</b> under the quick buttons applies to the whole dashboard: <b>red</b> = act now, <b>amber</b> = needs attention or waiting for someone, <b>green</b> = all clear or target met, <b>grey</b> = information only.",
+      "<b>Counters</b> (open emergencies, overdue, approvals…) turn green with a tick when they are zero. Tap a counter to open exactly the list it counts.",
+      "<b>Condition monitoring alarms (open)</b> counts every open alarm; the line under the number splits it into <i>alarm limit</i> and <i>warning limit</i>. It is not a plant shutdown.",
+      "<b>KPIs: result vs target</b>: each tile shows the result (last 6 months), the target and <b>Met</b> (green), <b>Close</b> (amber, missed by up to 10 %) or <b>Missed</b> (red). “No target set” = a manager has not set one yet.",
+      "<b>Condition monitoring</b> card: points with an alarm or a Nelson rule signal (R1, R2…, see 3.6 <i>Read a control chart</i>). Tap a point to open its chart."],
+     ("table", [["Colour", "Meaning", "Examples"],
+                [sw("#E03131", "Red"), "Act now", "Open emergencies, overdue work, overdue lubrication, alarm limit exceeded, KPI target missed"],
+                [sw("#F08C00", "Amber"), "Needs attention / waiting for someone", "New requests, approvals, review, warning limit exceeded, KPI close to target"],
+                [sw("#37B24D", "Green"), "All clear / target met", "Counter at zero, KPI target met, reading normal"],
+                [sw("#868E96", "Grey"), "Information", "My open work, open work orders, KPI without a target"]], [28, 52, 90]))
+proc("Customise your dashboard", "Everyone", "Dashboard › Customise dashboard",
+     ["Press <b>Customise dashboard</b> (top right of the dashboard).",
+      "Under <b>Sections</b> tick what you want to see: quick actions, counters, needs attention, work orders per week, KPIs with target and result, condition monitoring signals.",
+      "Under <b>Counters</b> untick the counters you do not need.",
+      "Under <b>Calculated KPIs</b> and <b>Company KPIs</b> tick the KPIs to show as tiles.",
+      "Press <b>Save</b>. <b>Reset to default</b> brings back the standard layout."],
+     ("tip", "Your layout is saved on the server for you and this plant, so the phone app and the computer show the same dashboard."))
 
 part("Reporting and doing work", "From a reported problem to a closed work order: requests, QR, work orders, safety and spare parts.")
 proc("Report a problem (work request)", "Everyone, including production", "Work requests › New work request",
@@ -206,10 +251,26 @@ proc("Do a lubrication route", "Lubricator / technician", "My work › lubricati
 proc("Enter a condition reading and handle an alert", "Technician (reading), reliability engineer (alert)", "Condition monitoring",
      ["Open <b>Condition monitoring</b> › <b>Measurement points</b>. Critical and High points are at the top (red / orange badge); tick <b>Critical &amp; high only</b> to see just those.",
       "Find a point with <b>Search</b> (point, equipment code or name) or <b>Asset and everything below it</b>, then click it. On a phone it opens full screen.",
-      "Enter the value in <b>Record reading</b> and press <b>Save</b>. The status becomes normal, warning or critical against the limits. Close the panel with the <b>X</b> at its top right.",
-      "A reading outside a limit opens an alert in the <b>Alerts</b> tab, sent to that area’s engineers.",
+      "Enter the value in <b>Record reading</b> and press <b>Save</b>. The level becomes <b>Normal</b> (green), <b>Warning limit</b> (amber) or <b>Alarm limit</b> (red) against the limits set for the point. Close the panel with the <b>X</b> at its top right.",
+      "A reading outside a limit opens an alarm in the <b>Alerts</b> tab, sent to that area’s engineers. Filter the tab with <b>All open</b> / <b>Alarm limit exceeded</b> / <b>Warning limit exceeded</b>.",
       "The engineer presses <b>Acknowledge</b>, then <b>Create work order</b> if action is needed, and finally <b>Resolve</b> with the resolution."],
      ("note", "Status comes from clear limit rules; the system does not predict failures. A point not read for too long becomes “unknown”. The screen list shows the first 2,000 points; use search for the others."))
+proc("Read a control chart (Nelson rules)", "Reliability engineer, engineer, supervisor, manager", "Condition monitoring › click a point; KPIs and reports › click a KPI or a company KPI",
+     ["The chart shows the readings (or monthly results) in time order. Dots are coloured by level: green normal, amber warning limit, red alarm limit (for KPIs: target met / close / missed).",
+      "<b>CL</b> (thick green line) is the average; <b>UCL</b> and <b>LCL</b> (dark red lines, with their values) are 3 standard deviations (σ) above and below. Zones: <b>C</b> within 1σ, <b>B</b> 1–2σ, <b>A</b> 2–3σ. Dashed orange and red lines are the point’s warning and alarm limits.",
+      "A point inside a broken rule is an <b>open red circle</b>; the <b>red number</b> next to a point is the rule whose pattern starts there.",
+      "The table under the chart lists the 8 rules with their probable cause; broken rules are red with the dates (first → last).",
+      "In the point list, the <b>Nelson</b> column shows the rules broken now (the last 30 readings, pattern ending in the last 3)."],
+     ("table", [["Rule", "Pattern", "Probable cause"],
+                ["1", "1 point more than 3σ from CL", "New person, wrong setup"],
+                ["2", "7 points in a row on the same side of CL", "Setup change, process change"],
+                ["3", "7 points in a row all increasing or all decreasing", "Trend, tool wear"],
+                ["4", "14 points in a row alternating up and down", "Over-control, tampering"],
+                ["5", "2 out of 3 points more than 2σ from CL (same side)", "New person, wrong setup"],
+                ["6", "4 out of 5 points more than 1σ from CL (same side)", "Small shift (similar to rules 1 and 5)"],
+                ["7", "14 points in a row within 1σ of CL (either side)", "Process change"],
+                ["8", "8 points in a row more than 1σ from CL (either side)", "Process change"]], [14, 96, 60]),
+     ("note", "A rule signal means the process changed, even when no limit is passed: look for the cause before it becomes an alarm. At least 3 values are needed; σ comes from the average moving range of the values on the chart (last 100 readings)."))
 proc("Set the priority of measurement points", "Planner, engineer, reliability engineer, manager, administrator", "Condition monitoring",
      ["One point: click it and choose <b>Critical</b>, <b>High</b> or <b>Normal</b> next to <b>Priority</b>.",
       "Many points: press <b>Priorities (Excel)</b> › <b>Download points with priorities</b>.",
@@ -260,13 +321,20 @@ proc("Import the roster from Excel", "Manager, planner", "Shifts and handover �
      ("note", "If the drop-down shows only OFF, L and A, the shift types are not set up yet: add them, then download the template again. Your own grid also works: a row starting with “Name”, then the days (day numbers or dates), several blocks allowed."),
      ("tip", "Names not in the system can be created as technicians by the administrator (tick “Create them as technicians”); they get a login after the administrator sets their e-mail and resets the password."))
 
-part("KPIs and company KPIs", "Calculated KPIs, failure modes and the plant’s own monthly KPI sheet.")
+part("KPIs, targets and company KPIs", "Calculated KPIs and their targets, failure modes, the plant’s own monthly KPI sheet and the management presentation.")
 proc("View KPIs for a period and department", "Manager, engineer, supervisor", "KPIs and reports › KPIs and reports",
      ["Set <b>From</b> and <b>To</b>. The page opens on the current month; set 1 January for the whole year.",
       "Choose a <b>Department</b> or leave it empty for the whole plant.",
-      "Tap a KPI to see its formula, inclusion rules, 12-month trend and the work orders behind it.",
+      "Each card is coloured against its target (colour key above the cards): green met, amber close (missed by up to 10 %), red missed, white no target.",
+      "Tap a KPI to see its formula, inclusion rules, the 12-month control chart with the target, and the work orders behind it.",
       "Use <b>Export XLSX</b> or <b>Export PDF</b> for reports."],
      ("note", "“Not available” means the data is missing, and the reason is shown. Values are never estimated. Maintenance cost today is spare parts only."))
+proc("Set or change a KPI target", "Maintenance manager (KPI management)", "KPIs and reports › KPIs and reports",
+     ["For a <b>whole-plant</b> target leave <b>Department</b> empty; for one department choose it first at the top of the page.",
+      "On the KPI card press <b>Set target</b> (or <b>Change</b> when a target exists).",
+      "Type the <b>Target</b>. <b>Better when</b> is preset (higher for PM compliance, MTBF, availability; lower for MTTR, backlog, costs); change it only if needed.",
+      "Press <b>Save</b>. The card, the dashboard tiles and the management presentation use the target at once. <b>Remove target</b> deletes it."],
+     ("note", "Which target is used: the department’s own target, else the plant target, else the target of a company KPI linked to this KPI."))
 proc("See the top failure modes (Pareto)", "Manager, reliability engineer, supervisor", "KPIs and reports › Failure modes",
      ["Set the period at the top of the KPIs page and open the <b>Failure modes</b> tab.",
       "Choose <b>By failure mode</b> (adds up the same mode on all equipment types), <b>By code</b> or <b>By symptom</b>.",
@@ -277,17 +345,46 @@ proc("Enter production data and budget", "Manager or planner", "KPIs and reports
      ["Production: choose the date and department, enter " + v("<b>Tons produced</b>, <b>Good tons</b>", "the quantity produced and good quantity (tons, pieces or any unit)") + ", <b>Planned hours</b>, <b>Run hours</b> and <b>Ideal rate</b>, and save.",
       "Budget: choose department, year and month, enter the amount, and save."],
      ("tip", "These unlock OEE, maintenance cost per " + v("ton", "unit produced") + " and budget versus actual."))
+proc("Add a company KPI in the app (no Excel)", "Manager", "KPIs and reports › Company KPIs",
+     ["Open the <b>Company KPIs</b> tab and press <b>Add KPI</b>.",
+      "Type the <b>KPI name</b>; choose a <b>Department</b> (blank = whole plant), the <b>Unit</b> and <b>Better when</b> higher or lower.",
+      "Optional: <b>Link to a CMMS KPI</b> (e.g. MTBF) to show its target next to the calculated value.",
+      "Press <b>Save</b>, then <b>Enter month</b> to type the first results. <b>Edit</b> on a row changes the KPI; <b>Delete</b> removes it with its values."])
 proc("Enter a month of company KPIs (in the app)", "Manager", "KPIs and reports › Company KPIs",
      ["Open the <b>Company KPIs</b> tab and choose the <b>Year</b>.",
       "Press <b>Enter month</b> and choose the month (e.g. Oct 2026).",
       "Type the <b>Actual</b> for each KPI. The <b>Target</b> is filled in from the previous month; change it only if the target changed.",
-      "Press <b>Save</b>. The month shows green when the target is met and red when missed."],
+      "Press <b>Save</b>. Each month is coloured: green met, amber close (missed by up to 10 %), red missed. Click the KPI name for its control chart."],
      ("tip", "Open the same month again to correct a value. Clearing a box deletes that value."))
 proc("Update company KPIs from Excel", "Manager", "KPIs and reports › Company KPIs",
      ["Choose the <b>Year</b> and press <b>Download template</b>; it comes back filled with the saved values.",
       "Fill or change the <b>Actual</b> and <b>Target</b> rows under the month columns (YYYY-MM).",
       "Choose the file under <b>Upload filled template</b>, press <b>Preview</b>, then <b>Import</b>."],
      ("note", "A blank cell keeps the saved value; type x to delete a value. A new KPI name in the file adds a new KPI. Columns: department code (blank = whole plant), unit, higher_is_better (yes / no), cmms_kpi (optional link to a calculated KPI such as mtbf)."))
+
+proc("Make the management presentation", "Maintenance manager, planner", "KPIs and reports › Management presentation",
+     ["Set <b>From</b> and <b>To</b> (a whole month, quarter or year compares with the same length before) and, optionally, a <b>Department</b>.",
+      "Press <b>Management presentation</b>. A PowerPoint file in your interface language (English, Arabic or Bengali) is downloaded.",
+      "Slides: executive summary, KPI scorecard (this period, previous period, target, status), 12-month trends, work orders, top 5 bad actors, cost against budget, emergency breakdowns, RCAs, lubrication and condition monitoring (alarm levels and Nelson signals), plan for the next period.",
+      "Status on the scorecard: <b>On target</b> (green), <b>Close to target</b> (amber, missed by up to 10 %), <b>Off target</b> (red); without a target, better / worse than the previous period."],
+     ("tip", "Charts are real PowerPoint charts: add comments or change colours before the meeting. Set the KPI targets first so the scorecard shows them."))
+
+part("Root cause analysis", "Major breakdowns are investigated with 5 Whys and a fishbone, and the actions are followed until they prove effective.")
+proc("Decide whether an RCA is needed", "Maintenance manager (decision); engineer or supervisor (request)", "Root cause analysis; or a work order › Request RCA",
+     ["An RCA is proposed automatically when a completed breakdown matches the <b>RCA rules</b> (long downtime for the asset’s criticality, the same failure mode repeating, a safety or environment event, high cost or production loss). Engineers and supervisors can also press <b>Request RCA</b> on a work order.",
+      "The manager is notified. Open <b>Root cause analysis</b>, open the RCA <b>Waiting for decision</b>.",
+      "Press <b>Start RCA</b>: choose the leader (an engineer), the team members and the due date (default 7 days); or press <b>Not required</b> with a reason."])
+proc("Carry out the RCA", "RCA leader and team", "Root cause analysis › open the RCA",
+     ["<b>Problem (5W1H)</b>: check the text pre-filled from the work orders and add the timeline.",
+      "<b>5 Whys</b>: answer “why?” step by step; add a second branch where there are two causes; mark the root causes.",
+      "<b>Fishbone</b>: list causes under Man, Machine, Method, Material, Measurement, Environment and mark each possible, verified or ruled out.",
+      "<b>Root causes</b> (physical, human, system) and <b>Action plan</b> (containment, corrective, preventive; owner and due date). Add photos and files under <b>Evidence</b>.",
+      "Press <b>Save</b>, then <b>Submit for approval</b>."])
+proc("Approve, act and check the effect", "Maintenance manager (approval); action owners", "Root cause analysis › open the RCA",
+     ["The manager <b>Approves</b> the RCA or returns it to the team with a note.",
+      "Owners finish their actions with the result; <b>Create work order</b> raises a work order for an action, and completing that work order finishes the action.",
+      "When the last action is done, the <b>effectiveness check</b> runs (default 90 days). If the same failure comes back on the asset, the RCA reopens by itself.",
+      "At the end the manager closes the RCA as effective. <b>Print report</b> gives a one-page A4 report."])
 
 part("Roles and approvals", "What each role can do and who approves each step. The chart and table follow the procedures of this part.")
 proc("Find who approves a work order", "Everyone", "Work order › Move to",
@@ -328,8 +425,9 @@ proc("Update the server to a new version", "Administrator", "PowerShell on a lap
       "Wait until <b>==&gt; Done</b> appears (a few minutes). Do not switch apps or lock the phone meanwhile.",
       "If the screen stops or shows “Connection closed” before Done, run the same command again; it is safe.",
       "Ask users to refresh the page or reopen the app."],
-     ("code", 'ssh -t ubuntu@84.8.106.22 "cd /opt/cmms &amp;&amp; sudo git pull &amp;&amp; sudo bash deploy/install-server.sh"'),
-     ("note", "The old version keeps running until the new one is ready, so users can keep working during the update."))
+     ("code", "ssh ubuntu@84.8.106.22 'cd /opt/cmms &amp;&amp; sudo ENV_FILE=deploy/.env scripts/backup.sh /opt/cmms-backups &amp;&amp; sudo BRANCH=ccr-09be8126-0y17zi bash deploy/install-server.sh'"),
+     ("note", "The command first takes a backup, then fetches the version named after BRANCH (the administrator is told which one), applies database changes and restarts. The old version keeps running until the new one is ready."),
+     ("tip", "Check afterwards: <b>sudo docker compose -f deploy/docker-compose.yml --env-file deploy/.env ps</b> shows api, web, worker and db as Up (healthy)."))
 proc("Check the backups", "Administrator", "Oracle console › Storage › Buckets",
      ["Every night at 02:15 the server backs up the database and attachments and uploads a copy to the bucket.",
       "Open <b>Storage › Buckets</b> › the CMMS bucket › <b>Objects</b>; each night adds a dated folder with 4 files.",
@@ -352,6 +450,9 @@ TROUBLE = [
     ("Roster drop-down shows only OFF, L, A", "Add the shift types (D, N, G…) in Shifts and handover › Shift types, then download the template again."),
     ("A point or asset is not in the list", "Lists show the first 2,000 items: use Search or the asset tree. Excel downloads always include everything."),
     ("iPhone: no Install button", "Use the Share button › Add to Home Screen (in Safari, or Chrome’s share button)."),
+    ("A KPI tile says “No target set”", "A manager sets it: KPIs and reports › Set target on the KPI card (whole plant, or a department chosen at the top)."),
+    ("The control chart says at least 3 values are needed", "Enter more readings (or more months for a KPI); the rules need history to judge the process."),
+    ("The dashboard looks different on my phone", "Customise dashboard saves your layout on the server: open the dashboard again, or press Reset to default."),
 ]
 
 
@@ -372,7 +473,7 @@ story = []
 # Cover
 story += [Spacer(1, 50 * mm), Paragraph("PlantPulse", S["title"]), Spacer(1, 4),
           Paragraph("Maintenance management – work instructions: how to do each task, step by step" + v("<br/>Paper mill edition", "<br/>General industry edition"), S["subtitle"]), Spacer(1, 10 * mm)]
-cover = Table([[Paragraph(v("Plant: PM1 · Maintenance department<br/>", "For any industrial plant: production lines, utilities, workshops, buildings<br/>") + "System: https://84-8-106-22.sslip.io<br/>Version: 31 October 2026 (PlantPulse name, users in several departments, user import from Excel, roles and approval chart)", S["body"])]], colWidths=[170 * mm])
+cover = Table([[Paragraph(v("Plant: PM1 · Maintenance department<br/>", "For any industrial plant: production lines, utilities, workshops, buildings<br/>") + "System: https://app.plantpulse-cmms.com<br/>Version: 12 November 2026 (dashboard colour key and customising, KPI targets, Nelson control charts, condition monitoring alarm levels, company KPIs in the app, root cause analysis, search, management presentation)", S["body"])]], colWidths=[170 * mm])
 cover.setStyle(TableStyle([("LINEBEFORE", (0, 0), (0, -1), 4, AMBER), ("LEFTPADDING", (0, 0), (-1, -1), 12), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
 story += [cover, Spacer(1, 12 * mm),
           Paragraph("Each procedure says <b>who</b> does it and <b>where</b> in the app, then gives numbered steps. "
@@ -395,8 +496,9 @@ for i, (_, title, intro, procs) in enumerate(P, 1):
         head = [Paragraph(f"{i}.{j}&nbsp;&nbsp;{ptitle}", S["proc"]),
                 Paragraph(f"<b>Who:</b> {who}&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;<b>Where:</b> {where}", S["meta"])]
         block = head + [steps(items)]
-        for kind, text in extras:
-            block += code(text) if kind == "code" else box(kind, text)
+        for ex in extras:
+            kind, text = ex[0], ex[1]
+            block += code(text) if kind == "code" else grid(text, ex[2]) if kind == "table" else box(kind, text)
         story.append(KeepTogether(block) if len(items) <= 6 else CondPageBreak(60 * mm))
         if len(items) > 6:
             story += block
@@ -417,8 +519,8 @@ for i, (_, title, intro, procs) in enumerate(P, 1):
                   colWidths=[52 * mm, 118 * mm], repeatRows=1)
         t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), TIP_BG), ("GRID", (0, 0), (-1, -1), 0.5, LINE), ("VALIGN", (0, 0), (-1, -1), "TOP"),
                                ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
-        story += [Spacer(1, 4), t, PageBreak(), Image("/tmp/flow/wo.png", width=170 * mm, height=170 * mm * 1836 / 2340), Spacer(1, 6),
-                  Image("/tmp/flow/other.png", width=170 * mm, height=170 * mm * 1023 / 2340)]
+        story += [Spacer(1, 4), t, PageBreak(), Image(os.path.join(DOCS, "approval-flow-work-orders.png"), width=170 * mm, height=170 * mm * 1836 / 2340), Spacer(1, 6),
+                  Image(os.path.join(DOCS, "approval-flow-other.png"), width=170 * mm, height=170 * mm * 1023 / 2340)]
     if title == "Troubleshooting":
         rows = [[Paragraph("<b>Problem</b>", S["box"]), Paragraph("<b>What to do</b>", S["box"])]] + [
             [Paragraph(a, S["box"]), Paragraph(b, S["box"])] for a, b in TROUBLE]

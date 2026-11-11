@@ -11,7 +11,12 @@ Centre line (CL) = mean; sigma = average moving range / 1.128. Rules (pattern ->
   8  8 points in a row more than 1 sigma from CL (either side)  process change
 The frontend (src/lib/kpiStatus.ts) applies the same rules for the charts; keep both in step."""
 
+import uuid
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 MIN_POINTS = 3
 
@@ -68,3 +73,32 @@ def nelson(x: list[float]) -> Result:
         r.triggers[i] = hit
     r.rules = sorted({k for t in r.triggers for k in t})
     return r
+
+
+SIGNAL_WINDOW, SIGNAL_RECENT = 30, 3
+
+
+def point_signals(db: "Session", plant_id: "uuid.UUID", *where: Any) -> dict[str, list[int]]:
+    """Nelson rules each active measurement point breaks now: rules run on its last 30 readings and count when the
+    pattern ends on one of the last 3 readings. `where` narrows the points (e.g. to departments). Points without a
+    signal are left out."""
+    from sqlalchemy import func, select
+
+    from app.models.pdm import ConditionReading, MeasurementPoint
+
+    rn = func.row_number().over(partition_by=ConditionReading.point_id, order_by=ConditionReading.measured_at.desc()).label("rn")
+    sub = (
+        select(ConditionReading.point_id, ConditionReading.value, ConditionReading.measured_at, rn)
+        .join(MeasurementPoint, MeasurementPoint.id == ConditionReading.point_id)
+        .where(ConditionReading.plant_id == plant_id, MeasurementPoint.is_active.is_(True), *where)
+        .subquery()
+    )
+    series: dict[Any, list[float]] = {}
+    for pid, value, _, _ in db.execute(select(sub).where(sub.c.rn <= SIGNAL_WINDOW).order_by(sub.c.point_id, sub.c.measured_at)):
+        series.setdefault(pid, []).append(float(value))
+    out: dict[str, list[int]] = {}
+    for pid, xs in series.items():
+        recent = sorted({k for t in nelson(xs).triggers[-SIGNAL_RECENT:] for k in t})
+        if recent:
+            out[str(pid)] = recent
+    return out

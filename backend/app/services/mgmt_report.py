@@ -21,14 +21,16 @@ from sqlalchemy.orm import Session
 
 from app.models.assets import Asset
 from app.models.enums import OPEN_WO_STATUSES, OccurrenceStatus, ShutdownStatus, WOStatus, WOType
+from app.models.pdm import MeasurementPoint
 from app.models.pm import PMOccurrence, PMPlan
 from app.models.shutdowns import Shutdown
-from app.models.system import KPIScorecard, KPIScorecardValue
+from app.models.system import KPIScorecard, KPIScorecardValue, KPITarget
 from app.models.tenancy import Department
 from app.models.workorders import WorkOrder
 from app.services import kpi as k
 from app.services.common import plant_today
 from app.services.mgmt_report_i18n import KPI_NAMES, LANGS, RTL, WO_STATUS, WO_TYPES, name, tr
+from app.services.nelson import point_signals
 
 HIGHER_IS_BETTER = {
     "pm_compliance",
@@ -91,13 +93,23 @@ def _months(start: date, end: date) -> list[date]:
     return out
 
 
-def _targets(db: Session, s: k.Scope) -> dict[str, float]:
-    """Average monthly target of company KPIs linked to a calculated KPI (same department, or plant-wide)."""
+def _targets(db: Session, s: k.Scope) -> dict[str, tuple[float, bool]]:
+    """Target and direction (higher is better) per calculated KPI, as on the KPI page: the department's own target,
+    else the plant target (KPI targets), else the average monthly target of a company KPI linked to it."""
+    out: dict[str, tuple[float, bool]] = {}
+    for t in db.execute(select(KPITarget).where(KPITarget.plant_id == s.plant.id)).scalars():
+        if t.department_id is None and t.kpi_code not in out:
+            out[t.kpi_code] = (float(t.target), t.higher_is_better)
+    if s.department_id:
+        for t in db.execute(
+            select(KPITarget).where(KPITarget.plant_id == s.plant.id, KPITarget.department_id == s.department_id)
+        ).scalars():
+            out[t.kpi_code] = (float(t.target), t.higher_is_better)
     q = select(KPIScorecard).where(KPIScorecard.plant_id == s.plant.id, KPIScorecard.kpi_code.is_not(None))
     q = q.where(KPIScorecard.department_id == s.department_id) if s.department_id else q.where(KPIScorecard.department_id.is_(None))
-    cards: dict[uuid.UUID, str] = {c.id: c.kpi_code for c in db.execute(q).scalars() if c.kpi_code}
+    cards: dict[uuid.UUID, str] = {c.id: c.kpi_code for c in db.execute(q).scalars() if c.kpi_code and c.kpi_code not in out}
     if not cards:
-        return {}
+        return out
     vals: dict[str, list[float]] = defaultdict(list)
     for v in db.execute(
         select(KPIScorecardValue).where(
@@ -108,7 +120,16 @@ def _targets(db: Session, s: k.Scope) -> dict[str, float]:
     ).scalars():
         if v.target is not None:
             vals[cards[v.scorecard_id]].append(float(v.target))
-    return {code: sum(x) / len(x) for code, x in vals.items()}
+    for code, x in vals.items():
+        out[code] = (sum(x) / len(x), code in HIGHER_IS_BETTER)
+    return out
+
+
+def _signals(db: Session, s: k.Scope) -> int:
+    """Measurement points in scope whose latest readings break a Nelson rule."""
+    ids = (s.department_id,) if s.department_id else s.department_ids
+    where = [MeasurementPoint.asset_id.in_(select(Asset.id).where(Asset.department_id.in_(ids)))] if ids else []
+    return len(point_signals(db, s.plant.id, *where))
 
 
 def _trend(db: Session, s: k.Scope, today: date) -> dict[str, Any]:
@@ -321,6 +342,7 @@ def collect(db: Session, s: k.Scope) -> dict[str, Any]:
         "kpis": cur,
         "prev": prev,
         "targets": _targets(db, s),
+        "nelson_points": _signals(db, s),
         "trend": _trend(db, s, today),
         "wo": _wo_stats(db, s),
         "bad_actors": _bad_actors(db, s, cost),
@@ -403,6 +425,7 @@ MUTED = RGBColor(0x6B, 0x72, 0x80)
 ACCENT = RGBColor(0x1D, 0x4E, 0xD8)
 GOOD = RGBColor(0x15, 0x80, 0x3D)
 BAD = RGBColor(0xB9, 0x1C, 0x1C)
+NEAR = RGBColor(0xC2, 0x41, 0x0C)  # amber: missed the target by no more than 10 % (same rule as the app)
 LINE = RGBColor(0xE5, 0xE7, 0xEB)
 CARD = RGBColor(0xF8, 0xFA, 0xFC)
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
@@ -539,12 +562,19 @@ class Deck:
         return b.getvalue()
 
 
-def _status(code: str, r: dict, prev: dict | None, target: float | None, lang: str) -> tuple[str, RGBColor]:
+def _status(code: str, r: dict, prev: dict | None, target: tuple[float, bool] | None, lang: str) -> tuple[str, RGBColor]:
+    """On target (green), close: missed by no more than 10 % (amber), off target (red), as in the app; without a
+    target, the change against the previous period."""
     if r["value"] is None:
         return tr(lang, "no_data"), MUTED
     if target is not None:
-        ok = verdict(code, r["value"], target) >= 0
-        return (tr(lang, "on_target"), GOOD) if ok else (tr(lang, "off_target"), BAD)
+        tv, hib = target
+        val = float(r["value"])
+        if (val >= tv) if hib else (val <= tv):
+            return tr(lang, "on_target"), GOOD
+        if tv and abs(val - tv) <= abs(tv) * 0.1:
+            return tr(lang, "near_target"), NEAR
+        return tr(lang, "off_target"), BAD
     if code in SNAPSHOT or prev is None:
         return tr(lang, "snapshot"), MUTED
     v = verdict(code, r["value"], prev["value"])
@@ -613,7 +643,7 @@ def build_pptx(d: dict[str, Any], lang: str) -> bytes:
                 name(KPI_NAMES, code, L),
                 fmt_kpi(r, L, cur_cy),
                 "—" if p is None else fmt_kpi(p, L, cur_cy),
-                "—" if tgt is None else fmt_kpi({**r, "value": tgt}, L, cur_cy),
+                "—" if tgt is None else fmt_kpi({**r, "value": tgt[0]}, L, cur_cy),
                 st,
             ]
         )
@@ -810,6 +840,7 @@ def build_pptx(d: dict[str, Any], lang: str) -> bytes:
         ),
         f"{dk.t('pdm_raised')}: {fmt_kpi(pd_, L, cur_cy)}",
         f"{dk.t('pdm_open')}: {dk.t('critical')} {opn.get('critical', 0)} · {dk.t('warning')} {opn.get('warning', 0)}",
+        f"{dk.t('nelson_points')}: {d.get('nelson_points', 0)}",
         f"{dk.t('stockouts')}: {fmt_kpi(cur['stockout_rate'], L, cur_cy)}",
     ]
     dk.text(s, M, Inches(1.5), W - 2 * M, Inches(2.4), lines, 18, bullets=True)

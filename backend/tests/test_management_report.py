@@ -81,3 +81,19 @@ def test_language_defaults_to_the_users_interface_language(world):
     mgr = world.api("manager")
     mgr.ok("post", "/auth/locale", {"locale": "ar"}, status=204)
     assert "تقرير إدارة الصيانة" in _texts(mgr.get(URL, params=SEPT).content)[0]
+
+
+def test_scorecard_uses_kpi_targets_with_close_and_off_target(world):
+    mgr, sup = world.api("manager"), world.api("mech_sup")
+    line = mk_asset(mgr, world, "PM1")
+    for d, h in ((5, 4), (20, 6)):  # MTTR 5 h in September
+        when = {"started_at": datetime(2026, 9, d, 0, tzinfo=TZ).isoformat(), "ended_at": datetime(2026, 9, d, h, tzinfo=TZ).isoformat()}
+        sup.ok("post", f"/assets/{line['id']}/downtime", {**when, "is_failure": True}, status=201)
+    mgr.ok("put", "/kpis/targets", {"kpi_code": "mttr", "target": 4.6})  # 5 h vs 4.6 h: missed by under 10 %
+    card = _texts(mgr.get(URL, params={**SEPT, "lang": "en"}).content)[2]
+    assert "4.6 h" in card and "Close to target" in card
+    mgr.ok("put", "/kpis/targets", {"kpi_code": "mttr", "target": 3})
+    card = _texts(mgr.get(URL, params={**SEPT, "lang": "en"}).content)[2]
+    assert "3 h" in card and "Off target" in card
+    cond = _texts(mgr.get(URL, params={**SEPT, "lang": "en"}).content)[8]
+    assert "Alarm limit exceeded" in cond and "Nelson rule" in cond
