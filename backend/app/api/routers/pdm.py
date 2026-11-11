@@ -1,10 +1,10 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import Field
-from sqlalchemy import case, or_, select
+from sqlalchemy import case, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from app.schemas.common import ORM, In
 from app.services import pdm as svc
 from app.services import pdm_history, pdm_priority, plan_removal
 from app.services.common import audit, utcnow
+from app.services.search import where_text
 
 router = APIRouter(prefix="/pdm", tags=["condition monitoring"])
 MAX_EXPORT = 50000
@@ -107,10 +108,7 @@ def list_points(
     if asset_id:
         stmt = stmt.where(MeasurementPoint.asset_id == asset_id)
     if q and q.strip():
-        like = f"%{q.strip()}%"
-        stmt = stmt.join(Asset, Asset.id == MeasurementPoint.asset_id).where(
-            or_(MeasurementPoint.code.ilike(like), MeasurementPoint.name.ilike(like), Asset.code.ilike(like), Asset.name.ilike(like))
-        )
+        stmt = where_text(stmt, q, MeasurementPoint.code, MeasurementPoint.name, asset_col=MeasurementPoint.asset_id, plant_id=ctx.plant_id)
     if under:
         root = db.get(Asset, under)
         if root is None or root.plant_id != ctx.plant_id:
@@ -317,8 +315,10 @@ def alerts(
     status: AlertStatus | None = None,
     severity: ConditionStatus | None = None,
     open_only: bool = False,
+    search: str | None = Query(None, alias="q"),
 ) -> dict:
     q = select(ConditionAlert).where(ConditionAlert.plant_id == ctx.plant_id, ctx.in_department(ConditionAlert.asset_id))
+    q = where_text(q, search, ConditionAlert.message, asset_col=ConditionAlert.asset_id, plant_id=ctx.plant_id)
     if status:
         q = q.where(ConditionAlert.status == status)
     if severity:

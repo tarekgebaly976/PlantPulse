@@ -9,6 +9,7 @@ import { DataTable, DeptSelect, PageHeader, StatusBadge, UserPicker } from "@/co
 import { api, download, patch, post, put } from "@/lib/api";
 import { useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { SearchBox, textMatch } from "@/components/Search";
 
 interface ShiftDef { id: string; code: string; name: string; kind: string; start_time: string; end_time: string; paid_hours: number }
 interface Entry { id: string; user_id: string; name: string; trade: string | null; work_date: string; shift: string | null; kind: string; hours: number; overtime_hours: number; callout_hours: number }
@@ -110,6 +111,7 @@ function Shifts() {
   const roster = useQ<Entry[]>("/shifts/roster", { start, end });
   const teams = useQ<Team[]>("/shifts/teams");
   const handovers = useQ<Handover[]>("/shifts/handovers");
+  const [hq, setHq] = useState("");
   const mp = useQ<Manpower[]>("/shifts/manpower", { start, end });
   const days = Array.from({ length: 14 }, (_, i) => addDays(start, i));
   const people = useMemo(() => {
@@ -165,7 +167,9 @@ function Shifts() {
             { key: "f", label: t("shift.flags"), render: (r) => r.flags.map((f) => <Text key={f} size="xs" c="red">⚠ {f}</Text>) }]} />
         </Tabs.Panel>
         <Tabs.Panel value="handovers" pt="md">
-          <DataTable rows={handovers.data} onRow={(h) => router.push(`/shifts/handovers/${h.id}`)} columns={[
+          <SearchBox value={hq} onChange={setHq} />
+          <div style={{ height: 12 }} />
+          <DataTable rows={handovers.data?.filter((h) => textMatch(hq, h.shift_date, h.summary, h.status, shifts.data?.find((x) => x.id === h.shift_id)?.code))} onRow={(h) => router.push(`/shifts/handovers/${h.id}`)} columns={[
             { key: "d", label: t("common.date"), render: (h) => h.shift_date }, { key: "sh", label: t("shift.shift"), render: (h) => shifts.data?.find((s) => s.id === h.shift_id)?.code },
             { key: "s", label: t("common.status"), render: (h) => <StatusBadge value={h.status} /> }, { key: "m", label: t("shift.summary"), render: (h) => h.summary.slice(0, 80) },
             { key: "o", label: t("shift.outgoing"), render: (h) => (h.outgoing_user_id === me?.id ? "✓ me" : "") }]} />

@@ -3,7 +3,7 @@
 import { ActionIcon, AppShell, Avatar, Badge, Box, useComputedColorScheme, useMantineColorScheme, Burger, Button, Group, Indicator, Menu, Modal, NavLink, PasswordInput, ScrollArea, Select, Stack, Text, Tooltip } from "@mantine/core";
 import { useDisclosure, useNetwork } from "@mantine/hooks";
 import {
-  IconAlertTriangle, IconBell, IconBox, IconCalendarTime, IconChartBar, IconClipboardList, IconDashboard, IconDroplet, IconHeartRateMonitor,
+  IconAlertTriangle, IconBell, IconBox, IconCalendarTime, IconChartBar, IconClipboardList, IconDashboard, IconDroplet, IconFishBone, IconHeartRateMonitor,
   IconKey, IconLanguage, IconLogout, IconMoon, IconPlus, IconSun, IconQrcode, IconSettings, IconSitemap, IconTool, IconToolsKitchen, IconUserCheck, IconWifi, IconWifiOff,
 } from "@tabler/icons-react";
 import Link from "next/link";
@@ -14,6 +14,7 @@ import { post } from "@/lib/api";
 import { useMut, useQ } from "@/lib/hooks";
 import { LANGS } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
+import { GlobalSearch } from "./Search";
 import { Loading } from "./ui";
 
 type NavItem = { href: string; key: string; icon: typeof IconDashboard; perm?: string };
@@ -30,6 +31,7 @@ const NAV_GROUPS: { key: string | null; items: NavItem[] }[] = [
     { href: "/lubrication", key: "nav.lubrication", icon: IconDroplet, perm: "lube.view" },
     { href: "/pdm", key: "nav.pdm", icon: IconHeartRateMonitor, perm: "pdm.view" },
     { href: "/shutdowns", key: "nav.shutdowns", icon: IconTool, perm: "shutdown.view" },
+    { href: "/rca", key: "nav.rca", icon: IconFishBone, perm: "rca.view" },
   ] },
   { key: "navGroup.resources", items: [
     { href: "/assets", key: "nav.assets", icon: IconSitemap, perm: "asset.view" },
@@ -103,6 +105,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
               <Select size="xs" w={150} aria-label={t("app.plant")} value={plant.plant_id} onChange={(v) => v && setPlant(v)} allowDeselect={false}
                 data={me.plants.map((p) => ({ value: p.plant_id, label: p.plant_code }))} />
             ) : <Badge variant="outline" visibleFrom="sm">{plant.plant_code}</Badge>}
+            <GlobalSearch />
             <Indicator disabled={!notif.data?.unread} label={notif.data?.unread} size={16} color="red">
               <ActionIcon variant="subtle" component={Link} href="/notifications" aria-label={t("nav.notifications")}><IconBell size={20} /></ActionIcon>
             </Indicator>

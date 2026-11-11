@@ -5,6 +5,7 @@ import { IconAlertOctagon, IconCalendar, IconCircleCheck, IconMapPin, IconShield
 import Link from "next/link";
 import { useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
+import { SearchBox, textMatch } from "@/components/Search";
 import { Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { fmtDate, useAssetCodes, useQ } from "@/lib/hooks";
 import type { Page, WorkOrder } from "@/lib/types";
@@ -17,20 +18,25 @@ export default function MyWork() {
   const q = useQ<Page<WorkOrder>>("/work-orders", { assigned_to_me: true, open_only: scope === "open", limit: 100, sort: "due_date" });
   const amap = useAssetCodes((q.data?.items ?? []).map((w) => w.asset_id));
   const today = new Date().toISOString().slice(0, 10);
+  const [search, setSearch] = useState("");
+  const items = (q.data?.items ?? []).filter((w) => textMatch(search, w.number, w.title, amap.get(w.asset_id), w.status));
   return (
     <>
       <PageHeader title={t("nav.myWork")}>
-        <SegmentedControl value={scope} onChange={setScope} data={[{ value: "open", label: t("wo.openOnly") }, { value: "all", label: t("common.all") }]} />
+        <Group gap="sm">
+          <SegmentedControl value={scope} onChange={setScope} data={[{ value: "open", label: t("wo.openOnly") }, { value: "all", label: t("common.all") }]} />
+          <SearchBox value={search} onChange={setSearch} w={220} />
+        </Group>
       </PageHeader>
       {!q.data ? <Loading /> : (
         <Stack gap="sm">
-          {q.data.items.length === 0 && (
+          {items.length === 0 && (
             <Stack align="center" gap={6} py="xl" c="dimmed">
               <ThemeIcon variant="light" color="teal" size={52} radius="xl"><IconCircleCheck size={30} /></ThemeIcon>
               <Text>{t("dash.allClear")}</Text>
             </Stack>
           )}
-          {q.data.items.map((w) => {
+          {items.map((w) => {
             const late = !!w.due_date && w.due_date < today && !["completed", "closed", "cancelled"].includes(w.status);
             return (
               <Card key={w.id} withBorder component={Link} href={`/work-orders/${w.id}`} padding="md" className="tap-target pp-stat" data-alert

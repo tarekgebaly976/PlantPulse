@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Attachments } from "@/components/Attachments";
 import { PartsUsed } from "@/components/PartsUsed";
+import { RequestRca } from "@/components/Rca";
 import { LotoRegister, PermitSignoff } from "@/components/Safety";
 import { KV, Loading, PageHeader, Section, StatusBadge, UserPicker } from "@/components/ui";
 import { del, download, patch, post } from "@/lib/api";
@@ -139,7 +140,7 @@ export default function WODetailPage() {
     const w = d.work_order;
     setExec({ findings: w.findings ?? "", recommendations: w.recommendations ?? "", root_cause: w.root_cause ?? "", corrective_action: w.corrective_action ?? "",
       symptom_code_id: w.symptom_code_id, problem_code_id: w.problem_code_id, cause_code_id: w.cause_code_id, remedy_code_id: w.remedy_code_id, downtime_hours: w.downtime_hours ?? "",
-      production_loss_tons: w.production_loss_tons ?? "" });
+      production_loss_tons: w.production_loss_tons ?? "", safety_event: w.safety_event });
     setPlan({ planned_start: toLocalInput(w.planned_start), planned_end: toLocalInput(w.planned_end), due_date: w.due_date ?? "", estimated_hours: w.estimated_hours ?? "",
       priority: w.priority, requires_loto: w.requires_loto, requires_permit: w.requires_permit, requires_testing: w.requires_testing, supervisor_id: w.supervisor_id });
   }
@@ -178,11 +179,14 @@ export default function WODetailPage() {
     <>
       <PageHeader title={`${w.number} · ${w.title}`} actions={<>
         {w.source === "migrated" && <Badge color="gray" variant="outline">{t("planImport.migrated")} · {w.external_ref}</Badge>}
+        {!d.rca && can("rca.edit") && w.source !== "migrated" && ["corrective", "emergency"].includes(w.type) && w.status !== "cancelled" && <RequestRca woId={w.id} />}
         <Button variant="default" onClick={() => void download(`/reports/work-orders/${w.id}.pdf`)}>{t("wo.pdf")}</Button>
       </>}>
         <Group gap="xs">
           <StatusBadge value={w.status} size="lg" data-testid="wo-status" /><StatusBadge value={w.priority} /><Badge variant="outline">{t(`woType.${w.type}`)}</Badge>
           {w.is_repeat_failure && <Badge color="red">{t("wo.repeat")}</Badge>}
+          {w.safety_event && <Badge color="red" variant="outline">{t("rca.safetyShort")}</Badge>}
+          {d.rca && <Anchor component={Link} href={`/rca/${d.rca.id}`}><Badge color="grape" style={{ cursor: "pointer" }}>{d.rca.number} · {t(`status.${d.rca.status}`)}</Badge></Anchor>}
           {d.asset && <Anchor component={Link} href={`/assets/${d.asset.id}`} size="sm">{d.asset.code} — {d.asset.name}</Anchor>}
         </Group>
       </PageHeader>
@@ -245,6 +249,7 @@ export default function WODetailPage() {
                 <NumberInput label={t("wo.downtime")} min={0} value={exec.downtime_hours as number | string} onChange={(v) => setExec({ ...exec, downtime_hours: v })} />
                 <NumberInput label={t("wo.productionLoss")} min={0} value={exec.production_loss_tons as number | string} onChange={(v) => setExec({ ...exec, production_loss_tons: v })} />
               </SimpleGrid>
+              <Checkbox mt="sm" label={t("rca.safetyEvent")} description={t("rca.safetyEventHint")} checked={Boolean(exec.safety_event)} onChange={(e) => setExec({ ...exec, safety_event: e.currentTarget.checked })} />
             </Section>
             {(w.requires_loto || d.loto.length > 0) && (
               <Section title={t("safety.lotoRegister")}><LotoRegister woId={w.id} rows={d.loto} status={w.status} /></Section>

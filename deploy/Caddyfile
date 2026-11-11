@@ -1,6 +1,8 @@
-# Single public origin. Caddy obtains and renews TLS certificates automatically for {$CMMS_DOMAIN}.
+# The CMMS. Caddy obtains and renews TLS certificates automatically for {$CMMS_DOMAIN}.
 # For local runs CMMS_DOMAIN=localhost uses Caddy's internal CA (trust it or accept the warning).
-{$CMMS_DOMAIN:localhost} {
+# The site is a snippet so a previous address can keep serving the same app while phones move to the new one
+# (scripts/set-domain.sh writes caddy.d/00-previous-address.caddy).
+(cmms_app) {
 	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
@@ -27,6 +29,10 @@
 		output stdout
 		format json
 	}
+}
+
+{$CMMS_DOMAIN:localhost} {
+	import cmms_app
 }
 
 # Optional test copy (scripts/test-copy.sh): a separate database and app at test.<domain>. Until it is started,

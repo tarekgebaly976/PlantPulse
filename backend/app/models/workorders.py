@@ -113,6 +113,8 @@ class WorkOrder(Base, PlantScoped, Timestamped, Attributed):
     root_cause: Mapped[str | None] = mapped_column(Text)
     corrective_action: Mapped[str | None] = mapped_column(Text)
     is_repeat_failure: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Safety / environment incident during the breakdown (injury, near miss, fire, spill): always proposes an RCA.
+    safety_event: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
 
     pm_occurrence_id: Mapped[uuid.UUID | None] = fk("pm_occurrences.id", nullable=True, index=False)
     condition_alert_id: Mapped[uuid.UUID | None] = fk("condition_alerts.id", nullable=True)

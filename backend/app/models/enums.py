@@ -243,3 +243,36 @@ class DeliveryStatus(StrEnum):
     SENT = "sent"
     FAILED = "failed"
     DISABLED = "disabled"
+
+
+class RCAStatus(StrEnum):
+    CANDIDATE = "candidate"  # a rule matched (or someone asked): waits for the manager's decision
+    NOT_REQUIRED = "not_required"  # the manager decided no RCA is needed (reason kept)
+    INVESTIGATION = "investigation"  # team works on 5W1H, 5 Whys, fishbone, root causes and actions
+    AWAITING_APPROVAL = "awaiting_approval"  # leader submitted the analysis; manager approves or returns it
+    ACTION_PLAN = "action_plan"  # approved: actions are being carried out
+    MONITORING = "monitoring"  # all actions finished: effectiveness check period (no recurrence)
+    CLOSED = "closed"
+    CANCELLED = "cancelled"
+
+
+ACTIVE_RCA_STATUSES = (
+    RCAStatus.CANDIDATE,
+    RCAStatus.INVESTIGATION,
+    RCAStatus.AWAITING_APPROVAL,
+    RCAStatus.ACTION_PLAN,
+    RCAStatus.MONITORING,
+)
+
+
+class RCAActionKind(StrEnum):
+    CONTAINMENT = "containment"  # immediate, to protect the plant until the real fix is in
+    CORRECTIVE = "corrective"  # removes the root cause
+    PREVENTIVE = "preventive"  # stops it happening again here or on similar equipment
+
+
+class RCAActionStatus(StrEnum):
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    CANCELLED = "cancelled"

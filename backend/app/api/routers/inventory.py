@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,7 @@ from app.models.inventory import (
 from app.schemas.common import ORM, In
 from app.services import inventory as svc
 from app.services.common import audit, next_number, utcnow
+from app.services.search import where_text
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
@@ -177,9 +178,7 @@ def list_parts(
     below_reorder: bool = False,
 ) -> dict:
     stmt = select(Part).where(Part.plant_id == ctx.plant_id)
-    if q:
-        like = f"%{q}%"
-        stmt = stmt.where(or_(Part.code.ilike(like), Part.description.ilike(like), Part.oem_part_number.ilike(like)))
+    stmt = where_text(stmt, q, Part.code, Part.description, Part.description_ar, Part.oem_part_number, Part.manufacturer, Part.category)
     if critical_only:
         stmt = stmt.where(Part.is_critical_spare.is_(True))
     if below_reorder:

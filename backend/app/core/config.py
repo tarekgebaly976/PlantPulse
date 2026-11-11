@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     instance_label: str = ""
     # Address of the web app, used for links in e-mails (e.g. https://cmms.example.com); empty = no link.
     public_url: str = ""
+    # Product website (e.g. plantpulse-cmms.com): the sign-in page links to its "Try the demo" form. Empty = no link.
+    product_domain: str = ""
     log_level: str = "INFO"
     log_json: bool = True
 

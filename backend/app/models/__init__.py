@@ -7,6 +7,7 @@ from app.models import (  # noqa: F401
     lubrication,
     pdm,
     pm,
+    rca,
     shifts,
     shutdowns,
     system,

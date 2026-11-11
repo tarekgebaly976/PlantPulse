@@ -18,6 +18,7 @@ from app.schemas.common import In
 from app.services import failure_modes as fm
 from app.services import kpi as svc
 from app.services import kpi_scorecard as sc
+from app.services import mgmt_report as mr
 from app.services.common import audit, plant_today, utcnow
 
 router = APIRouter(prefix="/kpis", tags=["kpi"])
@@ -119,6 +120,35 @@ def trend(
 
 def _f(v: Decimal | None) -> float | None:
     return None if v is None else float(v)
+
+
+@router.get("/management-report.pptx")
+def management_report(
+    ctx: Ctx = Depends(require("report.management")),
+    db: Session = Depends(get_db, scope="function"),
+    start: date | None = None,
+    end: date | None = None,
+    department_id: uuid.UUID | None = None,
+    lang: str | None = Query(None, pattern="^(en|ar|bn)$"),
+) -> Response:
+    """Management presentation for the period, in the requested interface language (default: the user's)."""
+    s = _scope(ctx, db, start, end, department_id, None)
+    language = lang or (ctx.user.locale if ctx.user.locale in mr.LANGS else "en")
+    content = mr.build_pptx(mr.collect(db, s), language)
+    audit(
+        db,
+        "report.management",
+        user_id=ctx.user.id,
+        plant_id=ctx.plant_id,
+        data={"start": s.start, "end": s.end, "department_id": s.department_id, "lang": language},
+        ip=ctx.ip,
+    )
+    fname = f"management_report_{ctx.plant.code}_{s.start}_{s.end}_{language}.pptx"
+    return Response(
+        content,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 @router.get("/scorecard")

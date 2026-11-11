@@ -14,6 +14,7 @@ import { AssetPicker, DataTable, PageHeader, Pager, StatusBadge } from "@/compon
 import { api, download, post, put } from "@/lib/api";
 import { fmtDate, fmtNum, useAssetCodes, useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { SearchBox, useSearch } from "@/components/Search";
 import type { Asset, Page } from "@/lib/types";
 
 export interface MPoint { id: string; code: string; name: string; asset_id: string; technique: string; unit: string; baseline: number | null; warning_low: number | null;
@@ -147,8 +148,9 @@ function PdM() {
   const [imp, setImp] = useState(false);
   const [f, setF] = useState({ code: "", name: "", asset_id: null as string | null, technique: "vibration", unit: "mm/s", warning_high: "" as number | string, alarm_high: "" as number | string,
     warning_low: "" as number | string, alarm_low: "" as number | string, auto_create_wo: false, external_tag: "", recommended_action: "" });
-  const [search, setSearch] = useState("");
-  const [q] = useDebouncedValue(search.trim(), 300);
+  const [search, setSearch, q] = useSearch();
+  const [aq, setAq] = useState("");
+  const [aqd] = useDebouncedValue(aq.trim(), 300);
   const [under, setUnder] = useState<string | null>(null);
   const [newAsset, setNewAsset] = useState(false);
   const [prioOnly, setPrioOnly] = useState(false);
@@ -158,7 +160,7 @@ function PdM() {
   const all = useQ<MPoint[]>("/pdm/points", { q: q || undefined, under });
   const points = { ...all, data: prioOnly ? all.data?.filter((p) => p.priority < 3 || p.last_status === "critical") : all.data };
   const chosen = useQ<Asset>(f.asset_id ? `/assets/${f.asset_id}` : null);
-  const alerts = useQ<Page<CAlert>>("/pdm/alerts", { open_only: openOnly, limit: 50, offset });
+  const alerts = useQ<Page<CAlert>>("/pdm/alerts", { open_only: openOnly, limit: 50, offset, q: aqd || undefined });
   const amap = useAssetCodes([...(points.data ?? []), ...(alerts.data?.items ?? [])].map((x) => x.asset_id));
   const pmap = new Map((points.data ?? []).map((p) => [p.id, p]));
   const n = (v: number | string) => (v === "" ? null : Number(v));
@@ -210,7 +212,10 @@ function PdM() {
           </SimpleGrid>
         </Tabs.Panel>
         <Tabs.Panel value="alerts" pt="md">
-          <Checkbox mb="sm" label={t("wo.openOnly")} checked={openOnly} onChange={(e) => setOpenOnly(e.currentTarget.checked)} />
+          <Group mb="sm">
+            <SearchBox value={aq} onChange={(v) => { setAq(v); setOffset(0); }} />
+            <Checkbox label={t("wo.openOnly")} checked={openOnly} onChange={(e) => setOpenOnly(e.currentTarget.checked)} />
+          </Group>
           <DataTable rows={alerts.data?.items} onRow={(a) => router.push(`/pdm/alerts/${a.id}`)} columns={[
             { key: "d", label: t("common.createdAt"), render: (a) => fmtDate(a.created_at, undefined, true) },
             { key: "p", label: t("pdm.points"), render: (a) => pmap.get(a.point_id)?.code }, { key: "a", label: t("common.asset"), render: (a) => amap.get(a.asset_id) },

@@ -26,6 +26,9 @@ erDiagram
         double working_hours_per_day
         jsonb settings
         boolean is_active
+        boolean daily_summary_enabled
+        time daily_summary_time
+        jsonb daily_summary_days
         datetime created_at
         datetime updated_at
     }
@@ -42,6 +45,10 @@ erDiagram
         varchar name_ar
         enum type
         boolean is_active
+        boolean pm_auto_wo
+        boolean pdm_auto_wo
+        boolean lube_auto_wo
+        varchar pdm_alert_action
         uuid plant_id FK
         datetime created_at
         datetime updated_at
@@ -91,6 +98,8 @@ erDiagram
         varchar code
         varchar name
         varchar description
+        boolean customized
+        uuid organization_id FK
     }
     permissions {
         varchar code PK
@@ -107,6 +116,7 @@ erDiagram
         uuid role_id FK
         uuid department_id FK
         boolean is_active
+        boolean daily_summary
         datetime created_at
         datetime updated_at
     }
@@ -138,6 +148,7 @@ erDiagram
     }
     departments ||--o{ memberships : "department_id"
     organizations ||--o{ plants : "organization_id"
+    organizations ||--o{ roles : "organization_id"
     organizations ||--o{ users : "organization_id"
     permissions ||--o{ role_permissions : "permission_code"
     plants ||--o{ departments : "plant_id"
@@ -174,6 +185,7 @@ erDiagram
         enum criticality
         enum status
         varchar location
+        varchar equipment_type
         jsonb specifications
         jsonb operating_limits
         numeric operating_hours
@@ -227,6 +239,8 @@ erDiagram
         varchar code
         varchar description
         varchar description_ar
+        varchar equipment_type
+        varchar category
         boolean is_active
         uuid plant_id FK
     }
@@ -275,6 +289,8 @@ erDiagram
         varchar title
         text description
         text symptoms
+        uuid symptom_code_id FK
+        uuid problem_code_id FK
         enum suggested_priority
         boolean is_breakdown
         enum status
@@ -290,6 +306,8 @@ erDiagram
     work_orders {
         uuid id PK
         varchar number
+        varchar source
+        varchar external_ref
         enum type
         enum status
         enum priority
@@ -298,6 +316,7 @@ erDiagram
         varchar title
         text description
         text symptoms
+        uuid symptom_code_id FK
         uuid problem_code_id FK
         uuid cause_code_id FK
         uuid remedy_code_id FK
@@ -322,6 +341,8 @@ erDiagram
         boolean requires_loto
         boolean requires_permit
         varchar permit_reference
+        varchar permit_types
+        datetime permit_valid_until
         text safety_requirements
         uuid safety_signed_by_id FK
         datetime safety_signed_at
@@ -335,6 +356,7 @@ erDiagram
         text root_cause
         text corrective_action
         boolean is_repeat_failure
+        boolean safety_event
         uuid pm_occurrence_id FK
         uuid condition_alert_id FK
         uuid shutdown_package_id FK
@@ -425,6 +447,9 @@ erDiagram
     failure_codes ||--o{ work_orders : "cause_code_id"
     failure_codes ||--o{ work_orders : "problem_code_id"
     failure_codes ||--o{ work_orders : "remedy_code_id"
+    failure_codes ||--o{ work_orders : "symptom_code_id"
+    failure_codes ||--o{ work_requests : "problem_code_id"
+    failure_codes ||--o{ work_requests : "symptom_code_id"
     plants ||--o{ wo_status_transitions : "plant_id"
     plants ||--o{ work_orders : "plant_id"
     plants ||--o{ work_requests : "plant_id"
@@ -470,6 +495,7 @@ erDiagram
         text safety_precautions
         boolean requires_loto
         boolean requires_permit
+        varchar permit_types
         boolean requires_testing
         boolean is_active
         uuid plant_id FK
@@ -946,6 +972,7 @@ erDiagram
         numeric last_value
         datetime last_reading_at
         boolean is_active
+        smallint priority
         uuid plant_id FK
         datetime created_at
         datetime updated_at
@@ -978,6 +1005,7 @@ erDiagram
         uuid resolved_by_id FK
         datetime resolved_at
         uuid work_order_id
+        uuid work_request_id
         uuid plant_id FK
         datetime created_at
         datetime updated_at

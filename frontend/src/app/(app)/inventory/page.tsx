@@ -11,6 +11,7 @@ import { DataTable, PageHeader, Pager, StatusBadge } from "@/components/ui";
 import { post } from "@/lib/api";
 import { fmtMoney, fmtNum, useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { SearchBox, textMatch, useSearch } from "@/components/Search";
 import type { Page, Part, Warehouse } from "@/lib/types";
 
 interface PO { id: string; number: string; status: string; external_reference: string | null; expected_date: string | null; lines: { id: string; part_code: string; part_id: string; quantity: number; qty_received: number; unit_price: number }[] }
@@ -22,14 +23,15 @@ function Inventory() {
   const router = useRouter();
   const { can, plant } = useSession();
   const cur = plant?.currency ?? "SAR";
-  const [q, setQ] = useState("");
+  const [q, setQ, dq] = useSearch();
   const [crit, setCrit] = useState(false);
   const [below, setBelow] = useState(false);
   const [offset, setOffset] = useState(0);
-  const parts = useQ<Page<Part>>("/inventory/parts", { q, critical_only: crit, below_reorder: below, limit: 50, offset });
+  const parts = useQ<Page<Part>>("/inventory/parts", { q: dq || undefined, critical_only: crit, below_reorder: below, limit: 50, offset });
   const allParts = useQ<Page<Part>>("/inventory/parts", { limit: 500 });
   const whs = useQ<Warehouse[]>("/inventory/warehouses");
   const pos = useQ<PO[]>("/inventory/purchase-orders");
+  const [poq, setPoq] = useState("");
   const val = useQ<{ total_value: number; items: { code: string; description: string; on_hand: number; average_cost: number; value: number }[] }>("/inventory/valuation");
   const aging = useQ<Aging>("/inventory/aging");
   const [modal, setModal] = useState<"part" | "import" | "receipt" | "adjust" | "po" | "wh" | null>(null);
@@ -68,7 +70,7 @@ function Inventory() {
         <Tabs.Panel value="used" pt="md"><PartsUsedReport /></Tabs.Panel>
         <Tabs.Panel value="parts" pt="md">
           <Group mb="sm">
-            <TextInput placeholder={t("common.search")} value={q} onChange={(e) => { setQ(e.currentTarget.value); setOffset(0); }} />
+            <SearchBox value={q} onChange={(v) => { setQ(v); setOffset(0); }} placeholder={t("search.partHint")} w={320} />
             <Checkbox label={t("inv.critical")} checked={crit} onChange={(e) => setCrit(e.currentTarget.checked)} />
             <Checkbox label={t("inv.belowReorder")} checked={below} onChange={(e) => setBelow(e.currentTarget.checked)} />
           </Group>
@@ -83,7 +85,9 @@ function Inventory() {
         </Tabs.Panel>
         <Tabs.Panel value="pos" pt="md">
           <Alert color="blue" mb="sm">{t("inv.erpNote")}</Alert>
-          <DataTable rows={pos.data} columns={[
+          <SearchBox value={poq} onChange={setPoq} />
+          <div style={{ height: 12 }} />
+          <DataTable rows={pos.data?.filter((p) => textMatch(poq, p.number, p.status, p.external_reference, ...p.lines.map((l) => l.part_code)))} columns={[
             { key: "n", label: "#", render: (p) => p.number }, { key: "s", label: t("common.status"), render: (p) => <StatusBadge value={p.status} /> },
             { key: "e", label: t("inv.externalRef"), render: (p) => p.external_reference }, { key: "l", label: t("wo.part"), render: (p) => p.lines.map((l) => `${l.part_code} ${l.qty_received}/${l.quantity}`).join(", ") },
             { key: "a", label: t("common.actions"), render: (p) => can("purchase.manage") && <Group gap={4}>

@@ -15,6 +15,7 @@ dependencies = [
   "apscheduler>=3.10,<4",
   "openpyxl>=3.1",
   "reportlab>=4.2",
+  "python-pptx>=1.0",
   "python-multipart>=0.0.9",
   "qrcode[pil]>=7.4",
   "boto3>=1.34",

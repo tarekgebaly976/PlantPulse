@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, FileInput, Group, Modal, Paper, SegmentedControl, Select, Stack, Table, TextInput } from "@mantine/core";
+import { Alert, Button, FileInput, Group, Modal, Paper, SegmentedControl, Select, Stack, Table, Text, TextInput } from "@mantine/core";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -12,6 +12,7 @@ import { AssetTree, DataTable, PageHeader, Pager, StatusBadge } from "@/componen
 import { api, download, downloadPost } from "@/lib/api";
 import { useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { SearchBox, useSearch } from "@/components/Search";
 import type { Asset, Page } from "@/lib/types";
 
 interface ImportResult { total: number; valid: number; invalid: number; errors: { row: number; code: string | null; errors: string[] }[] }
@@ -57,14 +58,16 @@ function Assets() {
   const router = useRouter();
   const { can } = useSession();
   const [view, setView] = useState("tree");
-  const [q, setQ] = useState("");
+  const [q, setQ, debounced] = useSearch();
   const [crit, setCrit] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
   const [newOpen, setNewOpen] = useState(false);
   const [impOpen, setImpOpen] = useState(false);
   const [labels, setLabels] = useState(false);
   const [classify, setClassify] = useState(false);
-  const list = useQ<Page<Asset>>(view === "list" ? "/assets" : null, { q, criticality: crit, limit: 50, offset });
+  // Typing a search shows the matching equipment from every level, also in the tree view.
+  const showList = view === "list" || debounced.length > 0;
+  const list = useQ<Page<Asset>>(showList ? "/assets" : null, { q: debounced || undefined, criticality: crit, limit: 50, offset });
   return (
     <>
       <PageHeader title={t("nav.assets")} actions={<>
@@ -78,14 +81,15 @@ function Assets() {
       </PageHeader>
       <LabelPrint kind="assets" opened={labels} onClose={() => setLabels(false)} />
       <ClassifyAssets opened={classify} onClose={() => setClassify(false)} />
-      {view === "tree" ? (
+      <Group mb="sm">
+        <SearchBox value={q} onChange={(v) => { setQ(v); setOffset(0); }} placeholder={t("search.assetHint")} w={340} />
+        {showList && <Select placeholder={t("common.criticality")} clearable data={["A", "B", "C"]} value={crit} onChange={setCrit} w={140} />}
+        {showList && list.data && <Text size="sm" c="dimmed">{list.data.total}</Text>}
+      </Group>
+      {!showList ? (
         <Paper withBorder p="md"><AssetTree /></Paper>
       ) : (
         <>
-          <Group mb="sm">
-            <TextInput placeholder={t("common.search")} value={q} onChange={(e) => { setQ(e.currentTarget.value); setOffset(0); }} />
-            <Select placeholder={t("common.criticality")} clearable data={["A", "B", "C"]} value={crit} onChange={setCrit} w={140} />
-          </Group>
           <DataTable rows={list.data?.items} onRow={(a) => router.push(`/assets/${a.id}`)} columns={[
             { key: "c", label: t("common.code"), render: (a) => <span className="mono">{a.code}</span> },
             { key: "n", label: t("common.name"), render: (a) => a.name },
@@ -93,6 +97,7 @@ function Assets() {
             { key: "k", label: t("common.criticality"), render: (a) => <StatusBadge value={a.criticality} /> },
             { key: "s", label: t("common.status"), render: (a) => <StatusBadge value={a.status} /> },
             { key: "o", label: t("asset.oem"), render: (a) => `${a.oem ?? ""} ${a.model ?? ""}` },
+            { key: "loc", label: t("common.location"), render: (a) => a.location ?? "", hideOnMobile: true },
           ]} />
           <Pager page={list.data} setPage={(p) => setOffset((p - 1) * 50)} />
         </>
