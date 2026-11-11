@@ -75,7 +75,11 @@ def summary(ctx: Ctx = Depends(get_ctx), db: Session = Depends(get_db, scope="fu
     if ctx.has("pdm.view"):
         rows = db.execute(
             select(ConditionAlert.severity, func.count())
-            .where(ConditionAlert.plant_id == ctx.plant_id, ConditionAlert.status != AlertStatus.RESOLVED)
+            .where(
+                ConditionAlert.plant_id == ctx.plant_id,
+                ConditionAlert.status != AlertStatus.RESOLVED,
+                ctx.in_department(ConditionAlert.asset_id),  # same scope as the alert list the tile opens
+            )
             .group_by(ConditionAlert.severity)
         ).all()
         d = {s.value: n for s, n in rows}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LevelBadge } from "@/components/KpiControlChart";
 import { KV, Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { post } from "@/lib/api";
 import { fmtDate, useMut, useQ } from "@/lib/hooks";
@@ -26,7 +27,7 @@ export default function AlertDetail() {
   const a = q.data;
   return (
     <>
-      <PageHeader title={a.message}><Group><StatusBadge value={a.severity} /><StatusBadge value={a.status} /></Group></PageHeader>
+      <PageHeader title={a.message}><Group><LevelBadge value={a.severity} size="md" /><StatusBadge value={a.status} /></Group></PageHeader>
       <Paper withBorder p="md" maw={760}>
         <Stack>
           <KV label={t("common.createdAt")}>{fmtDate(a.created_at, undefined, true)}</KV>

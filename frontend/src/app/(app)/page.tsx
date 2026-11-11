@@ -23,8 +23,8 @@ interface Summary {
   open_alerts?: { critical: number; warning: number }; timezone?: string;
 }
 
-function Stat({ label, value, href, color, icon: Icon, alert }: {
-  label: string; value: number | undefined; href: string; color: string; icon: typeof IconUserCheck; alert?: boolean;
+function Stat({ label, value, href, color, icon: Icon, alert, sub }: {
+  label: string; value: number | undefined; href: string; color: string; icon: typeof IconUserCheck; alert?: boolean; sub?: string;
 }) {
   if (value === undefined) return null;
   const on = value > 0;
@@ -36,6 +36,7 @@ function Stat({ label, value, href, color, icon: Icon, alert }: {
         <ThemeIcon variant="light" color={on ? color : "gray"} size={30} radius="md" style={{ flexShrink: 0 }}><Icon size={17} stroke={1.8} /></ThemeIcon>
       </Group>
       <Text fz={{ base: 26, sm: 32 }} fw={800} lh={1.1} mt={6} c={on && alert ? `${color}.7` : on ? "var(--pp-strong)" : "gray.5"}>{value}</Text>
+      {sub && <Text size="xs" c="dimmed" mt={2} lineClamp={2}>{sub}</Text>}
     </Card>
   );
 }
@@ -123,7 +124,8 @@ function useDashPrefs() {
   return { prefs: q.data ?? DEFAULT_PREFS, loaded: !!q.data, save: (p: DashPrefs) => save.mutate(p) };
 }
 
-interface TileDef { key: string; label: string; href: string; color: string; icon: typeof IconUserCheck; value: (s: Summary) => number | undefined; alert?: boolean }
+interface TileDef { key: string; label: string; href: string; color: string; icon: typeof IconUserCheck; value: (s: Summary) => number | undefined; alert?: boolean;
+  sub?: (s: Summary, t: (k: string, o?: Record<string, unknown>) => string) => string | undefined }
 const TILES: TileDef[] = [
   { key: "my_open", label: "dash.myOpen", href: "/my-work", color: "brand", icon: IconUserCheck, value: (s) => s.my_open_work },
   { key: "emergencies", label: "dash.emergencies", href: "/work-orders?type=emergency&open=1", color: "red", icon: IconAlertOctagon, value: (s) => s.open_emergencies, alert: true },
@@ -134,7 +136,10 @@ const TILES: TileDef[] = [
   { key: "awaiting_review", label: "dash.awaitingReview", href: "/work-orders?status=awaiting_review", color: "violet", icon: IconEye, value: (s) => s.awaiting_review, alert: true },
   { key: "pm_approvals", label: "dash.pmApprovals", href: "/pm?tab=approvals", color: "yellow", icon: IconCalendarTime, value: (s) => s.pm_pending_approvals, alert: true },
   { key: "lube_overdue", label: "dash.lubeOverdue", href: "/lubrication", color: "orange", icon: IconDroplet, value: (s) => s.lube_overdue, alert: true },
-  { key: "critical", label: "dash.critical", href: "/pdm?tab=alerts", color: "red", icon: IconHeartRateMonitor, value: (s) => s.open_alerts?.critical, alert: true },
+  // Every open condition-monitoring alarm (the number matches the list it opens), split into alarm and warning limit.
+  { key: "cm_alarms", label: "dash.cmAlarms", href: "/pdm?tab=alerts", color: "red", icon: IconHeartRateMonitor, alert: true,
+    value: (s) => (s.open_alerts ? s.open_alerts.critical + s.open_alerts.warning : undefined),
+    sub: (s, t) => (s.open_alerts ? t("dash.cmAlarmsSplit", { a: s.open_alerts.critical, w: s.open_alerts.warning }) : undefined) },
 ];
 const SECTIONS = ["quick", "tiles", "attention", "activity", "kpis", "condition"] as const;
 
@@ -334,7 +339,7 @@ export default function Dashboard() {
       </Group>}
       {mine && work}
       {on("section.tiles") && tiles.length > 0 && <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} mb="lg" spacing={{ base: "xs", sm: "md" }}>
-        {tiles.map((x) => <Stat key={x.key} label={t(x.label)} value={x.value(s)} href={x.href} color={x.color} icon={x.icon} alert={x.alert} />)}
+        {tiles.map((x) => <Stat key={x.key} label={t(x.label)} value={x.value(s)} href={x.href} color={x.color} icon={x.icon} alert={x.alert} sub={x.sub?.(s, t)} />)}
       </SimpleGrid>}
       {!mine && work}
       {edit && <Customise prefs={prefs} summary={s} defs={defs.data ?? []} cards={sc.data ?? []} onSave={save} onClose={() => setEdit(false)} />}

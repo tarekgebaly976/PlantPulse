@@ -146,8 +146,15 @@ export function ConditionLegend() {
   return (
     <Group gap="md" data-testid="condition-legend">
       {(["normal", "warning", "critical"] as const).map((k) => (
-        <Group key={k} gap={6}><span style={{ width: 12, height: 12, borderRadius: 6, background: CM_COLOR[k] }} /><Text size="xs">{t(`status.${k}`)}</Text></Group>))}
+        <Group key={k} gap={6}><span style={{ width: 12, height: 12, borderRadius: 6, background: CM_COLOR[k] }} /><Text size="xs">{t(`pdm.level_${k}`)}</Text></Group>))}
       <Group gap={6}><span style={{ width: 12, height: 12, borderRadius: 6, border: "2px solid #e03131" }} /><Text size="xs">{t("kpi.nelsonMark")}</Text></Group>
     </Group>
   );
+}
+
+/** Condition-monitoring level in plain words: "Alarm limit exceeded" / "Warning limit exceeded" / "Normal", not "Critical". */
+export function LevelBadge({ value, size = "sm" }: { value: string; size?: "xs" | "sm" | "md" }) {
+  const { t } = useTranslation();
+  const color = value === "critical" ? "red" : value === "warning" ? "orange" : value === "normal" ? "green" : "gray";
+  return <Badge color={color} variant={value === "critical" ? "filled" : "light"} size={size} styles={{ root: { textTransform: "none", overflow: "visible", maxWidth: "none", flexShrink: 0 }, label: { overflow: "visible", textOverflow: "clip" } }}>{t(`pdm.short_${value}`, { defaultValue: value })}</Badge>;
 }

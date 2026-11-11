@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
-import { CM_COLOR, ConditionLegend, ControlChart, type CPoint, type SpecLine } from "@/components/KpiControlChart";
+import { CM_COLOR, ConditionLegend, ControlChart, LevelBadge, type CPoint, type SpecLine } from "@/components/KpiControlChart";
 import { NewAsset } from "@/components/NewAsset";
 import { PlanImport } from "@/components/PlanImport";
 import { RemovePlans } from "@/components/RemovePlans";
@@ -130,7 +130,7 @@ function HistoryImport({ opened, onClose }: { opened: boolean; onClose: () => vo
           <Button color="teal" disabled={!res || res.invalid > 0 || res.readings === 0} loading={commit.isPending} onClick={() => commit.mutate(undefined)}>{t("asset.commit")}</Button></Group>
         {res && <Alert color={res.invalid ? "orange" : "teal"} data-testid="hist-preview">
           {t("pdm.histSummary", { n: res.readings, p: res.points, from: res.from ?? "—", to: res.to ?? "—" })}
-          {" · "}{t("status.critical")} {res.by_status.critical ?? 0} · {t("status.warning")} {res.by_status.warning ?? 0} · {t("status.normal")} {res.by_status.normal ?? 0}
+          {" · "}{t("pdm.level_critical")} {res.by_status.critical ?? 0} · {t("pdm.level_warning")} {res.by_status.warning ?? 0} · {t("pdm.level_normal")} {res.by_status.normal ?? 0}
           {res.already > 0 && <> · {t("pdm.histAlready", { n: res.already })}</>} · {res.invalid} {t("asset.invalid")}
           {res.errors.slice(0, 30).map((e, i) => <div key={i}>Row {e.row} {e.code ?? ""}: {e.errors.join("; ")}</div>)}
         </Alert>}
@@ -164,7 +164,8 @@ function PdM() {
   const signals = useQ<Record<string, number[]>>("/pdm/signals", undefined, { staleTime: 60_000 });
   const points = { ...all, data: prioOnly ? all.data?.filter((p) => p.priority < 3 || p.last_status === "critical") : all.data };
   const chosen = useQ<Asset>(f.asset_id ? `/assets/${f.asset_id}` : null);
-  const alerts = useQ<Page<CAlert>>("/pdm/alerts", { open_only: openOnly, limit: 50, offset, q: aqd || undefined });
+  const [severity, setSeverity] = useState(sp.get("severity") ?? "all");
+  const alerts = useQ<Page<CAlert>>("/pdm/alerts", { open_only: openOnly, limit: 50, offset, q: aqd || undefined, severity: severity === "all" ? undefined : severity });
   const amap = useAssetCodes([...(points.data ?? []), ...(alerts.data?.items ?? [])].map((x) => x.asset_id));
   const pmap = new Map((points.data ?? []).map((p) => [p.id, p]));
   const n = (v: number | string) => (v === "" ? null : Number(v));
@@ -206,7 +207,7 @@ function PdM() {
             <DataTable rows={points.data} onRow={(p) => setSel(p.id)} selected={picked} onSelect={can("pdm.manage") ? setPicked : undefined} columns={[
               { key: "c", label: t("common.code"), render: (p) => <Group gap={6} wrap="nowrap"><PrioBadge p={p.priority} /><b>{p.code}</b></Group> }, { key: "a", label: t("common.asset"), render: (p) => amap.get(p.asset_id) },
               { key: "t", label: t("pdm.technique"), render: (p) => p.technique }, { key: "v", label: t("pdm.lastValue"), render: (p) => `${fmtNum(p.last_value)} ${p.unit}` },
-              { key: "s", label: t("common.status"), render: (p) => <StatusBadge value={p.last_status} /> },
+              { key: "s", label: t("common.status"), render: (p) => <LevelBadge value={p.last_status} /> },
               { key: "n", label: t("pdm.nelson"), render: (p) => { const r = signals.data?.[p.id]; return r ? <Badge color="red" variant="light" size="sm" title={r.map((x) => `${x}: ${t(`kpi.nelson${x}`)}`).join("\n")}>{t("kpi.rule")} {r.join(",")}</Badge> : null; } }]} />
             {wide && detail ? (
               <Paper withBorder p="md" pos="relative">
@@ -219,12 +220,15 @@ function PdM() {
         <Tabs.Panel value="alerts" pt="md">
           <Group mb="sm">
             <SearchBox value={aq} onChange={(v) => { setAq(v); setOffset(0); }} />
+            <SegmentedControl size="xs" value={severity} onChange={(v) => { setSeverity(v); setOffset(0); }} data-testid="alert-level"
+              data={[{ value: "all", label: t("pdm.levelAll") }, { value: "critical", label: t("pdm.level_critical") }, { value: "warning", label: t("pdm.level_warning") }]} />
             <Checkbox label={t("wo.openOnly")} checked={openOnly} onChange={(e) => setOpenOnly(e.currentTarget.checked)} />
           </Group>
+          <Text size="xs" c="dimmed" mb="xs">{t("pdm.levelHint")}</Text>
           <DataTable rows={alerts.data?.items} onRow={(a) => router.push(`/pdm/alerts/${a.id}`)} columns={[
             { key: "d", label: t("common.createdAt"), render: (a) => fmtDate(a.created_at, undefined, true) },
-            { key: "p", label: t("pdm.points"), render: (a) => pmap.get(a.point_id)?.code }, { key: "a", label: t("common.asset"), render: (a) => amap.get(a.asset_id) },
-            { key: "sv", label: "Severity", render: (a) => <StatusBadge value={a.severity} /> }, { key: "s", label: t("common.status"), render: (a) => <StatusBadge value={a.status} /> },
+            { key: "p", label: t("pdm.point"), render: (a) => { const pt = pmap.get(a.point_id); return pt ? <><b>{pt.code}</b><Text size="xs" c="dimmed" lineClamp={1}>{pt.name}</Text></> : null; } }, { key: "a", label: t("common.asset"), render: (a) => amap.get(a.asset_id) },
+            { key: "sv", label: t("pdm.level"), render: (a) => <LevelBadge value={a.severity} /> }, { key: "s", label: t("common.status"), render: (a) => <StatusBadge value={a.status} /> },
             { key: "m", label: t("common.description"), render: (a) => a.message }]} />
           <Pager page={alerts.data} setPage={(p) => setOffset((p - 1) * 50)} />
         </Tabs.Panel>
