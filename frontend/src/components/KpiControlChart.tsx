@@ -56,7 +56,7 @@ export function ControlChart({ points, unit, specs = [], showTarget = false, hei
   const broken = new Map(n.hits.map((h) => [h.rule, ranges(h.points)]));
   return (
     <Stack gap="xs">
-      <div style={{ width: "100%", height }} data-testid="control-chart">
+      <div style={{ width: "100%", height }} data-testid="control-chart" dir="ltr">{/* time runs left to right, also in Arabic */}
         <ResponsiveContainer>
           <ComposedChart data={data} margin={{ top: 12, right: 64, bottom: 4, left: 4 }}>
             <CartesianGrid strokeDasharray="2 4" stroke="#f1f3f5" />

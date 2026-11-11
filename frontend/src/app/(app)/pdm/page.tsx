@@ -175,7 +175,7 @@ function PdM() {
   // Side by side only on wide screens; on a phone (or a narrow window) the point opens in its own window.
   const wide = useMediaQuery("(min-width: 75em)", true);
   const detail = point ? <>
-    <Group gap="xs" mb={4} wrap="nowrap" align="start"><PrioBadge p={point.priority} /><Text fw={600}>{point.code} — {point.name}</Text></Group>
+    <Group gap="xs" mb={4} wrap="nowrap" align="start" pe={28}><PrioBadge p={point.priority} /><Text fw={600}>{point.code} — {point.name}</Text></Group>
     {can("pdm.prioritize") && <PrioritySetter point={point} />}
     <Text size="xs" c="dimmed" mb="sm">{t("pdm.limits")}: W {fmtNum(point.warning_low)}/{fmtNum(point.warning_high)} · A {fmtNum(point.alarm_low)}/{fmtNum(point.alarm_high)} {point.unit}</Text>
     <Trend point={point} />
@@ -211,7 +211,7 @@ function PdM() {
               { key: "n", label: t("pdm.nelson"), render: (p) => { const r = signals.data?.[p.id]; return r ? <Badge color="red" variant="light" size="sm" title={r.map((x) => `${x}: ${t(`kpi.nelson${x}`)}`).join("\n")}>{t("kpi.rule")} {r.join(",")}</Badge> : null; } }]} />
             {wide && detail ? (
               <Paper withBorder p="md" pos="relative">
-                <CloseButton pos="absolute" top={8} right={8} aria-label={t("common.close")} title={t("common.close")} onClick={() => setSel(null)} />
+                <CloseButton pos="absolute" top={8} style={{ insetInlineEnd: 8 }} aria-label={t("common.close")} title={t("common.close")} onClick={() => setSel(null)} />
                 {detail}
               </Paper>
             ) : null}
