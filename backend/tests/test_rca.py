@@ -175,6 +175,9 @@ def test_full_rca_lifecycle_actions_effectiveness_and_recurrence(world):
         {"id": "w2", "parent_id": "w1", "text": "No grease"},
         {"id": "w3", "parent_id": "w2", "text": "Point not in lube route", "is_root": True},
     ]})  # fmt: skip
+    # The marked last why becomes a root cause by itself, and follows its text.
+    rcs = manager.ok("get", f"/rca/{rid}")["rca"]["root_causes"]
+    assert rcs == [{"id": "w:w3", "type": "latent", "text": "Point not in lube route"}]
     assert tech.patch(f"/rca/{rid}", {"fishbone": [{"id": "x", "category": "money", "text": "?"}]}).status_code == 422
     eng.ok("patch", f"/rca/{rid}", {"root_causes": [{"id": "rc1", "type": "latent", "text": "PM/lube plan did not cover the DE bearing"}]})
     a1 = eng.ok("post", f"/rca/{rid}/actions", {"description": "Add DE bearing to lube route", "kind": "corrective", "owner_id": str(world.users["tech"].id), "root_cause_ref": "rc1", "due_date": str(plant_today(world.plant) + timedelta(days=7))}, status=201)  # fmt: skip

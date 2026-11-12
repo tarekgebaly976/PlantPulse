@@ -342,6 +342,7 @@ export const en = {
       }
     },
     rc: {
+      linked: "From the 5 Whys (last why of the chain): change the text there; delete here to remove the root-cause mark.",
       hint: "Write the causes that, once removed, stop the failure. Physical: what failed. Human: what was done or not done. System (latent): why the system allowed it – procedure, PM plan, training, design.",
       add: "Add root cause",
       fromWhys: "Root causes from the 5 Whys",

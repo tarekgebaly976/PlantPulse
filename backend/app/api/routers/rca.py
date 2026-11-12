@@ -561,6 +561,26 @@ class AnalysisIn(In):
     due_date: date | None = None
 
 
+LINK = "w:"
+
+
+def sync_root_causes(whys: list[dict], roots: list[dict]) -> list[dict]:
+    """Every why marked as root cause on the last why of its chain has a root cause entry with id "w:<why id>" and
+    the same text (type kept once chosen, default system/latent); unmarked or deleted whys lose theirs. Root causes
+    written by hand (other ids) are kept as they are."""
+    parents = {w.get("parent_id") for w in whys if w.get("parent_id")}
+    leaf = {w["id"]: w["text"].strip() for w in whys if w.get("is_root") and (w.get("text") or "").strip() and w["id"] not in parents}
+    out = []
+    for c in roots:
+        if not c["id"].startswith(LINK):
+            out.append(c)
+        elif c["id"][len(LINK) :] in leaf:
+            out.append({**c, "text": leaf[c["id"][len(LINK) :]]})
+    have = {c["id"] for c in out}
+    out += [{"id": LINK + wid, "type": "latent", "text": text} for wid, text in leaf.items() if LINK + wid not in have]
+    return out
+
+
 @router.patch("/{rid}")
 def update_analysis(rid: uuid.UUID, body: AnalysisIn, ctx: Ctx = Depends(get_ctx), db: Session = Depends(get_db, scope="function")) -> dict:
     r = _get(db, ctx, rid, lock=True)
@@ -587,6 +607,8 @@ def update_analysis(rid: uuid.UUID, body: AnalysisIn, ctx: Ctx = Depends(get_ctx
         fc = db.get(FailureCode, body.failure_code_id)
         if fc is None or fc.plant_id != ctx.plant_id:
             raise HTTPException(422, "Unknown failure code")
+    if "whys" in data:  # root causes follow the 5 Whys (the marked last why of each chain)
+        data["root_causes"] = sync_root_causes(data["whys"], data.get("root_causes", r.root_causes or []))
     for k, v in data.items():
         setattr(r, k, date.fromisoformat(v) if k == "due_date" and v else v)
     audit(db, "rca.update", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="rca", entity_id=r.id, data={"fields": sorted(data)})

@@ -202,6 +202,18 @@ function AddAction({ d, users }: { d: RcaDetail; users: Member[] }) {
   );
 }
 
+/** Root causes follow the 5 Whys: every why marked as root cause on the last why of its chain has a root cause
+ *  entry (id "w:<why id>", same text, type kept once chosen); unmarking or deleting the why removes it.
+ *  Root causes added by hand (other ids) are not touched. */
+const LINK = "w:";
+function syncRoots(whys: Why[], roots: RootCause[]): RootCause[] {
+  const leafRoots = whys.filter((w) => w.is_root && w.text.trim() && !whys.some((c) => c.parent_id === w.id));
+  const keep = roots.filter((c) => !c.id.startsWith(LINK) || leafRoots.some((w) => LINK + w.id === c.id));
+  const out = keep.map((c) => { const w = leafRoots.find((x) => LINK + x.id === c.id); return w ? { ...c, text: w.text.trim() } : c; });
+  for (const w of leafRoots) if (!out.some((c) => c.id === LINK + w.id)) out.push({ id: LINK + w.id, type: "latent", text: w.text.trim() });
+  return out;
+}
+
 export default function RcaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { t } = useTranslation();
@@ -235,7 +247,9 @@ export default function RcaDetailPage() {
   const me = d.me;
   const tz = plant?.timezone;
   // Root causes come from the last why of each chain (marked in the 5 Whys).
-  const rootWhys = draft.whys.filter((w) => w.is_root && w.text.trim() && !draft.whys.some((c) => c.parent_id === w.id) && !draft.root_causes.some((c) => c.text === w.text));
+  const rootWhys = draft.whys.filter((w) => w.is_root && w.text.trim() && !draft.whys.some((c) => c.parent_id === w.id)
+    && !draft.root_causes.some((c) => c.id === LINK + w.id || c.text === w.text.trim()));
+  const setWhys = (v: Why[]) => edit({ whys: v, root_causes: syncRoots(v, draft.root_causes) });
   const early = r.effectiveness_due && new Date(`${r.effectiveness_due}T00:00:00`) > new Date();
 
   return (
@@ -251,8 +265,8 @@ export default function RcaDetailPage() {
         {me.can_approve && s === "monitoring" && <NoteAction label={t("rca.flow.close")} color="teal" path={`/rca/${id}/close`} optional={!early}
           hint={early ? t("rca.flow.closeEarly", { date: r.effectiveness_due }) : undefined} />}
         {me.can_approve && ["action_plan", "monitoring", "closed"].includes(s) && <NoteAction label={t("rca.flow.reopen")} color="orange" variant="light" path={`/rca/${id}/reopen`} />}
-        {me.can_approve && ACTIVE.includes(s) && s !== "candidate" && <NoteAction label={t("rca.flow.cancel")} color="red" variant="subtle" path={`/rca/${id}/cancel`} />}
-        <Button component={Link} href={`/rca/${id}/print`} variant="default" leftSection={<IconPrinter size={16} />}>{t("rca.flow.print")}</Button>
+        {me.can_approve && ACTIVE.includes(s) && s !== "candidate" && <NoteAction label={t("rca.flow.cancel")} color="red" variant="light" path={`/rca/${id}/cancel`} />}
+        <Button component={Link} href={`/rca/${id}/print`} variant="light" color="gray" leftSection={<IconPrinter size={16} />}>{t("rca.flow.print")}</Button>
       </>}>
         <Group gap="xs">
           <StatusBadge value={s} size="lg" />
@@ -275,9 +289,9 @@ export default function RcaDetailPage() {
       {["not_required", "cancelled"].includes(s) && r.decision_note && <Alert color="gray" mb="md">{r.decided_by ? `${r.decided_by}: ` : ""}{r.decision_note}</Alert>}
 
       <Tabs value={tab ?? (s === "action_plan" || s === "monitoring" ? "actions" : "overview")} onChange={setTab}>
-        <Tabs.List>
+        <Tabs.List style={{ flexWrap: "nowrap", overflowX: "auto", overflowY: "hidden", scrollbarWidth: "thin" }}>
           {(["overview", "problem", "evidence", "fishbone", "whys", "rootCauses", "actions"] as const).map((k) => (
-            <Tabs.Tab key={k} value={k}>{t(`rca.tabs.${k}`)}{k === "actions" && d.actions.length ? ` (${d.actions.filter((a) => a.status === "done").length}/${d.actions.filter((a) => a.status !== "cancelled").length})` : ""}</Tabs.Tab>
+            <Tabs.Tab key={k} value={k} style={{ whiteSpace: "nowrap", flexShrink: 0 }}>{t(`rca.tabs.${k}`)}{k === "actions" && d.actions.length ? ` (${d.actions.filter((a) => a.status === "done").length}/${d.actions.filter((a) => a.status !== "cancelled").length})` : ""}</Tabs.Tab>
           ))}
         </Tabs.List>
 
@@ -369,14 +383,14 @@ export default function RcaDetailPage() {
         <Tabs.Panel value="whys" pt="md">
           <Text size="sm" c="dimmed" mb="sm">{t("rca.whys.hint")}</Text>
           {draft.problem_statement || draft.problem.what ? <Paper withBorder p="xs" mb="sm" bg="var(--pp-page-bg)"><Text size="sm" fw={600}>{draft.problem_statement || draft.problem.what}</Text></Paper> : null}
-          <WhysEditor value={draft.whys} onChange={(v) => edit({ whys: v })} readOnly={!editable} />
+          <WhysEditor value={draft.whys} onChange={setWhys} readOnly={!editable} />
         </Tabs.Panel>
 
         <Tabs.Panel value="fishbone" pt="md">
           <Text size="sm" c="dimmed" mb="sm">{t("rca.fish.hint")}</Text>
           <Paper withBorder p="xs" mb="md" style={{ overflowX: "auto" }}><div style={{ minWidth: 720 }}><FishboneDiagram bones={draft.fishbone} problem={draft.problem_statement || draft.problem.what || r.title} /></div></Paper>
           <FishboneEditor value={draft.fishbone} onChange={(v) => edit({ fishbone: v })} readOnly={!editable}
-            onAskWhy={(text) => { edit({ whys: [...draft.whys, { id: uid(), parent_id: null, text }] }); setTab("whys"); }} />
+            onAskWhy={(text) => { setWhys([...draft.whys, { id: uid(), parent_id: null, text }]); setTab("whys"); }} />
         </Tabs.Panel>
 
         <Tabs.Panel value="rootCauses" pt="md">
@@ -387,17 +401,22 @@ export default function RcaDetailPage() {
                 <Text size="sm" fw={600} mb={4}>{t("rca.rc.fromWhys")}</Text>
                 {rootWhys.map((w) => (
                   <Group key={w.id} gap="xs"><Text size="sm" style={{ flex: 1 }}>{w.text}</Text>
-                    <Button size="compact-xs" variant="light" onClick={() => edit({ root_causes: [...draft.root_causes, { id: uid(), type: "latent", text: w.text }] })}>{t("rca.rc.use")}</Button></Group>
+                    <Button size="compact-xs" variant="light" onClick={() => edit({ root_causes: [...draft.root_causes, { id: LINK + w.id, type: "latent", text: w.text.trim() }] })}>{t("rca.rc.use")}</Button></Group>
                 ))}
               </Paper>)}
             {draft.root_causes.map((c) => (
-              <Group key={c.id} gap="xs" wrap="nowrap" align="start">
-                <Select w={240} allowDeselect={false} disabled={!editable} value={c.type}
+              <Group key={c.id} gap="xs" wrap="wrap" align="start">
+                <Select w={{ base: "calc(100% - 40px)", sm: 240 }} allowDeselect={false} disabled={!editable} value={c.type}
                   onChange={(v) => v && edit({ root_causes: draft.root_causes.map((x) => (x.id === c.id ? { ...x, type: v as RootCause["type"] } : x)) })}
                   data={(["physical", "human", "latent"] as const).map((k) => ({ value: k, label: t(`rca.rc.type.${k}`) }))} />
-                <Textarea style={{ flex: 1 }} autosize minRows={1} readOnly={!editable} value={c.text}
-                  onChange={(e) => { const v = e.currentTarget.value; edit({ root_causes: draft.root_causes.map((x) => (x.id === c.id ? { ...x, text: v } : x)) }); }} />
-                {editable && <ActionIcon mt={6} variant="subtle" color="red" aria-label={t("common.delete")} onClick={() => edit({ root_causes: draft.root_causes.filter((x) => x.id !== c.id) })}><IconTrash size={16} /></ActionIcon>}
+                <Stack gap={2} style={{ flex: "1 1 260px", minWidth: 0 }}>
+                  <Textarea autosize minRows={1} readOnly={!editable || c.id.startsWith(LINK)} value={c.text}
+                    onChange={(e) => { const v = e.currentTarget.value; edit({ root_causes: draft.root_causes.map((x) => (x.id === c.id ? { ...x, text: v } : x)) }); }} />
+                  {c.id.startsWith(LINK) && <Text size="xs" c="dimmed">{t("rca.rc.linked")}</Text>}
+                </Stack>
+                {editable && <ActionIcon mt={6} variant="subtle" color="red" aria-label={t("common.delete")}
+                  onClick={() => (c.id.startsWith(LINK) ? setWhys(draft.whys.map((w) => (LINK + w.id === c.id ? { ...w, is_root: false } : w)))
+                    : edit({ root_causes: draft.root_causes.filter((x) => x.id !== c.id) }))}><IconTrash size={16} /></ActionIcon>}
               </Group>
             ))}
             {editable && <Button w="fit-content" variant="light" leftSection={<IconPlus size={16} />} onClick={() => edit({ root_causes: [...draft.root_causes, { id: uid(), type: "physical", text: "" }] })}>{t("rca.rc.add")}</Button>}
