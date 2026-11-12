@@ -116,7 +116,8 @@ export function FishboneDiagram({ bones, problem }: { bones: Bone[]; problem: st
 }
 
 /** Fishbone editor: causes per 6M category with possible / verified / ruled out. */
-export function FishboneEditor({ value, onChange, readOnly }: { value: Bone[]; onChange: (v: Bone[]) => void; readOnly: boolean }) {
+/** Fishbone (6M) editor; a verified cause can start a 5 Whys chain (onAskWhy). */
+export function FishboneEditor({ value, onChange, readOnly, onAskWhy }: { value: Bone[]; onChange: (v: Bone[]) => void; readOnly: boolean; onAskWhy?: (text: string) => void }) {
   const { t } = useTranslation();
   const set = (id: string, p: Partial<Bone>) => onChange(value.map((b) => (b.id === id ? { ...b, ...p } : b)));
   return (
@@ -133,6 +134,8 @@ export function FishboneEditor({ value, onChange, readOnly }: { value: Bone[]; o
                 <TextInput style={{ flex: 1 }} size="xs" placeholder={t("rca.fish.cause")} value={b.text} readOnly={readOnly} onChange={(e) => set(b.id, { text: e.currentTarget.value })} />
                 <Select size="xs" w={130} allowDeselect={false} disabled={readOnly} value={b.status} onChange={(v) => v && set(b.id, { status: v as Bone["status"] })}
                   data={(["possible", "verified", "ruled_out"] as const).map((s) => ({ value: s, label: t(`rca.fish.st.${s}`) }))} />
+                {!readOnly && onAskWhy && b.status === "verified" && b.text.trim() &&
+                  <Button size="compact-xs" variant="light" onClick={() => onAskWhy(b.text.trim())}>{t("rca.fish.askWhy")}</Button>}
                 {!readOnly && <ActionIcon variant="subtle" color="red" aria-label={t("common.delete")} onClick={() => onChange(value.filter((x) => x.id !== b.id))}><IconTrash size={16} /></ActionIcon>}
               </Group>
             ))}
@@ -143,7 +146,9 @@ export function FishboneEditor({ value, onChange, readOnly }: { value: Bone[]; o
   );
 }
 
-/** 5 Whys as a tree: each answer can be asked "why?" again (next level) or get a second answer (branch). */
+/** 5 Whys as a tree: each answer can be asked "why?" again (next level, no limit at five) or get a second answer
+ *  (branch). As the standard says, the root cause is the LAST why of a chain: only a why with no further why below
+ *  it can be marked; asking why below a marked why moves the mark down to the new last why. */
 export function WhysEditor({ value, onChange, readOnly }: { value: Why[]; onChange: (v: Why[]) => void; readOnly: boolean }) {
   const { t } = useTranslation();
   const set = (id: string, p: Partial<Why>) => onChange(value.map((w) => (w.id === id ? { ...w, ...p } : w)));
@@ -153,15 +158,19 @@ export function WhysEditor({ value, onChange, readOnly }: { value: Why[]; onChan
     while (grew) { grew = false; for (const w of value) if (w.parent_id && gone.has(w.parent_id) && !gone.has(w.id)) { gone.add(w.id); grew = true; } }
     onChange(value.filter((w) => !gone.has(w.id)));
   };
+  const hasChild = (id: string) => value.some((c) => c.parent_id === id);
+  const askWhy = (w: Why) => onChange([...value.map((x) => (x.id === w.id ? { ...x, is_root: false } : x)), { id: uid(), parent_id: w.id, text: "", is_root: !!w.is_root }]);
   const node = (w: Why, depth: number): ReactNode => (
     <div key={w.id}>
       <Group gap="xs" wrap="nowrap" align="start" ps={depth * 22}>
         {depth > 0 && <IconCornerDownRight size={16} style={{ marginTop: 8, flexShrink: 0 }} color="var(--mantine-color-dimmed)" />}
         <Badge variant="filled" color={w.is_root ? "red" : "blue"} mt={6} miw={64}>{t("rca.whys.level", { n: depth + 1 })}</Badge>
         <Textarea style={{ flex: 1 }} size="sm" autosize minRows={1} placeholder={t("rca.whys.placeholder")} value={w.text} readOnly={readOnly} onChange={(e) => set(w.id, { text: e.currentTarget.value })} />
-        <Checkbox mt={8} label={t("rca.whys.root")} checked={!!w.is_root} disabled={readOnly} onChange={(e) => set(w.id, { is_root: e.currentTarget.checked })} />
+        <Tooltip label={t("rca.whys.rootLast")} disabled={!hasChild(w.id)}>
+          <span><Checkbox mt={8} label={t("rca.whys.root")} checked={!!w.is_root} disabled={readOnly || hasChild(w.id)} onChange={(e) => set(w.id, { is_root: e.currentTarget.checked })} /></span>
+        </Tooltip>
         {!readOnly && <>
-          <Tooltip label={t("rca.whys.next")}><ActionIcon mt={4} variant="light" aria-label={t("rca.whys.next")} onClick={() => onChange([...value, { id: uid(), parent_id: w.id, text: "" }])}><IconPlus size={16} /></ActionIcon></Tooltip>
+          <Tooltip label={t("rca.whys.next")}><ActionIcon mt={4} variant="light" aria-label={t("rca.whys.next")} onClick={() => askWhy(w)}><IconPlus size={16} /></ActionIcon></Tooltip>
           <Tooltip label={t("rca.whys.branch")}><ActionIcon mt={4} variant="subtle" aria-label={t("rca.whys.branch")} onClick={() => onChange([...value, { id: uid(), parent_id: w.parent_id, text: "" }])}><IconCornerDownRight size={16} /></ActionIcon></Tooltip>
           <ActionIcon mt={4} variant="subtle" color="red" aria-label={t("common.delete")} onClick={() => remove(w.id)}><IconTrash size={16} /></ActionIcon>
         </>}

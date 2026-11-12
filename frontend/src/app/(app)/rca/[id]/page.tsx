@@ -215,6 +215,7 @@ export default function RcaDetailPage() {
   const [start, setStart] = useState(false);
   const [team, setTeam] = useState(false);
   const [linkWo, setLinkWo] = useState<string | null>(null);
+  const [tab, setTab] = useState<string | null>(null);
   const d = q.data;
   const serverKey = d ? JSON.stringify(draftOf(d.rca)) : null;
   if (d && !dirty && serverKey !== seeded) { setSeeded(serverKey); setDraft(draftOf(d.rca)); }
@@ -233,7 +234,8 @@ export default function RcaDetailPage() {
   const s = r.status;
   const me = d.me;
   const tz = plant?.timezone;
-  const rootWhys = draft.whys.filter((w) => w.is_root && w.text.trim() && !draft.root_causes.some((c) => c.text === w.text));
+  // Root causes come from the last why of each chain (marked in the 5 Whys).
+  const rootWhys = draft.whys.filter((w) => w.is_root && w.text.trim() && !draft.whys.some((c) => c.parent_id === w.id) && !draft.root_causes.some((c) => c.text === w.text));
   const early = r.effectiveness_due && new Date(`${r.effectiveness_due}T00:00:00`) > new Date();
 
   return (
@@ -272,9 +274,9 @@ export default function RcaDetailPage() {
       {s === "closed" && r.effectiveness_result && <Alert color="teal" mb="md">{t(`rca.eff.${r.effectiveness_result}`)}{r.effectiveness_note ? ` – ${r.effectiveness_note}` : ""}</Alert>}
       {["not_required", "cancelled"].includes(s) && r.decision_note && <Alert color="gray" mb="md">{r.decided_by ? `${r.decided_by}: ` : ""}{r.decision_note}</Alert>}
 
-      <Tabs defaultValue={s === "action_plan" || s === "monitoring" ? "actions" : "overview"}>
+      <Tabs value={tab ?? (s === "action_plan" || s === "monitoring" ? "actions" : "overview")} onChange={setTab}>
         <Tabs.List>
-          {(["overview", "problem", "whys", "fishbone", "rootCauses", "actions", "evidence"] as const).map((k) => (
+          {(["overview", "problem", "evidence", "fishbone", "whys", "rootCauses", "actions"] as const).map((k) => (
             <Tabs.Tab key={k} value={k}>{t(`rca.tabs.${k}`)}{k === "actions" && d.actions.length ? ` (${d.actions.filter((a) => a.status === "done").length}/${d.actions.filter((a) => a.status !== "cancelled").length})` : ""}</Tabs.Tab>
           ))}
         </Tabs.List>
@@ -373,7 +375,8 @@ export default function RcaDetailPage() {
         <Tabs.Panel value="fishbone" pt="md">
           <Text size="sm" c="dimmed" mb="sm">{t("rca.fish.hint")}</Text>
           <Paper withBorder p="xs" mb="md" style={{ overflowX: "auto" }}><div style={{ minWidth: 720 }}><FishboneDiagram bones={draft.fishbone} problem={draft.problem_statement || draft.problem.what || r.title} /></div></Paper>
-          <FishboneEditor value={draft.fishbone} onChange={(v) => edit({ fishbone: v })} readOnly={!editable} />
+          <FishboneEditor value={draft.fishbone} onChange={(v) => edit({ fishbone: v })} readOnly={!editable}
+            onAskWhy={(text) => { edit({ whys: [...draft.whys, { id: uid(), parent_id: null, text }] }); setTab("whys"); }} />
         </Tabs.Panel>
 
         <Tabs.Panel value="rootCauses" pt="md">

@@ -155,11 +155,15 @@ and again if its downtime, loss or codes are corrected later.
 1. **Waiting for decision** — a rule matched (or an engineer / supervisor pressed *Request RCA* on a work order).
    The maintenance manager is notified and presses *Start RCA* (leader from the engineering positions —
    permission `rca.lead` — team members, analysis due date; default 7 days) or *Not required* with a reason.
-2. **Investigation** — the team fills in the tabs: *Problem (5W1H)* (pre-filled from the work orders) and the
-   timeline, *5 Whys* (each answer can be asked "why?" again or get a second branch; mark the root causes),
-   *Fishbone* (causes under Man, Machine, Method, Material, Measurement, Environment, each possible / verified /
-   ruled out; the diagram draws itself), *Root causes* (physical, human, system/latent), *Action plan*
-   (containment, corrective, preventive; owner and due date) and *Evidence* (photos, files). Press *Save*.
+2. **Investigation** — the team works through the numbered tabs in the standard order: *1. Problem (5W1H)*
+   (What, Where, When, Who, Which / how much, How; pre-filled from the work orders) with the problem statement and
+   timeline; *2. Evidence & data* (photos, files); *3. Fishbone* (causes under Man, Machine, Method, Material,
+   Measurement, Environment, each possible / verified / ruled out; the diagram draws itself; *Ask why?* on a verified
+   cause starts a 5 Whys chain); *4. 5 Whys* (five is a guide, not a limit: keep asking "why?" — Why 6, 7… — and add
+   branches; the **root cause is the last why of each chain** and can only be marked there, also enforced by the server);
+   *5. Root causes* (from the marked last whys; physical, human, system/latent); *6. Action plan* (containment,
+   corrective, preventive; owner and due date). Press *Save*. Submitting needs the problem, a 5 Whys chain with its
+   root cause marked, a root cause and an action; step 7, the effectiveness check, follows the actions.
    The leader presses *Submit for approval*.
 3. **Awaiting approval** — the manager approves or returns it to the team with a note.
 4. **Action plan** — owners finish their actions with the result. *Create work order* raises a work order for an

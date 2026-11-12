@@ -374,12 +374,15 @@ proc("Decide whether an RCA is needed", "Maintenance manager (decision); enginee
      ["An RCA is proposed automatically when a completed breakdown matches the <b>RCA rules</b> (long downtime for the asset’s criticality, the same failure mode repeating, a safety or environment event, high cost or production loss). Engineers and supervisors can also press <b>Request RCA</b> on a work order.",
       "The manager is notified. Open <b>Root cause analysis</b>, open the RCA <b>Waiting for decision</b>.",
       "Press <b>Start RCA</b>: choose the leader (an engineer), the team members and the due date (default 7 days); or press <b>Not required</b> with a reason."])
-proc("Carry out the RCA", "RCA leader and team", "Root cause analysis › open the RCA",
-     ["<b>Problem (5W1H)</b>: check the text pre-filled from the work orders and add the timeline.",
-      "<b>5 Whys</b>: answer “why?” step by step; add a second branch where there are two causes; mark the root causes.",
-      "<b>Fishbone</b>: list causes under Man, Machine, Method, Material, Measurement, Environment and mark each possible, verified or ruled out.",
-      "<b>Root causes</b> (physical, human, system) and <b>Action plan</b> (containment, corrective, preventive; owner and due date). Add photos and files under <b>Evidence</b>.",
-      "Press <b>Save</b>, then <b>Submit for approval</b>."])
+proc("Carry out the RCA (standard order)", "RCA leader and team", "Root cause analysis › open the RCA – the tabs are numbered in this order",
+     ["<b>1. Problem (5W1H)</b>: What, Where, When, Who, Which / how much, How – check the text pre-filled from the work orders, write the problem statement and add the timeline. (“Why” is not asked here: it is step 4.)",
+      "<b>2. Evidence &amp; data</b>: photos, readings, the failed part, reports. Facts first, before guessing causes.",
+      "<b>3. Fishbone</b>: list every possible cause under Man, Machine, Method, Material, Measurement, Environment; check each with the evidence and mark it verified or ruled out.",
+      "<b>4. 5 Whys</b>: press <b>Ask why?</b> on a verified cause (or start from the problem) and keep asking “why?”. Five is a guide, not a limit: add Why 6, 7… until the answer is a cause you can act on. Add another answer for a second branch.",
+      "<b>Root cause = the last why</b> of each chain: tick <b>Root cause</b> there (it is only possible on the last why). Asking why again moves the mark down.",
+      "<b>5. Root causes</b>: press <b>Use</b> on each marked last why and set its type (physical, human, system).",
+      "<b>6. Action plan</b>: containment, corrective and preventive actions with owner and due date, each linked to a root cause. Press <b>Save</b>, then <b>Submit for approval</b>."],
+     ("note", "Submitting is refused until there is a problem description, a 5 Whys chain with its root cause marked on the last why, at least one root cause and at least one action. Step 7, the effectiveness check, follows the actions."))
 proc("Approve, act and check the effect", "Maintenance manager (approval); action owners", "Root cause analysis › open the RCA",
      ["The manager <b>Approves</b> the RCA or returns it to the team with a note.",
       "Owners finish their actions with the result; <b>Create work order</b> raises a work order for an action, and completing that work order finishes the action.",

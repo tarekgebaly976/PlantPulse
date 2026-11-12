@@ -286,12 +286,12 @@ export const en = {
     },
     tabs: {
       overview: "Overview",
-      problem: "Problem (5W1H)",
-      whys: "5 Whys",
-      fishbone: "Fishbone",
-      rootCauses: "Root causes",
-      actions: "Action plan",
-      evidence: "Evidence"
+      problem: "1. Problem (5W1H)",
+      whys: "4. 5 Whys",
+      fishbone: "3. Fishbone (possible causes)",
+      rootCauses: "5. Root causes",
+      actions: "6. Action plan (CAPA)",
+      evidence: "2. Evidence & data"
     },
     w: {
       what: "What happened?",
@@ -312,8 +312,9 @@ export const en = {
       addEvent: "Add event"
     },
     whys: {
+      rootLast: "Only the last why of a chain can be the root cause. Ask why below this one, or mark the last one.",
       level: "Why {{n}}",
-      hint: "Ask “Why?” until you reach a cause you can act on (usually 5 times). Add another answer to follow a second branch. Mark the last why of each branch as root cause.",
+      hint: "Start from the problem or from a verified fishbone cause and keep asking “Why?” – five is a guide, not a limit: go on until the answer is a cause you can act on (usually a missing or weak system, plan or standard). Add another answer for a second branch. The root cause is the LAST why of each chain: mark it there.",
       start: "Start with the problem: why did it fail?",
       why: "Why?",
       next: "Why? (next level)",
@@ -322,7 +323,8 @@ export const en = {
       placeholder: "Because …"
     },
     fish: {
-      hint: "Collect every possible cause under the 6M. Check each one with evidence: mark it verified or ruled out.",
+      askWhy: "Ask why?",
+      hint: "Step 3: list every possible cause under the 6M, then check each one with evidence (step 2) and mark it verified or ruled out. Press “Ask why?” on a verified cause to drill down to its root cause in the 5 Whys.",
       cause: "Possible cause",
       problem: "Problem",
       cat: {

@@ -443,6 +443,8 @@ def submit(db: Session, rca: RCA, user_id: uuid.UUID) -> None:
     missing = []
     if not (rca.problem_statement or (rca.problem or {}).get("what")):
         missing.append("problem description (5W1H)")
+    if not any(w.get("is_root") and (w.get("text") or "").strip() for w in rca.whys or []):
+        missing.append("5 Whys down to a root cause (mark the last why of the chain)")
     if not rca.root_causes:
         missing.append("at least one root cause")
     if not [a for a in open_actions(db, rca) if a.status != RCAActionStatus.CANCELLED]:

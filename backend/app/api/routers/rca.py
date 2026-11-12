@@ -577,8 +577,12 @@ def update_analysis(rid: uuid.UUID, body: AnalysisIn, ctx: Ctx = Depends(get_ctx
         raise DomainError("This RCA is finished", "read_only", 409)
     if "whys" in data:
         ids = {w["id"] for w in data["whys"]}
-        if any(w["parent_id"] and w["parent_id"] not in ids for w in data["whys"]):
+        if any(w.get("parent_id") and w["parent_id"] not in ids for w in data["whys"]):
             raise HTTPException(422, "A why points to a missing parent")
+        # Standard 5 Whys: keep asking "why?" (no limit at 5); the root cause is the LAST why of its chain.
+        parents = {w.get("parent_id") for w in data["whys"] if w.get("parent_id")}
+        if any(w.get("is_root") and w["id"] in parents for w in data["whys"]):
+            raise HTTPException(422, "Only the last why of a chain can be the root cause; ask why again below it or move the mark down")
     if data.get("failure_code_id"):
         fc = db.get(FailureCode, body.failure_code_id)
         if fc is None or fc.plant_id != ctx.plant_id:

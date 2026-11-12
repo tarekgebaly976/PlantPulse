@@ -140,7 +140,7 @@ def test_full_rca_lifecycle_actions_effectiveness_and_recurrence(world):
     manager.ok("post", f"/rca/{rid}/start", {"leader_id": str(world.users["engineer"].id), "member_ids": [str(world.users["tech"].id)]})
     # Submitting an empty analysis is refused with what is missing.
     r = eng.post(f"/rca/{rid}/submit")
-    assert r.status_code == 409 and "root cause" in r.text
+    assert r.status_code == 409 and "root cause" in r.text and "5 Whys" in r.text
     # The team (technician member included) writes the analysis.
     tech.ok(
         "patch",
@@ -166,6 +166,15 @@ def test_full_rca_lifecycle_actions_effectiveness_and_recurrence(world):
         },
     )
     assert tech.patch(f"/rca/{rid}", {"whys": [{"id": "x", "parent_id": "nope", "text": "?"}]}).status_code == 422
+    # More than five whys are allowed; the root cause can only be the last why of its chain.
+    deep = [{"id": f"d{i}", "parent_id": f"d{i - 1}" if i else None, "text": f"why {i + 1}"} for i in range(7)]
+    assert tech.patch(f"/rca/{rid}", {"whys": [*deep[:-1], {**deep[-1], "is_root": True}]}).status_code == 200
+    assert tech.patch(f"/rca/{rid}", {"whys": [{**deep[0], "is_root": True}, *deep[1:]]}).status_code == 422
+    tech.ok("patch", f"/rca/{rid}", {"whys": [
+        {"id": "w1", "parent_id": None, "text": "Bearing seized"},
+        {"id": "w2", "parent_id": "w1", "text": "No grease"},
+        {"id": "w3", "parent_id": "w2", "text": "Point not in lube route", "is_root": True},
+    ]})  # fmt: skip
     assert tech.patch(f"/rca/{rid}", {"fishbone": [{"id": "x", "category": "money", "text": "?"}]}).status_code == 422
     eng.ok("patch", f"/rca/{rid}", {"root_causes": [{"id": "rc1", "type": "latent", "text": "PM/lube plan did not cover the DE bearing"}]})
     a1 = eng.ok("post", f"/rca/{rid}/actions", {"description": "Add DE bearing to lube route", "kind": "corrective", "owner_id": str(world.users["tech"].id), "root_cause_ref": "rc1", "due_date": str(plant_today(world.plant) + timedelta(days=7))}, status=201)  # fmt: skip

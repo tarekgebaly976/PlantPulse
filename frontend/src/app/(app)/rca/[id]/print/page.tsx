@@ -13,7 +13,7 @@ import type { RcaDetail } from "../page";
 
 const W_KEYS = ["what", "where", "when", "who", "which", "how"] as const;
 
-/** One RCA on A4: problem (5W1H), 5 Whys, fishbone, root causes, action plan, effectiveness and sign-off. The browser
+/** One RCA on A4, in the standard order: problem (5W1H), fishbone, 5 Whys, root causes, action plan, effectiveness and sign-off. The browser
  * prints it (or saves it as PDF), so Arabic and Bengali text and right-to-left layout come out right. */
 export default function RcaPrint() {
   const { id } = useParams<{ id: string }>();
@@ -62,11 +62,11 @@ export default function RcaPrint() {
         {r.timeline.length > 0 && <div className="rca-keep" style={{ marginTop: 4 }}><b>{t("rca.w.timeline")}:</b>{" "}
           {[...r.timeline].sort((a, b) => (a.at ?? "").localeCompare(b.at ?? "")).map((e) => `${e.at ? fmtDate(e.at, tz, true) : ""} ${e.text}`).join(" → ")}</div>}
 
-        {whys.length > 0 && <><h2>{t("rca.tabs.whys")}</h2><div className="rca-keep"><WhysView value={whys} /></div></>}
-
         {r.fishbone.length > 0 && <><h2>{t("rca.tabs.fishbone")}</h2>
           <div className="rca-keep"><FishboneDiagram bones={r.fishbone} problem={r.problem_statement || r.problem.what || r.title} /></div>
           {verified.length > 0 && <div>{t("rca.fish.st.verified")}: {verified.map((b) => `${t(`rca.fish.cat.${b.category}`)} – ${b.text}`).join("; ")}</div>}</>}
+
+        {whys.length > 0 && <><h2>{t("rca.tabs.whys")}</h2><div className="rca-keep"><WhysView value={whys} /></div></>}
 
         <h2>{t("rca.tabs.rootCauses")}</h2>
         <table className="rca-keep"><tbody>
