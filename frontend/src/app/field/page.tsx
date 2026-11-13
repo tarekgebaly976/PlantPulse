@@ -283,9 +283,10 @@ export default function FieldPage() {
         </Card>
       ) : (
         <Stack>
-          <Group justify="space-between" wrap="nowrap">
-            <Text size="xs" c="dimmed">{t("field.ready", { n: cat.assets.length, date: new Date(cat.generated_at).toLocaleString() })} · {cat.plant.code}</Text>
-            {online && me && <Button size="compact-xs" variant="subtle" loading={busy} leftSection={<IconRefresh size={14} />} onClick={() => void prepare()}>{t("field.update")}</Button>}
+          <Group justify="space-between" wrap="nowrap" align="center" gap="xs">
+            <Text size="xs" c="dimmed" style={{ minWidth: 0 }}>{t("field.ready", { n: cat.assets.length, date: new Date(cat.generated_at).toLocaleString() })} · {cat.plant.code}</Text>
+            {online && me && <Button size="compact-sm" variant="light" loading={busy} leftSection={<IconRefresh size={14} />} onClick={() => void prepare()}
+              style={{ flexShrink: 0 }} data-testid="field-update">{t("field.update")}</Button>}
           </Group>
           {err && <Alert color="red">{err}</Alert>}
           {note && <Alert color="blue" withCloseButton onClose={() => setNote(null)}>{note}</Alert>}
