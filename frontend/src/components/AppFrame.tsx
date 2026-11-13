@@ -10,6 +10,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { loadCatalog, pendingCount } from "@/lib/offline";
 import { post } from "@/lib/api";
 import { useMut, useQ } from "@/lib/hooks";
 import { LANGS } from "@/lib/i18n";
@@ -78,7 +79,10 @@ export function AppFrame({ children }: { children: ReactNode }) {
 
   useEffect(() => { if (!loading && !me && !offline) router.replace("/login"); }, [loading, me, offline, router]);
   useEffect(() => close(), [pathname, close]);
-  if (!loading && !me && offline) return <OfflinePanel />;
+  // Without internet the app's pages cannot load their data: moving to any page (Back included) leads to the
+  // offline dashboard. Only on navigation: a connection lost while typing on a page does not throw the user out.
+  useEffect(() => { if (!navigator.onLine && pathname !== "/") window.location.replace("/"); }, [pathname]);
+  if ((!loading && !me && offline) || (!net.online && pathname === "/")) return <OfflineHome />;
   if (loading || !me) return <Loading />;
   if (!plant) return <Text p="xl">{t("app.noPlants")}</Text>;
 
@@ -227,22 +231,35 @@ function ChangePassword({ opened, onClose }: { opened: boolean; onClose: () => v
   );
 }
 
-/** No connection when a page of the app is opened (e.g. Back from the field round): say so and offer the field round,
- *  which works without internet, instead of a blank loading screen. Reloads by itself when the connection is back. */
-function OfflinePanel() {
+/** Offline dashboard: what works without internet (the field round), what waits on this phone, and how fresh the
+ *  equipment on the phone is. Every page opened without internet leads here; the normal dashboard comes back by
+ *  itself when the connection does. */
+function OfflineHome() {
   const { t } = useTranslation();
+  const [info, setInfo] = useState<{ waiting: number; equipment: number | null; updated: string | null } | null>(null);
   useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const [waiting, cat] = await Promise.all([pendingCount().catch(() => 0), loadCatalog().catch(() => undefined)]);
+      if (alive) setInfo({ waiting, equipment: cat ? cat.assets.length : null, updated: cat ? cat.generated_at : null });
+    })();
     const back = () => window.location.reload();
     window.addEventListener("online", back);
-    return () => window.removeEventListener("online", back);
+    return () => { alive = false; window.removeEventListener("online", back); };
   }, []);
   return (
-    <Stack align="center" justify="center" p="xl" mih="70vh" gap="md" data-testid="offline-panel" style={{ textAlign: "center" }}>
+    <Stack align="center" justify="center" p="xl" mih="80vh" gap="md" data-testid="offline-panel" style={{ textAlign: "center" }}>
       <IconWifiOff size={48} color="var(--mantine-color-red-6)" />
-      <Text fw={700} size="lg">{t("field.offlinePanelTitle")}</Text>
-      <Text c="dimmed" maw={420}>{t("field.offlinePanel")}</Text>
+      <Text fw={800} size="xl">{t("field.offlineHomeTitle")}</Text>
+      <Text c="dimmed" maw={440}>{t("field.offlinePanel")}</Text>
+      {info && (
+        <Stack gap={4}>
+          <Text fw={600} c={info.waiting ? "orange.8" : undefined} data-testid="offline-waiting">{t("field.waitingN", { n: info.waiting })}</Text>
+          <Text size="sm" c="dimmed">{info.equipment === null ? t("field.notPrepared") : t("field.ready", { n: info.equipment, date: new Date(info.updated!).toLocaleString() })}</Text>
+        </Stack>
+      )}
       {/* a full page load: the service worker serves the kept field round without internet */}
-      <Button component="a" href="/field" size="md" leftSection={<IconRoute size={18} />} className="tap-target">{t("nav.field")}</Button>
+      <Button component="a" href="/field" size="lg" leftSection={<IconRoute size={20} />} className="tap-target">{t("nav.field")}</Button>
     </Stack>
   );
 }

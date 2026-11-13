@@ -46,6 +46,8 @@ self.addEventListener("fetch", (e) => {
       if (res.ok && res.type === "basic" && !res.redirected) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(url.pathname, copy)); }
       return res;
     }).catch(() => caches.match(url.pathname).then((page) => page
-      || caches.match("/field").then((hit) => (hit ? Response.redirect("/field", 302) : caches.match("/offline.html"))))));
+      // a page never opened online: the dashboard (it shows the offline dashboard), else the field round
+      || caches.match("/").then((home) => (home ? Response.redirect("/", 302)
+        : caches.match("/field").then((hit) => (hit ? Response.redirect("/field", 302) : caches.match("/offline.html"))))))));
   }
 });

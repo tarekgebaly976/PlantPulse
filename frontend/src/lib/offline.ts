@@ -86,13 +86,20 @@ export async function prepareOffline(): Promise<Catalog> {
   const c = await get<Catalog>("/offline/catalog");
   await saveCatalog(c);
   if ("caches" in window) {
-    const urls = new Set<string>(["/field", "/offline.html", "/manifest.webmanifest", "/icons/icon-192.png"]);
+    const urls = new Set<string>(["/", "/field", "/offline.html", "/manifest.webmanifest", "/icons/icon-192.png"]);
     for (const e of performance.getEntriesByType("resource")) {
       const u = new URL(e.name);
       if (u.origin === location.origin && u.pathname.startsWith("/_next/static/")) urls.add(u.pathname + u.search);
     }
     document.querySelectorAll<HTMLScriptElement>("script[src]").forEach((s) => { const u = new URL(s.src); if (u.origin === location.origin) urls.add(u.pathname + u.search); });
     document.querySelectorAll<HTMLLinkElement>("link[rel=stylesheet][href]").forEach((l) => { const u = new URL(l.href); if (u.origin === location.origin) urls.add(u.pathname + u.search); });
+    // The pages kept for offline use (dashboard and field round): keep every script and style they load too.
+    for (const page of ["/", "/field"]) {
+      try {
+        const html = await (await fetch(page, { credentials: "same-origin", cache: "no-store" })).text();
+        for (const m of html.matchAll(/(?:src|href)="(\/_next\/static\/[^"]+)"/g)) urls.add(m[1]!.replace(/&amp;/g, "&"));
+      } catch { /* kept as far as possible */ }
+    }
     const cache = await caches.open(SHELL_CACHE);
     await Promise.all([...urls].map((u) => cache.add(u).catch(() => undefined)));
   }

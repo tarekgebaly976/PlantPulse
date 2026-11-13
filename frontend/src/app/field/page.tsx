@@ -175,6 +175,42 @@ export default function FieldPage() {
   const [form, setForm] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
+  // Back closes the camera or the request form first (nothing typed is lost); the next Back leaves the page.
+  // The history entry keeps Next.js's own state, so its router treats it as the same page.
+  const overlay = scan || form;
+  const popped = useRef(false);
+  const overlayOpen = useRef(false);
+  const skipPop = useRef(false);
+  useEffect(() => {
+    overlayOpen.current = overlay;
+    if (!overlay) return;
+    popped.current = false;
+    window.history.pushState({ ...(window.history.state ?? {}), ppOverlay: true }, "");
+    const onPop = () => { popped.current = true; setScan(false); setForm(false); };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      if (!popped.current && window.history.state?.ppOverlay) { skipPop.current = true; window.history.back(); } // closed with a button
+    };
+  }, [overlay]);
+  // Without internet, Back from the field round (nothing open) always goes to the (offline) dashboard.
+  useEffect(() => {
+    const onPop = () => {
+      if (skipPop.current) { skipPop.current = false; return; }
+      // A full page load on purpose: without internet only the service worker's kept page can open, not a router fetch.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      if (!navigator.onLine && !overlayOpen.current) window.location.assign("/");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  // Leaving the page (another app, screen off, page kept in memory): the camera is always released.
+  useEffect(() => {
+    const off = () => setScan(false);
+    window.addEventListener("pagehide", off);
+    return () => window.removeEventListener("pagehide", off);
+  }, []);
+
   const reload = useCallback(async () => { setItems(await listOutbox()); }, []);
   const sync = useCallback(async () => {
     if (!navigator.onLine) return;
@@ -226,7 +262,8 @@ export default function FieldPage() {
     <Container size={560} px="sm" py="sm">
       <Group justify="space-between" mb="sm" wrap="nowrap">
         <Group gap="xs" wrap="nowrap">
-          {me && <ActionIcon component={Link} href="/" variant="subtle" aria-label={t("common.back")}><IconArrowLeft /></ActionIcon>}
+          {online && me ? <ActionIcon component={Link} href="/" variant="subtle" aria-label={t("nav.dashboard")}><IconArrowLeft /></ActionIcon>
+            : <ActionIcon component="a" href="/" variant="subtle" aria-label={t("nav.dashboard")}><IconArrowLeft /></ActionIcon>}
           <Title order={3}>{t("field.title")}</Title>
         </Group>
         <Badge size="lg" color={online ? "teal" : "red"} variant="light" leftSection={online ? <IconWifi size={14} /> : <IconWifiOff size={14} />} data-testid="field-net"
