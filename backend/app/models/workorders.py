@@ -25,7 +25,12 @@ from app.models.enums import ChecklistKind, Priority, RequestStatus, WOStatus, W
 
 class WorkRequest(Base, PlantScoped, Timestamped, Attributed):
     __tablename__ = "work_requests"
-    __table_args__ = (UniqueConstraint("plant_id", "number"),)
+    __table_args__ = (
+        UniqueConstraint("plant_id", "number"),
+        # A request written on a phone without internet is sent with its own reference: sending it again (lost
+        # connection, retried upload) returns the first one instead of a duplicate.
+        Index("ix_wr_client_ref", "plant_id", "client_ref", unique=True, postgresql_where=text("client_ref IS NOT NULL")),
+    )
     id: Mapped[uuid.UUID] = uuid_pk()
     number: Mapped[str] = mapped_column(String(40))
     asset_id: Mapped[uuid.UUID] = fk("assets.id")
@@ -41,6 +46,8 @@ class WorkRequest(Base, PlantScoped, Timestamped, Attributed):
     triaged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     triage_note: Mapped[str | None] = mapped_column(Text)
     work_order_id: Mapped[uuid.UUID | None] = fk("work_orders.id", nullable=True)
+    client_ref: Mapped[str | None] = mapped_column(String(40))  # set by the phone (offline field mode)
+    reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # when written, if written offline
 
 
 class WorkOrder(Base, PlantScoped, Timestamped, Attributed):

@@ -14,7 +14,7 @@ test("mobile shell, offline indicator and PWA assets", async ({ page, context })
   await context.setOffline(true);
   await expect(page.getByTestId("net-status")).toHaveAttribute("data-variant", "light");
   await page.getByTestId("net-status").hover();
-  await expect(page.getByRole("tooltip", { name: /Offline — changes cannot be saved/ })).toBeVisible();
+  await expect(page.getByRole("tooltip", { name: /open the field round/ })).toBeVisible();
   await context.setOffline(false);
   const manifest = await page.request.get("/manifest.webmanifest");
   expect(manifest.ok()).toBeTruthy();
@@ -34,4 +34,21 @@ test("condition monitoring point opens full screen on a phone to record a readin
   await dlg.getByTestId("reading-input").fill("60");
   await dlg.getByRole("button", { name: "Save" }).click();
   await expect(dlg.getByTestId("reading-result")).toBeVisible();
+});
+
+test("field round: equipment card from search and a work request sent from the phone's outbox", async ({ page }) => {
+  await login(page, "tech1");
+  await page.goto("/field");
+  const prepare = page.getByTestId("field-prepare");
+  if (await prepare.isVisible().catch(() => false)) await prepare.click();
+  await expect(page.getByTestId("field-scan")).toBeVisible();
+  await page.getByTestId("field-search").fill("crusher motor");
+  await page.getByText("L2-CRS-MTR").first().click();
+  await expect(page.getByTestId("field-asset")).toContainText("Crusher");
+  await page.getByTestId("field-new-request").click();
+  const dlg = page.getByRole("dialog");
+  const title = dlg.getByRole("textbox", { name: /^Title/ });
+  if (!(await title.inputValue())) await title.fill("E2E field round request");
+  await page.getByTestId("field-save").click();
+  await expect(page.getByTestId("field-outbox")).toContainText(/WR-/, { timeout: 20_000 }); // sent at once when online
 });

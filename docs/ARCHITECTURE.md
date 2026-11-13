@@ -79,8 +79,10 @@ extracted later if load requires it.
   timezone.
 * **KPIs:** computed on demand from source records with explicit availability/reason; monthly snapshots persisted
   for trends. Formulas documented in `KPI_DEFINITIONS.md`.
-* **Offline:** the PWA is installable and shows an online/offline indicator; it does **not** store or queue
-  maintenance records offline (deliberately, to avoid silent conflicts). See limitations.
+* **Offline:** the PWA is installable and shows an online/offline indicator. The *field round* (`/field`, kept by the
+  service worker) works without internet: the equipment catalogue (`GET /offline/catalog`) and an outbox of work
+  requests with photos live in IndexedDB; requests are sent later with a `client_ref` (unique per plant), so a re-send
+  returns the first request instead of a duplicate. Other records are saved online only (no silent conflicts).
 
 ## 4. Code map
 

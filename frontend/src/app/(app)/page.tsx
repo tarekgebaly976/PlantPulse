@@ -4,7 +4,7 @@ import { BarChart } from "@mantine/charts";
 import { Anchor, Badge, Button, Card, Checkbox, Grid, Group, Modal, SegmentedControl, SimpleGrid, Stack, Table, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
 import {
   IconAdjustments, IconAlertOctagon, IconAlertTriangle, IconCalendarTime, IconChecklist, IconClipboardList, IconClockExclamation, IconDroplet,
-  IconCircleCheck, IconEye, IconHeartRateMonitor, IconPlus, IconQrcode, IconUserCheck,
+  IconCircleCheck, IconEye, IconHeartRateMonitor, IconPlus, IconQrcode, IconRoute, IconUserCheck,
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -367,6 +367,7 @@ export default function Dashboard() {
           {can("request.create") && <Button component={Link} href="/requests?new=1" color="red" leftSection={<IconAlertTriangle size={18} />} className="tap-target">{t("req.new")}</Button>}
           {can("wo.create") && <Button component={Link} href="/work-orders/new" leftSection={<IconPlus size={18} />} className="tap-target">{t("wo.new")}</Button>}
           <Button component={Link} href="/scan" variant="default" leftSection={<IconQrcode size={18} />} className="tap-target">{t("nav.scan")}</Button>
+          {can("request.create") && <Button component={Link} href="/field" variant="default" leftSection={<IconRoute size={18} />} className="tap-target">{t("nav.field")}</Button>}
       </Group>}
       <DashLegend />
       {mine && work}

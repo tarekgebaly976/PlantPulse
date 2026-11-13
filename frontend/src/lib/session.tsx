@@ -21,7 +21,7 @@ interface SessionValue {
 const Ctx = createContext<SessionValue | null>(null);
 const PLANT_KEY = "cmms.plant"; // UI preference only (an id, not a credential)
 /** Reachable without signing in: never sent to the sign-in page. */
-export const PUBLIC_PATHS = ["/login", "/privacy", "/forgot-password", "/reset-password"];
+export const PUBLIC_PATHS = ["/login", "/privacy", "/forgot-password", "/reset-password", "/field"]; // /field: field round, also offline
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
@@ -65,7 +65,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       adopt(m);
     },
     logout: async () => {
-      try { await post("/auth/logout"); } finally { setMe(null); qc.clear(); router.replace("/login"); }
+      // Field round: requests not sent yet are lost at sign-out (nothing of this user stays on the phone): ask first.
+      const { pendingCount, clearOffline } = await import("./offline");
+      const waiting = await pendingCount().catch(() => 0);
+      if (waiting > 0 && !window.confirm(i18n.t("field.logoutPending", { n: waiting }))) return;
+      try { await post("/auth/logout"); } finally { await clearOffline().catch(() => undefined); setMe(null); qc.clear(); router.replace("/login"); }
     },
     setLocale: async (l) => {
       await i18n.changeLanguage(l);

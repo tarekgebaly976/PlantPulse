@@ -1,7 +1,7 @@
-// Service worker: caches the static app shell for fast start-up and installability.
-// Deliberately does NOT cache /api responses and does NOT queue writes: maintenance records are
-// only saved online, so there is no risk of silently overwriting conflicting records.
-const CACHE = "cmms-shell-v3"; // bump to make every phone drop the old shell
+// Service worker: caches the static app shell for fast start-up and installability, and the field round (/field)
+// so it opens without internet. It does NOT cache /api responses: the field round keeps its own data and its outbox
+// of work requests in IndexedDB (src/lib/offline.ts) and sends them itself, each once, when the connection is back.
+const CACHE = "cmms-shell-v4"; // bump to make every phone drop the old shell (same name in src/lib/offline.ts)
 const SHELL = ["/manifest.webmanifest", "/icons/icon.svg", "/icons/icon-192.png", "/offline.html"];
 
 self.addEventListener("install", (e) => {
@@ -32,6 +32,15 @@ self.addEventListener("fetch", (e) => {
     return;
   }
   if (e.request.mode === "navigate") {
-    e.respondWith(fetch(e.request).catch(() => caches.match("/offline.html")));
+    if (url.pathname === "/field") {
+      // Field round: the latest page when online (kept for later), the kept page without internet.
+      e.respondWith(fetch(e.request).then((res) => {
+        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put("/field", copy)); }
+        return res;
+      }).catch(() => caches.match("/field").then((hit) => hit || caches.match("/offline.html"))));
+      return;
+    }
+    // Any other page without internet: go to the field round if this phone has it, else the offline notice.
+    e.respondWith(fetch(e.request).catch(() => caches.match("/field").then((hit) => (hit ? Response.redirect("/field", 302) : caches.match("/offline.html")))));
   }
 });

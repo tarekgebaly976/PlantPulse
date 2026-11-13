@@ -35,6 +35,20 @@ it into alarm limit and warning limit underneath. *KPIs: result vs target* shows
 *Customise dashboard* (top right): choose sections, counters, calculated KPIs and company KPIs. The layout is saved on
 the server for you and the plant, so phone and computer show the same; *Reset to default* restores it.
 
+## 2c. Field round without internet
+*Field round (offline)* in the menu (and the red *Offline* badge) opens a screen made for walking the plant. Press
+*Prepare for offline* once while connected: all equipment of your departments (code, name, place in the tree,
+criticality, QR token, equipment type) and the last five work orders per equipment are kept on the phone. Then, with
+or without internet: *Scan QR* (or search) opens the equipment card; *New work request* takes the symptom, suspected
+failure mode, priority, *Breakdown* and up to 6 photos (made smaller on the phone). Without internet the request
+waits under *Requests from this phone* and is sent by itself when the connection is back (also every minute, or
+*Send now*); it then gets its WR number and the photos follow. Each request carries its own reference, so sending it
+again never makes a second request; the time it was written on the phone is kept. If PlantPulse is opened without
+internet it goes to the field round. Requests not sent are deleted at sign-out (the phone asks first); requests
+written by another user on the same phone are only sent when that user signs in. A breakdown written offline reaches
+the supervisor only when the phone is back online: also call or use the radio. Approvals, LOTO / permit sign-off and
+closing stay online.
+
 ## 3. Reporting a problem (everyone with "Work requests")
 *Work requests → New work request* (or the red button on an asset page / after scanning its QR code). Choose the asset,
 describe the symptom, tick **Breakdown** if the machine is stopped — supervisors are alerted immediately.

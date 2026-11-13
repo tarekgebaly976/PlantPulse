@@ -4,7 +4,7 @@ import { ActionIcon, AppShell, Avatar, Badge, Box, useComputedColorScheme, useMa
 import { useDisclosure, useNetwork } from "@mantine/hooks";
 import {
   IconAlertTriangle, IconBell, IconBox, IconCalendarTime, IconChartBar, IconClipboardList, IconDashboard, IconDroplet, IconFishBone, IconHeartRateMonitor,
-  IconKey, IconLanguage, IconLogout, IconMoon, IconPlus, IconSun, IconQrcode, IconSettings, IconSitemap, IconTool, IconToolsKitchen, IconUserCheck, IconWifi, IconWifiOff,
+  IconKey, IconLanguage, IconLogout, IconMoon, IconPlus, IconSun, IconQrcode, IconSettings, IconSitemap, IconTool, IconToolsKitchen, IconUserCheck, IconWifi, IconWifiOff, IconRoute,
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -23,6 +23,7 @@ const NAV_GROUPS: { key: string | null; items: NavItem[] }[] = [
   { key: "navGroup.daily", items: [
     { href: "/my-work", key: "nav.myWork", icon: IconUserCheck, perm: "wo.view" },
     { href: "/scan", key: "nav.scan", icon: IconQrcode, perm: "asset.view" },
+    { href: "/field", key: "nav.field", icon: IconRoute, perm: "request.create" },
     { href: "/requests", key: "nav.requests", icon: IconAlertTriangle, perm: "request.create" },
     { href: "/work-orders", key: "nav.workOrders", icon: IconClipboardList, perm: "wo.view" },
   ] },
@@ -96,10 +97,16 @@ export function AppFrame({ children }: { children: ReactNode }) {
             </Group></Link>
           </Group>
           <Group gap="xs" wrap="nowrap">
-            <Tooltip label={net.online ? t("app.online") : t("app.offline")}>
-              <Badge data-testid="net-status" color={net.online ? "teal" : "red"} variant="light" leftSection={net.online ? <IconWifi size={14} /> : <IconWifiOff size={14} />}>
-                <Text span size="xs" visibleFrom="sm">{net.online ? t("app.online") : t("app.offline")}</Text>
-              </Badge>
+            <Tooltip label={net.online ? t("app.online") : t("field.offlineHint")}>
+              {net.online ? (
+                <Badge data-testid="net-status" color="teal" variant="light" leftSection={<IconWifi size={14} />}>
+                  <Text span size="xs" visibleFrom="sm">{t("app.online")}</Text>
+                </Badge>
+              ) : ( /* offline: one tap to the field round, which works without internet */
+                <Badge data-testid="net-status" color="red" variant="light" leftSection={<IconWifiOff size={14} />} component={Link} href="/field" style={{ cursor: "pointer" }}>
+                  <Text span size="xs" visibleFrom="sm">{t("app.offline")}</Text>
+                </Badge>
+              )}
             </Tooltip>
             {me.plants.length > 1 ? (
               <Select size="xs" w={150} aria-label={t("app.plant")} value={plant.plant_id} onChange={(v) => v && setPlant(v)} allowDeselect={false}

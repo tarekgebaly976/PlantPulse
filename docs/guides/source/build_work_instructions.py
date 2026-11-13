@@ -174,6 +174,14 @@ proc("Report a problem (work request)", "Everyone, including production", "Work 
       "Tick <b>Breakdown (machine stopped)</b> if the machine is stopped; that area’s supervisors are notified at once.",
       "Press <b>Submit</b>. You can follow the request’s status in the Work requests list."],
      ("tip", "Use a work request instead of a phone call or WhatsApp message, so every breakdown is counted in MTBF and MTTR."))
+proc("Field round without internet (scan QR, raise work requests)", "Technicians, engineers, supervisors, production", "Menu › Field round (offline); also the red Offline badge",
+     ["Once, while connected: open <b>Field round</b> and press <b>Prepare for offline</b>. All equipment of your departments (codes, names, QR labels, last work orders) is kept on the phone.",
+      "On the round, with or without internet: press <b>Scan QR</b> (or search a code or name) to open the equipment card.",
+      "Press <b>New work request</b>, choose the symptom (and the suspected failure mode if known), take up to 6 photos, tick <b>Breakdown</b> if the machine is stopped, then <b>Save</b>.",
+      "Without internet the request waits on the phone under <b>Requests from this phone</b> (status <i>Waiting</i>). When the connection is back it is sent by itself (or press <b>Send now</b>) and gets its WR number; photos follow.",
+      "If PlantPulse is opened without internet, it goes straight to the field round."],
+     ("warn", "A breakdown written without internet reaches the supervisor only when the phone is back online: for a stopped machine also call or use the radio at once."),
+     ("note", "A request is never created twice, even if it is sent again. Requests not sent yet are deleted at sign-out (the phone asks first). Approvals, LOTO / permit sign-off and closing jobs need a connection."))
 proc("Scan a QR label", "Everyone", "Scan QR",
      ["Open <b>Scan QR</b> from the menu and press <b>Start camera</b>.",
       "Point the camera at the label on the machine or lubrication point.",

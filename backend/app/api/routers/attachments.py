@@ -24,20 +24,25 @@ ENTITIES = {
     "part": ("app.models.inventory:Part", "inventory.view"),
     "condition_alert": ("app.models.pdm:ConditionAlert", "pdm.view"),
     "rca": ("app.models.rca:RCA", "rca.view"),
+    "work_request": ("app.models.workorders:WorkRequest", "wo.view"),
 }
 CATEGORIES = {"manual", "drawing", "photo", "report", "document", "certificate"}
 
 
-def _entity(db: Session, ctx: Ctx, entity_type: str, entity_id: uuid.UUID) -> None:
+def _entity(db: Session, ctx: Ctx, entity_type: str, entity_id: uuid.UUID) -> bool:
+    """Checks access; returns True when the caller is the one who raised this work request (own photos)."""
     if entity_type not in ENTITIES:
         raise HTTPException(422, "Unsupported entity type")
     path, perm = ENTITIES[entity_type]
-    ctx.require(perm)
     mod, cls = path.split(":")
     model = getattr(__import__(mod, fromlist=[cls]), cls)
     obj = db.get(model, entity_id)
+    own = entity_type == "work_request" and obj is not None and obj.created_by_id == ctx.user.id
+    if not own:
+        ctx.require(perm)
     if obj is None or obj.plant_id != ctx.plant_id:
         raise HTTPException(404, "Entity not found")
+    return own
 
 
 @router.post("", status_code=201)
@@ -46,12 +51,15 @@ def upload(
     entity_id: uuid.UUID = Form(...),
     category: str = Form("document"),
     file: UploadFile = File(...),
-    ctx: Ctx = Depends(require("attachment.upload")),
+    ctx: Ctx = Depends(get_ctx),
     db: Session = Depends(get_db, scope="function"),
 ) -> dict:
     if category not in CATEGORIES:
         raise HTTPException(422, "Invalid category")
-    _entity(db, ctx, entity_type, entity_id)
+    # Uploading needs the upload permission, except photos the requester adds to their own work request.
+    own = _entity(db, ctx, entity_type, entity_id)
+    if not (own and ctx.has("request.create") and category == "photo"):
+        ctx.require("attachment.upload")
     limit = get_settings().max_upload_mb * 1024 * 1024
     name = safe_filename(file.filename or "file")
     sha = hashlib.sha256()

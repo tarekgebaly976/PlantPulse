@@ -22,6 +22,7 @@ from app.api.routers import (
     kpi,
     lubrication,
     notifications,
+    offline,
     pdm,
     pm,
     rca,
@@ -186,6 +187,7 @@ def create_app() -> FastAPI:
         dashboard.router,
         rca.router,
         search.router,
+        offline.router,
     ):
         app.include_router(r, prefix=API)
 

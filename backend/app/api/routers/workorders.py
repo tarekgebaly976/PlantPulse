@@ -1,9 +1,9 @@
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import Ctx, require
@@ -49,6 +49,10 @@ class RequestIn(In):
     problem_code_id: uuid.UUID | None = None  # suspected failure mode, if the requester knows it
     suggested_priority: Priority = Priority.P3_MEDIUM
     is_breakdown: bool = False
+    # Field mode (no internet): the phone's own reference, so a re-sent request is not created twice, and the time
+    # the request was written on the phone.
+    client_ref: str | None = Field(None, min_length=8, max_length=40, pattern=r"^[A-Za-z0-9-]+$")
+    reported_at: datetime | None = None
 
 
 class RequestOut(ORM):
@@ -67,6 +71,9 @@ class RequestOut(ORM):
     work_order_id: uuid.UUID | None
     created_at: datetime
     created_by_id: uuid.UUID | None
+    client_ref: str | None = None
+    reported_at: datetime | None = None
+    open_on_asset: int | None = None  # other open requests and work orders on the same equipment (on create)
 
 
 class TriageIn(In):
@@ -83,16 +90,53 @@ def _asset(db: Session, ctx: Ctx, asset_id: uuid.UUID) -> Asset:
     return a
 
 
+def _open_on_asset(db: Session, ctx: Ctx, asset_id: uuid.UUID, own_id: uuid.UUID) -> int:
+    """Other open work requests and work orders on this equipment: a hint for the requester (already reported?)."""
+    reqs = db.execute(
+        select(func.count())
+        .select_from(WorkRequest)
+        .where(
+            WorkRequest.plant_id == ctx.plant_id,
+            WorkRequest.asset_id == asset_id,
+            WorkRequest.id != own_id,
+            WorkRequest.status == RequestStatus.SUBMITTED,
+        )
+    ).scalar_one()
+    wos = db.execute(
+        select(func.count())
+        .select_from(WorkOrder)
+        .where(WorkOrder.plant_id == ctx.plant_id, WorkOrder.asset_id == asset_id, WorkOrder.status.in_(OPEN_WO_STATUSES))
+    ).scalar_one()
+    return int(reqs) + int(wos)
+
+
 @router.post("/work-requests", response_model=RequestOut, status_code=201)
 def create_request(
     body: RequestIn, ctx: Ctx = Depends(require("request.create")), db: Session = Depends(get_db, scope="function")
 ) -> WorkRequest:
+    if body.client_ref:  # sent again by the phone: the request already exists
+        old = db.execute(
+            select(WorkRequest).where(WorkRequest.plant_id == ctx.plant_id, WorkRequest.client_ref == body.client_ref)
+        ).scalar_one_or_none()
+        if old is not None:
+            if old.created_by_id != ctx.user.id:
+                raise HTTPException(409, "This reference belongs to another request")
+            old.open_on_asset = _open_on_asset(db, ctx, old.asset_id, old.id)  # type: ignore[attr-defined]
+            return old
     a = _asset(db, ctx, body.asset_id)
     _check_refs(db, ctx, body.model_dump(include={"symptom_code_id", "problem_code_id"}))
     ctx.check_asset(db, a.id, code=403)
-    r = WorkRequest(plant_id=ctx.plant_id, number=next_number(db, ctx.plant, "WR"), created_by_id=ctx.user.id, **body.model_dump())
+    data = body.model_dump()
+    now = utcnow()
+    if data["reported_at"] is not None and data["reported_at"].tzinfo is None:
+        data["reported_at"] = data["reported_at"].replace(tzinfo=UTC)
+    if data["reported_at"] is not None and (data["reported_at"] > now or data["reported_at"] < now - timedelta(days=14)):
+        data["reported_at"] = None  # a phone clock far off: keep the server time only
+    r = WorkRequest(plant_id=ctx.plant_id, number=next_number(db, ctx.plant, "WR"), created_by_id=ctx.user.id, **data)
     db.add(r)
     db.flush()
+    r.open_on_asset = _open_on_asset(db, ctx, a.id, r.id)  # type: ignore[attr-defined]
+    offline = f" (written offline {r.reported_at:%Y-%m-%d %H:%M} UTC)" if r.reported_at else ""
     notify_permission(
         db,
         ctx.plant_id,
@@ -101,7 +145,7 @@ def create_request(
         kind="work_request",
         severity="critical" if body.is_breakdown else "info",
         title=f"{'BREAKDOWN ' if body.is_breakdown else ''}Work request {r.number}",
-        body=f"{a.code}: {r.title}",
+        body=f"{a.code}: {r.title}{offline}",
         link=f"/requests/{r.id}",
         dedupe_key=f"wr:{r.id}",
         email=body.is_breakdown,
