@@ -3,13 +3,16 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { get, post, setApiContext } from "./api";
+import { ApiError, get, post, setApiContext } from "./api";
 import type { Me, PlantAccess } from "./types";
 import i18n, { applyDirection, toLang, type Lang } from "./i18n";
 
 interface SessionValue {
   me: Me | null;
   loading: boolean;
+  /** The account could not be loaded because there is no connection (not a sign-out): the app shows an offline
+   *  panel with the field round instead of sending the user to the sign-in page. */
+  offline: boolean;
   plant: PlantAccess | null;
   setPlant: (id: string) => void;
   can: (perm: string) => boolean;
@@ -26,6 +29,7 @@ export const PUBLIC_PATHS = ["/login", "/privacy", "/forgot-password", "/reset-p
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
+  const [offline, setOffline] = useState(false);
   const [plantId, setPlantId] = useState<string | null>(null);
   const router = useRouter();
   const qc = useQueryClient();
@@ -46,13 +50,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Pages for people who are not signed in stay where they are (an e-mailed reset link, the privacy policy …).
     const isPublic = () => PUBLIC_PATHS.some((p) => window.location.pathname === p || window.location.pathname.startsWith(`${p}/`));
     setApiContext({ onUnauthorized: () => { setMe(null); if (!isPublic()) router.replace("/login"); } });
-    get<Me>("/auth/me").then(adopt).catch(() => setMe(null)).finally(() => setLoading(false));
+    const load = () => get<Me>("/auth/me")
+      .then((m) => { setOffline(false); adopt(m); })
+      .catch((e) => { setMe(null); setOffline(!(e instanceof ApiError)); }) // no answer at all = no connection
+      .finally(() => setLoading(false));
+    void load();
+    // Connection back after an offline start: load the account again (no sign-in needed, the cookie is still there).
+    const back = () => { if (!window.location.pathname.startsWith("/field")) void load(); };
+    window.addEventListener("online", back);
+    return () => window.removeEventListener("online", back);
   }, [adopt, router]);
 
   const plant = useMemo(() => me?.plants.find((p) => p.plant_id === plantId) ?? null, [me, plantId]);
 
   const value: SessionValue = {
-    me, loading, plant,
+    me, loading, offline, plant,
     setPlant: (id) => {
       setPlantId(id);
       setApiContext({ plantId: id });

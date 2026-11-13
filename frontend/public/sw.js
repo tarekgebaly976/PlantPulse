@@ -40,7 +40,12 @@ self.addEventListener("fetch", (e) => {
       }).catch(() => caches.match("/field").then((hit) => hit || caches.match("/offline.html"))));
       return;
     }
-    // Any other page without internet: go to the field round if this phone has it, else the offline notice.
-    e.respondWith(fetch(e.request).catch(() => caches.match("/field").then((hit) => (hit ? Response.redirect("/field", 302) : caches.match("/offline.html")))));
+    // Other pages: the latest when online (kept per page, so Back works without internet: the page opens and shows
+    // the "No connection" panel with the field round); a page never opened before goes to the field round, if kept.
+    e.respondWith(fetch(e.request).then((res) => {
+      if (res.ok && res.type === "basic" && !res.redirected) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(url.pathname, copy)); }
+      return res;
+    }).catch(() => caches.match(url.pathname).then((page) => page
+      || caches.match("/field").then((hit) => (hit ? Response.redirect("/field", 302) : caches.match("/offline.html"))))));
   }
 });

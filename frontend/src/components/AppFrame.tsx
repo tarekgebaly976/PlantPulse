@@ -64,7 +64,7 @@ const humanRole = (code: string) => { const s = code.replace(/_/g, " "); return 
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
 export function AppFrame({ children }: { children: ReactNode }) {
-  const { me, loading, plant, setPlant, can, logout, setLocale } = useSession();
+  const { me, loading, offline, plant, setPlant, can, logout, setLocale } = useSession();
   const { t, i18n } = useTranslation();
   const [opened, { toggle, close }] = useDisclosure();
   const [pwOpen, pw] = useDisclosure();
@@ -76,8 +76,9 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const { setColorScheme } = useMantineColorScheme();
   const dark = useComputedColorScheme("light", { getInitialValueInEffect: true }) === "dark";
 
-  useEffect(() => { if (!loading && !me) router.replace("/login"); }, [loading, me, router]);
+  useEffect(() => { if (!loading && !me && !offline) router.replace("/login"); }, [loading, me, offline, router]);
   useEffect(() => close(), [pathname, close]);
+  if (!loading && !me && offline) return <OfflinePanel />;
   if (loading || !me) return <Loading />;
   if (!plant) return <Text p="xl">{t("app.noPlants")}</Text>;
 
@@ -223,5 +224,25 @@ function ChangePassword({ opened, onClose }: { opened: boolean; onClose: () => v
         <Button onClick={() => m.mutate(undefined)} loading={m.isPending} disabled={!f.current || f.next.length < 12 || f.next !== f.repeat}>{t("common.save")}</Button>
       </Stack>
     </Modal>
+  );
+}
+
+/** No connection when a page of the app is opened (e.g. Back from the field round): say so and offer the field round,
+ *  which works without internet, instead of a blank loading screen. Reloads by itself when the connection is back. */
+function OfflinePanel() {
+  const { t } = useTranslation();
+  useEffect(() => {
+    const back = () => window.location.reload();
+    window.addEventListener("online", back);
+    return () => window.removeEventListener("online", back);
+  }, []);
+  return (
+    <Stack align="center" justify="center" p="xl" mih="70vh" gap="md" data-testid="offline-panel" style={{ textAlign: "center" }}>
+      <IconWifiOff size={48} color="var(--mantine-color-red-6)" />
+      <Text fw={700} size="lg">{t("field.offlinePanelTitle")}</Text>
+      <Text c="dimmed" maw={420}>{t("field.offlinePanel")}</Text>
+      {/* a full page load: the service worker serves the kept field round without internet */}
+      <Button component="a" href="/field" size="md" leftSection={<IconRoute size={18} />} className="tap-target">{t("nav.field")}</Button>
+    </Stack>
   );
 }

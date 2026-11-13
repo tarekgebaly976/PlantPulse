@@ -7,7 +7,7 @@ export const en = {
     noPlants: "Your account has no active plant membership. Contact your administrator." },
   navGroup: { daily: "Daily work", maintenance: "Maintenance", resources: "Assets & resources", insight: "Analysis & admin" },
   field: {
-    offlineShort: "Offline", title: "Field round",
+    offlinePanelTitle: "No connection", offlinePanel: "This screen needs internet. The field round works without it: scan QR labels and raise work requests; they are sent when the connection is back. This page opens again by itself when you are online.", offlineShort: "Offline", title: "Field round",
     offline: "Offline – saved on the phone",
     offlineHint: "Offline: open the field round to scan QR and raise work requests without internet",
     intro: "Scan any equipment QR label and raise work requests, also without internet. Prepare this phone once while connected: all equipment of your departments is downloaded.",
