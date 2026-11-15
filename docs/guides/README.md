@@ -4,6 +4,8 @@
 |---|---|---|
 | `PlantPulse_Work_Instructions_General_Industry.pdf` | Step-by-step work instructions, general industry edition | `python3 source/build_work_instructions.py PlantPulse_Work_Instructions_General_Industry.pdf general` |
 | `PlantPulse_Work_Instructions_Paper_Mill.pdf` | Same, paper mill edition (PM1 examples) | `python3 source/build_work_instructions.py PlantPulse_Work_Instructions_Paper_Mill.pdf paper` |
+| `PlantPulse_Training_Course.pptx` | Full training course presentation: every module, sessions A–F per role, with the November 2026 improvements (work orders without internet, conflicts, targets, Nelson, RCA), screenshots and speaker notes (26 slides) | `python3 source/build_training_deck.py PlantPulse_Training_Course.pptx en` |
+| `PlantPulse_Training_Course_AR.pptx` | عرض دورة التدريب الكاملة بالعربية (من اليمين لليسار) | `python3 source/build_training_deck.py PlantPulse_Training_Course_AR.pptx ar` |
 | `PlantPulse_Training_Workbook.pdf` | Training plan per role, 19 hands-on exercises with checks (incl. work orders without internet), quiz (18 questions) with answer key, attendance sheet | `python3 source/build_training.py PlantPulse_Training_Workbook.pdf` |
 | `PlantPulse_Whats_New_2026-11.pptx` | Presentation: what is new in November 2026 (update to the modules and benefits deck), with speaker notes | `python3 source/build_whatsnew_deck.py PlantPulse_Whats_New_2026-11.pptx` |
 | `PlantPulse_Work_Instructions_General_Industry_AR.pdf` | تعليمات العمل بالعربية – نسخة الصناعة العامة | `python3 source/build_work_instructions_ar.py PlantPulse_Work_Instructions_General_Industry_AR.pdf general` |
