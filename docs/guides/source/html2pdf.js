@@ -3,7 +3,8 @@
 const { chromium } = require("playwright");
 
 (async () => {
-  const [src, out, footer] = process.argv.slice(2);
+  const [src, out, footer, lang] = process.argv.slice(2);
+  const en = lang === "en"; // optional 4th argument: an English (left-to-right) footer
   const browser = await chromium.launch();
   const page = await browser.newPage();
   await page.goto("file://" + src, { waitUntil: "load" });
@@ -15,8 +16,8 @@ const { chromium } = require("playwright");
     printBackground: true,
     displayHeaderFooter: true,
     headerTemplate: "<span></span>",
-    footerTemplate: `<div dir="rtl" style="width:100%;font-family:'DejaVu Sans',sans-serif;font-size:8px;color:#44535A;padding:0 18mm;display:flex;justify-content:space-between;border-top:0.5px solid #D5DDDF;padding-top:3px;margin:0 18mm">
-      <span>${esc(footer || "")}</span><span>صفحة <span class="pageNumber"></span> من <span class="totalPages"></span></span></div>`,
+    footerTemplate: `<div dir="${en ? "ltr" : "rtl"}" style="width:100%;font-family:'DejaVu Sans',sans-serif;font-size:8px;color:#44535A;padding:0 18mm;display:flex;justify-content:space-between;border-top:0.5px solid #D5DDDF;padding-top:3px;margin:0 18mm">
+      <span>${esc(footer || "")}</span><span>${en ? "Page" : "صفحة"} <span class="pageNumber"></span> ${en ? "of" : "من"} <span class="totalPages"></span></span></div>`,
     margin: { top: "18mm", bottom: "20mm", left: "18mm", right: "18mm" },
   });
   await browser.close();

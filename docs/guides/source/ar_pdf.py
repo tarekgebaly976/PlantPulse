@@ -112,11 +112,11 @@ def doc_image(path: str, width: str = "100%") -> str:
     return f'<figure><img src="data:image/png;base64,{data}" style="width:{width}"></figure>'
 
 
-def render(html_text: str, out_pdf: str, footer: str) -> None:
+def render(html_text: str, out_pdf: str, footer: str, lang: str = "ar") -> None:
     with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as f:
         f.write(html_text)
         src = f.name
     try:
-        subprocess.run(["node", os.path.join(HERE, "html2pdf.js"), src, os.path.abspath(out_pdf), footer], check=True)
+        subprocess.run(["node", os.path.join(HERE, "html2pdf.js"), src, os.path.abspath(out_pdf), footer, lang], check=True)
     finally:
         os.unlink(src)
