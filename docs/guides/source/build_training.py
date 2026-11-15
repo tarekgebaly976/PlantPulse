@@ -59,10 +59,10 @@ def shot(name, width_mm, caption):
 # ---- Content ---------------------------------------------------------------------------------------------------------
 PLAN = [
     ["Session", "Who", "Time", "Contents (work instructions part)", "Exercises"],
-    ["A. Everyone", "All users, production", "45 min", "Sign in, install the app, menu, search, dashboard colour key, customise the dashboard (1); report a problem, scan QR (2.1–2.2)", "1–4"],
-    ["B. Technicians", "Technicians, lubricators", "90 min", "Carry out a work order, LOTO and permit, spare parts, lubrication route, condition reading (2.5–2.7, 3.4–3.5)", "5–8"],
-    ["C. Supervisors and planners", "Supervisors, planners", "2 h", "Accept requests, assign, review and close; PM schedule, deferrals, imports; alarm levels (2.3–2.8, 3.1–3.3, 3.5)", "5–10"],
-    ["D. Engineers and reliability", "Engineers, reliability engineers", "2 h", "Control charts and Nelson rules, measurement points and priorities, failure modes, RCA (3.5–3.9, 6.3, 7)", "9–13"],
+    ["A. Everyone", "All users, production", "45 min", "Sign in, install the app, menu, search, dashboard colour key, customise the dashboard (1); report a problem, field round, scan QR (2.1–2.3)", "1–4"],
+    ["B. Technicians", "Technicians, lubricators", "90 min", "Carry out a work order, LOTO and permit, spare parts, work orders without internet and conflicts, lubrication route, condition reading (2.6–2.8, 2.10–2.11, 3.4–3.5)", "5–8, 18–19"],
+    ["C. Supervisors and planners", "Supervisors, planners", "2 h", "Accept requests, assign, review and close; work orders without internet; PM schedule, deferrals, imports; alarm levels (2.4–2.11, 3.1–3.3, 3.5)", "5–10, 18–19"],
+    ["D. Engineers and reliability", "Engineers, reliability engineers", "2 h", "Control charts and Nelson rules, measurement points and priorities, failure modes, RCA; creating work orders without internet (2.10, 3.5–3.9, 6.3, 7)", "9–13, 18"],
     ["E. Managers", "Maintenance manager, management", "90 min", "KPI targets, company KPIs, colour code, management presentation, RCA decisions and approval (6, 7)", "11–16"],
     ["F. Administrator", "PlantPulse administrator", "60 min", "Users and departments, user import, test copy, server update, backups (9)", "17"],
 ]
@@ -144,6 +144,18 @@ EX = [
       "On the test copy, import users from Excel.",
       "Run the server update command (on the test day) and check the containers."],
      "The new user sees only the two departments; the update ends with ==&gt; Done and all containers Up."),
+    (18, "Work order without internet", "Technicians, engineers, supervisors",
+     ["Sign in on a phone (engineer account for the creating part), open <b>Field round</b> and press <b>Update</b>; open the <b>My work orders</b> tab.",
+      "Turn on flight mode. Scan or search a DEMO pump › <b>New work order</b>: type <i>Emergency breakdown</i>, a title, tick <b>I will do this work myself</b>, save.",
+      "In the job press <b>Start work</b>; add 1 hour, a spare part (from the list or typed), findings and a root cause; press <b>Work done – send for review</b>.",
+      "Look at <b>Waiting on this phone</b>, then turn flight mode off."],
+     "Within a minute both items show <i>Sent</i> and the work order has a WO number; on a computer it is <i>Awaiting review</i> with the hour, part and findings, and the labour line says it was written offline."),
+    (19, "Decide a conflict", "Technicians with a supervisor (in pairs)",
+     ["The trainer gives an approved DEMO work order with a reading line, assigned to the technician. The technician presses <b>Update</b> in the field round, then turns on flight mode.",
+      "Technician (offline): <b>Start work</b> and type a reading. Supervisor (online, on a computer): start the same job and type a different reading on the same line.",
+      "Technician: turn flight mode off and open <b>Waiting on this phone</b>.",
+      "Read <b>Yours</b> / <b>Now on the server</b>; agree which is right; press <b>Keep mine</b> or <b>Keep theirs</b>; then <b>Send again</b> on <i>Work done – send for review</i>."],
+     "The red <i>Decide</i> badge disappears; the work order shows the agreed reading and is <i>Awaiting review</i>; the other lines of the technician were saved without any decision."),
 ]
 
 QUIZ = [
@@ -163,6 +175,8 @@ QUIZ = [
     ("Can a job start before LOTO is signed off?", ["Yes", "No, the app refuses", "Only emergencies"], 1),
     ("When is an RCA proposed automatically?", ["Every work order", "When a completed breakdown matches the RCA rules", "Only when production asks"], 1),
     ("The management presentation compares October with…", ["October last year", "September", "The whole year"], 1),
+    ("You recorded work on the phone without internet. When does it reach the server?", ["Only when you send it by e-mail", "By itself when the phone is back online (or with Send now)", "It never does: offline work is lost"], 1),
+    ("The phone shows <i>Decide</i> on a reading after sending. What happened?", ["Your whole job was refused", "Someone changed the same reading meanwhile; only that line waits for your choice", "The reading was outside its range"], 1),
 ]
 
 
@@ -181,13 +195,13 @@ def on_page(c, doc):
 
 st = [Spacer(1, 50 * mm), Paragraph("PlantPulse", S["title"]), Spacer(1, 4),
       Paragraph("Training workbook: sessions per role, hands-on exercises, quiz and sign-off sheet", S["subtitle"]), Spacer(1, 10 * mm)]
-cov = Table([[Paragraph(f"System: {URL} (exercises on the DEMO plant or the test copy)<br/>Version: 12 November 2026<br/>"
+cov = Table([[Paragraph(f"System: {URL} (exercises on the DEMO plant or the test copy)<br/>Version: 15 November 2026<br/>"
                         "Use with: PlantPulse work instructions (the numbers in brackets point to its procedures)", S["body"])]], colWidths=[170 * mm])
 cov.setStyle(TableStyle([("LINEBEFORE", (0, 0), (0, -1), 4, AMBER), ("LEFTPADDING", (0, 0), (-1, -1), 12), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
 st += [cov, Spacer(1, 10 * mm),
        box("<b>For the trainer:</b> give each trainee a DEMO training account (one per role) or use the test copy, never the real plant. "
            "Run session A for everyone first. Each exercise has a <b>Check</b>: the trainee shows it before moving on. "
-           "Finish with the quiz (pass mark 12 of 16) and the sign-off sheet."),
+           "Finish with the quiz (pass mark 14 of 18) and the sign-off sheet."),
        PageBreak()]
 
 st += [Paragraph("1. Training plan", S["h1"]), table(PLAN, [30, 30, 14, 71, 25]), Spacer(1, 6),
@@ -212,14 +226,14 @@ for no, title, who, steps_, check in EX:
                              ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
     st.append(KeepTogether([Paragraph(f"Exercise {no}: {title}", S["h2"]), Paragraph(f"<b>Who:</b> {who}", S["meta"]), t, Spacer(1, 3), chk, Spacer(1, 4)]))
 
-st += [PageBreak(), Paragraph("4. Quiz", S["h1"]), Paragraph("Circle one answer per question. Pass mark: 12 of 16.", S["body"]), Spacer(1, 4)]
+st += [PageBreak(), Paragraph("4. Quiz", S["h1"]), Paragraph("Circle one answer per question. Pass mark: 14 of 18.", S["body"]), Spacer(1, 4)]
 for i, (q, opts, _) in enumerate(QUIZ, 1):
     st.append(KeepTogether([Paragraph(f"<b>{i}.</b> {q}", S["body"]),
                             Paragraph("&nbsp;&nbsp;&nbsp;&nbsp;" + "&nbsp;&nbsp;&nbsp;&nbsp;".join(f"<b>{'abc'[j]})</b> {o}" for j, o in enumerate(opts)), S["cell"]), Spacer(1, 6)]))
-st += [Spacer(1, 6), Paragraph("Name: ______________________________ &nbsp;&nbsp; Score: ______ / 16 &nbsp;&nbsp; Date: ____________", S["body"])]
+st += [Spacer(1, 6), Paragraph("Name: ______________________________ &nbsp;&nbsp; Score: ______ / 18 &nbsp;&nbsp; Date: ____________", S["body"])]
 
 st += [PageBreak(), Paragraph("5. Quiz answer key (trainer)", S["h1"]),
-       table([["Q", "Answer", "Q", "Answer"]] + [[str(i), f"{'abc'[QUIZ[i - 1][2]]}) {QUIZ[i - 1][1][QUIZ[i - 1][2]]}", str(i + 8), f"{'abc'[QUIZ[i + 7][2]]}) {QUIZ[i + 7][1][QUIZ[i + 7][2]]}"] for i in range(1, 9)],
+       table([["Q", "Answer", "Q", "Answer"]] + [[str(i), f"{'abc'[QUIZ[i - 1][2]]}) {QUIZ[i - 1][1][QUIZ[i - 1][2]]}", str(i + 9), f"{'abc'[QUIZ[i + 8][2]]}) {QUIZ[i + 8][1][QUIZ[i + 8][2]]}"] for i in range(1, 10)],
              [10, 75, 10, 75])]
 
 st += [Spacer(1, 10), Paragraph("6. Attendance and sign-off", S["h1"]),

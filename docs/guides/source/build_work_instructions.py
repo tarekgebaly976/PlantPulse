@@ -178,7 +178,7 @@ proc("Field round without internet (scan QR, raise work requests)", "Technicians
      ["Once, while connected: open <b>Field round</b> and press <b>Prepare for offline</b>. All equipment of your departments (codes, names, QR labels, last work orders) is kept on the phone.",
       "On the round, with or without internet: press <b>Scan QR</b> (or search a code or name) to open the equipment card.",
       "Press <b>New work request</b>, choose the symptom (and the suspected failure mode if known), take up to 6 photos, tick <b>Breakdown</b> if the machine is stopped, then <b>Save</b>.",
-      "Without internet the request waits on the phone under <b>Requests from this phone</b> (status <i>Waiting</i>). When the connection is back it is sent by itself (or press <b>Send now</b>) and gets its WR number; photos follow.",
+      "Without internet the request waits on the phone under <b>Waiting on this phone</b> (status <i>Waiting</i>). When the connection is back it is sent by itself (or press <b>Send now</b>) and gets its WR number; photos follow.",
       "If PlantPulse is opened without internet, it goes straight to the field round."],
      ("warn", "A breakdown written without internet reaches the supervisor only when the phone is back online: for a stopped machine also call or use the radio at once."),
      ("note", "A request is never created twice, even if it is sent again. Requests not sent yet are deleted at sign-out (the phone asks first). Approvals, LOTO / permit sign-off and closing jobs need a connection."))
@@ -230,6 +230,25 @@ proc("Review and close a work order", "Supervisor", "Work orders › status Awai
       "Record a test result if the job needs one (<b>Record result</b>).",
       "Use <b>Move to</b> to complete and close the job, or send it back if something is missing."],
      ("note", "Closing is refused until required checklist items, test results and failure codes are complete (root cause too for emergencies). The message lists what is missing. Each work order can be printed as a PDF report."))
+proc("Work orders without internet (create and carry out)", "Engineers and supervisors (create); technicians, engineers, supervisors (carry out)", "Menu › Field round (offline) › My work orders; New work order on the equipment card",
+     ["Once, while connected: open <b>Field round</b> and press <b>Update</b> (or <b>Prepare for offline</b>). Your work orders (assigned to you; supervisors also the active work of their departments) and the spare-parts list are kept on the phone. Two tabs appear: <b>Equipment</b> and <b>My work orders</b>.",
+      "<b>Create</b> (engineers, supervisors): scan or search the equipment › <b>New work order</b>. Choose the type, symptom, title, description and priority. Tick <b>I will do this work myself</b> if you will do it. Press <b>Save – send when online</b>.",
+      "<b>Carry out</b>: open the job in <b>My work orders</b> and press <b>Start work</b>. The button only appears when the job is approved or scheduled and, if it needs LOTO or a permit, already signed off.",
+      "<b>Checklist</b>: press <b>OK</b> or <b>Not OK</b> on each line; type each reading (a reading outside its range is shown in red at once). Add a remark where needed.",
+      "<b>Labour</b>: enter your hours (and Overtime if so) and press <b>Add</b>. <b>Spare parts used</b>: pick the part from the list (or type a description) with the quantity, then <b>Add</b>.",
+      "<b>Report</b>: write findings, corrective action, root cause, recommendations and downtime; add a comment if useful.",
+      "Finish with <b>Work done – send for review</b>, or <b>Put on hold</b> (then <b>Resume work</b> later).",
+      "Every change waits under <b>Waiting on this phone</b> and is sent by itself when the connection is back (or press <b>Send now</b>). A new work order gets its WO number first, then the work done on it follows. <i>Sent</i> = on the server."],
+     ("warn", "LOTO and permit sign-off, approval, review and closing need a connection. A work order that needs LOTO or a permit cannot start on the phone until the supervisor has signed it off on site."),
+     ("note", "An <b>emergency breakdown</b> that you do yourself can be started on the phone at once; other new work orders are created when the phone is online and follow the normal approval. Nothing is created or booked twice, even if the phone sends again. Items not sent are deleted at sign-out (the phone asks first)."),
+     ("tip", "Book your hours on the phone as you go: they keep the date you worked, even if they are sent the next day."))
+proc("When the phone shows a conflict (Keep mine / Keep theirs)", "Whoever did the work offline", "Field round › Waiting on this phone (red <i>Decide</i> badge)",
+     ["After sending, a red <b>Decide</b> badge means someone else changed the same line while you were offline (for example the supervisor recorded the reading online). Everything else you did is already saved.",
+      "For each line read <b>Yours</b> and <b>Now on the server</b> (with who did it).",
+      "Press <b>Keep mine</b> to send your value again over theirs, or <b>Keep theirs</b> to leave the server’s value. Agree with the colleague if unsure.",
+      "<i>Work done – send for review</i> (or <i>on hold</i>) waits until the lines are decided: then press <b>Send again</b> on it.",
+      "If the work order was closed or cancelled meanwhile, or you are no longer assigned, nothing was applied: the line says why. Press <b>Discard</b>, or tell the supervisor."],
+     ("note", "Nothing is ever overwritten without your decision: lines nobody else touched are saved directly, only lines changed by both sides come back as a conflict."))
 
 part("Planned work", "Preventive maintenance, lubrication and condition monitoring create their work orders automatically.")
 proc("Follow the PM schedule", "Planner, supervisor", "Preventive maintenance",
@@ -436,7 +455,7 @@ proc("Update the server to a new version", "Administrator", "PowerShell on a lap
       "Wait until <b>==&gt; Done</b> appears (a few minutes). Do not switch apps or lock the phone meanwhile.",
       "If the screen stops or shows “Connection closed” before Done, run the same command again; it is safe.",
       "Ask users to refresh the page or reopen the app."],
-     ("code", "ssh ubuntu@84.8.106.22 'cd /opt/cmms &amp;&amp; sudo ENV_FILE=deploy/.env scripts/backup.sh /opt/cmms-backups &amp;&amp; sudo BRANCH=ccr-09be8126-0y17zi bash deploy/install-server.sh'"),
+     ("code", "ssh ubuntu@84.8.106.22 'cd /opt/cmms &amp;&amp; sudo ENV_FILE=deploy/.env scripts/backup.sh /opt/cmms-backups &amp;&amp; sudo BRANCH=claude/serene-davinci-0arq11 bash deploy/install-server.sh'"),
      ("note", "The command first takes a backup, then fetches the version named after BRANCH (the administrator is told which one), applies database changes and restarts. The old version keeps running until the new one is ready."),
      ("tip", "Check afterwards: <b>sudo docker compose -f deploy/docker-compose.yml --env-file deploy/.env ps</b> shows api, web, worker and db as Up (healthy)."))
 proc("Check the backups", "Administrator", "Oracle console › Storage › Buckets",
@@ -463,6 +482,9 @@ TROUBLE = [
     ("iPhone: no Install button", "Use the Share button › Add to Home Screen (in Safari, or Chrome’s share button)."),
     ("A KPI tile says “No target set”", "A manager sets it: KPIs and reports › Set target on the KPI card (whole plant, or a department chosen at the top)."),
     ("The control chart says at least 3 values are needed", "Enter more readings (or more months for a KPI); the rules need history to judge the process."),
+    ("A red <i>Decide</i> badge in the field round", "Someone else changed the same line while you were offline: choose Keep mine or Keep theirs (see 2.11). The rest of your work is already saved."),
+    ("<i>Start work</i> is missing on the phone", "The job is not approved yet, or needs LOTO / permit sign-off first (done online with the supervisor), or it is not assigned to you. The phone shows the reason."),
+    ("My offline work stays <i>Waiting</i>", "The phone is not online yet, or you are signed out: open the field round with a connection and press Send now. Work on a new work order waits until the work order itself is created."),
     ("The dashboard looks different on my phone", "Customise dashboard saves your layout on the server: open the dashboard again, or press Reset to default."),
 ]
 
@@ -484,7 +506,7 @@ story = []
 # Cover
 story += [Spacer(1, 50 * mm), Paragraph("PlantPulse", S["title"]), Spacer(1, 4),
           Paragraph("Maintenance management – work instructions: how to do each task, step by step" + v("<br/>Paper mill edition", "<br/>General industry edition"), S["subtitle"]), Spacer(1, 10 * mm)]
-cover = Table([[Paragraph(v("Plant: PM1 · Maintenance department<br/>", "For any industrial plant: production lines, utilities, workshops, buildings<br/>") + "System: https://app.plantpulse-cmms.com<br/>Version: 12 November 2026 (dashboard colour key and customising, KPI targets, Nelson control charts, condition monitoring alarm levels, company KPIs in the app, root cause analysis, search, management presentation)", S["body"])]], colWidths=[170 * mm])
+cover = Table([[Paragraph(v("Plant: PM1 · Maintenance department<br/>", "For any industrial plant: production lines, utilities, workshops, buildings<br/>") + "System: https://app.plantpulse-cmms.com<br/>Version: 15 November 2026 (work orders without internet: create, carry out and conflicts; dashboard colour key and customising, KPI targets, Nelson control charts, condition monitoring alarm levels, company KPIs in the app, root cause analysis, search, management presentation)", S["body"])]], colWidths=[170 * mm])
 cover.setStyle(TableStyle([("LINEBEFORE", (0, 0), (0, -1), 4, AMBER), ("LEFTPADDING", (0, 0), (-1, -1), 12), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
 story += [cover, Spacer(1, 12 * mm),
           Paragraph("Each procedure says <b>who</b> does it and <b>where</b> in the app, then gives numbered steps. "
