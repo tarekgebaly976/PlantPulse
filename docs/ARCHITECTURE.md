@@ -82,7 +82,14 @@ extracted later if load requires it.
 * **Offline:** the PWA is installable and shows an online/offline indicator. The *field round* (`/field`, kept by the
   service worker) works without internet: the equipment catalogue (`GET /offline/catalog`) and an outbox of work
   requests with photos live in IndexedDB; requests are sent later with a `client_ref` (unique per plant), so a re-send
-  returns the first request instead of a duplicate. Other records are saved online only (no silent conflicts).
+  returns the first request instead of a duplicate. Phase 2: the catalogue also carries the user's work orders and the
+  spare-parts list; work orders are created offline (`POST /work-orders` with `client_ref`, `reported_at`,
+  `assign_me`) and executed offline. Each batch of execution (start, checklist / readings, findings, labour, parts,
+  comments, hold / submit) is sent to `POST /offline/work-orders/{id}/sync` with its own reference (`offline_syncs`,
+  migration 0021: a re-send returns the stored answer). Lines are applied one by one in savepoints with a three-way
+  check (value the phone downloaded / phone value / server value now): a line changed by someone else meanwhile
+  comes back as a conflict with both values; `force` lists the lines the user decided to keep. Hold / submit is held
+  back while any line conflicts. LOTO, permits, approvals, review and closing stay online.
 
 ## 4. Code map
 

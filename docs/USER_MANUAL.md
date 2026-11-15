@@ -49,6 +49,25 @@ written by another user on the same phone are only sent when that user signs in.
 the supervisor only when the phone is back online: also call or use the radio. Approvals, LOTO / permit sign-off and
 closing stay online.
 
+**Work orders without internet (engineers, supervisors, technicians).** *Prepare for offline* also keeps your work
+orders on the phone (assigned to you; supervisors also get the active work of their departments) and the spare-parts
+list. The field round then shows two tabs, *Equipment* and *My work orders*.
+* *New work order* on the equipment card (users who may create work orders): type, symptom, title, description,
+  priority and *I will do this work myself*. It is created when the phone is online (the time it was written is kept,
+  sending it again never makes a second one) and follows the normal approval. An *emergency breakdown* you do
+  yourself can be started on the phone at once.
+* Open a work order and press *Start work* (only when it is approved / scheduled and, if it needs LOTO or a permit,
+  already signed off — the sign-off is done on site with the supervisor, online). Then fill the checklist (OK / Not
+  OK, readings with their range: outside the range is shown at once), book your hours, add the spare parts used
+  (from the list, or a description), write findings, corrective action, root cause, recommendations, downtime and
+  comments, and finish with *Put on hold* or *Work done – send for review*. Everything is kept on the phone and sent
+  by itself when online (*Waiting on this phone*).
+* **Conflicts.** If someone else changed the same checklist line or text meanwhile (for example the supervisor
+  recorded the reading online), that line is not overwritten: it shows *Yours* and *Now on the server* with
+  *Keep mine* / *Keep theirs*. Everything else of the batch is saved. *Send for review* waits until the conflicts
+  are decided (*Send again*). If the work order was closed or cancelled meanwhile, or you are no longer assigned,
+  nothing is applied and each line says why.
+
 ## 3. Reporting a problem (everyone with "Work requests")
 *Work requests → New work request* (or the red button on an asset page / after scanning its QR code). Choose the asset,
 describe the symptom, tick **Breakdown** if the machine is stopped — supervisors are alerted immediately.

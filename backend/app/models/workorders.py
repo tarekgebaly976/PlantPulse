@@ -61,6 +61,8 @@ class WorkOrder(Base, PlantScoped, Timestamped, Attributed):
         Index("ix_wo_plant_created", "plant_id", "created_at"),
         Index("ix_wo_external_ref", "plant_id", "external_ref", unique=True, postgresql_where=text("external_ref IS NOT NULL")),
         CheckConstraint("estimated_hours IS NULL OR estimated_hours >= 0", name="est_hours_nonneg"),
+        # Created on a phone without internet: sent again after a lost answer → the first one is returned.
+        Index("ix_wo_client_ref", "plant_id", "client_ref", unique=True, postgresql_where=text("client_ref IS NOT NULL")),
     )
     id: Mapped[uuid.UUID] = uuid_pk()
     number: Mapped[str] = mapped_column(String(40))
@@ -127,6 +129,9 @@ class WorkOrder(Base, PlantScoped, Timestamped, Attributed):
     condition_alert_id: Mapped[uuid.UUID | None] = fk("condition_alerts.id", nullable=True)
     shutdown_package_id: Mapped[uuid.UUID | None] = fk("shutdown_packages.id", nullable=True)
     work_request_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    client_ref: Mapped[str | None] = mapped_column(String(40))  # set by the phone (offline field mode)
+    reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # when written, if written offline
 
     version: Mapped[int] = mapped_column(Integer, default=1)  # optimistic concurrency token
     __mapper_args__ = {"version_id_col": version}
@@ -232,6 +237,22 @@ class WOComment(Base):
     body: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     data: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+
+class OfflineSync(Base, PlantScoped):
+    """One batch of work done on a work order without internet (start, checklist, readings, labour, parts, findings,
+    hold / submit), sent later by the phone with its own reference. Sent again → the stored answer, nothing applied
+    twice. The answer lists what was applied and what conflicted with changes made meanwhile by others."""
+
+    __tablename__ = "offline_syncs"
+    __table_args__ = (UniqueConstraint("plant_id", "client_ref"), Index("ix_offline_syncs_wo", "work_order_id"))
+    id: Mapped[uuid.UUID] = uuid_pk()
+    client_ref: Mapped[str] = mapped_column(String(40))
+    user_id: Mapped[uuid.UUID] = fk("users.id", index=False)
+    work_order_id: Mapped[uuid.UUID] = fk("work_orders.id", ondelete="CASCADE", index=False)
+    written_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    result: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 PERMIT_TYPES = ("cold_work", "hot_work", "electrical", "confined_space", "work_at_height", "excavation", "lifting", "chemical")

@@ -1,10 +1,12 @@
 "use client";
 
 // Field round: works without internet. Scan any equipment QR label (or search), see its card and last jobs, and raise
-// a work request with photos. Requests wait on the phone and are sent by themselves when the connection is back.
+// a work request with photos. Engineers and supervisors create work orders; whoever carries out the work does it here
+// too (start, checklist and readings, labour, parts, findings, hold / submit). Everything waits on the phone and is
+// sent by itself when the connection is back; what someone else changed meanwhile comes back as a conflict to decide.
 // Outside the main app frame on purpose: it must open and work with no connection and no server answer.
 
-import { ActionIcon, Alert, Anchor, Badge, Button, Card, Checkbox, Container, FileButton, Group, Image, Loader, Modal, Select, SimpleGrid, Stack, Text,
+import { ActionIcon, Alert, Anchor, Badge, Button, Card, Checkbox, Container, FileButton, Group, Image, Loader, Modal, SegmentedControl, Select, SimpleGrid, Stack, Text,
   Textarea, TextInput, Title } from "@mantine/core";
 import { IconArrowLeft, IconCamera, IconCloudUpload, IconQrcode, IconRefresh, IconSearch, IconTrash, IconWifi, IconWifiOff } from "@tabler/icons-react";
 import { useNetwork } from "@mantine/hooks";
@@ -13,8 +15,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import i18n, { applyDirection, toLang } from "@/lib/i18n";
-import { addRequest, deleteItem, listOutbox, loadCatalog, newRef, prepareOffline, pruneSent, shrinkPhoto, syncOutbox,
-  type CAsset, type Catalog, type OutItem } from "@/lib/offline";
+import { addRequest, discardItem, isRequest, listOutbox, loadCatalog, newRef, prepareOffline, pruneSent, shrinkPhoto, syncOutbox, viewWo,
+  type AnyItem, type CAsset, type Catalog } from "@/lib/offline";
+import { ConflictCard, WoFlag, WoForm, WoList, WoScreen } from "./WorkOrders";
 import { useSession } from "@/lib/session";
 
 const STALE_MS = 12 * 3600 * 1000;
@@ -64,7 +67,7 @@ function Scanner({ onCode, onClose }: { onCode: (text: string) => void; onClose:
 
 const CRIT_COLOR: Record<string, string> = { A: "red", B: "orange", C: "gray" };
 
-function AssetCard({ cat, a, onRequest }: { cat: Catalog; a: CAsset; onRequest: () => void }) {
+function AssetCard({ cat, a, items, onRequest, onWo, onOpen }: { cat: Catalog; a: CAsset; items: AnyItem[]; onRequest: () => void; onWo: () => void; onOpen: (id: string) => void }) {
   const { t } = useTranslation();
   const byId = useMemo(() => new Map(cat.assets.map((x) => [x.id, x])), [cat]);
   const chain: CAsset[] = [];
@@ -82,7 +85,17 @@ function AssetCard({ cat, a, onRequest }: { cat: Catalog; a: CAsset; onRequest: 
       </Group>
       {chain.length > 0 && <Text size="xs" c="dimmed" mt={4}>{chain.map((x) => x.c).join(" › ")}</Text>}
       <Text size="sm" mt={6}>{[dept?.c, a.et, a.loc].filter(Boolean).join(" · ")}</Text>
-      <Button mt="md" fullWidth size="md" color="red" onClick={onRequest} className="tap-target" data-testid="field-new-request">{t("req.new")}</Button>
+      {cat.perms?.request !== false && <Button mt="md" fullWidth size="md" color="red" onClick={onRequest} className="tap-target" data-testid="field-new-request">{t("req.new")}</Button>}
+      {cat.perms?.create && <Button mt="xs" fullWidth size="md" variant="light" onClick={onWo} className="tap-target" data-testid="field-new-wo">{t("wo.new")}</Button>}
+      {(cat.wos ?? []).filter((w) => w.a === a.id).map((w0) => { const w = viewWo(w0, items); return (
+        <Card key={w.id} withBorder padding={6} mt="xs" style={{ cursor: "pointer" }} onClick={() => onOpen(w.id)}>
+          <Group gap="xs" wrap="nowrap">
+            <Text size="xs" fw={700} className="mono">{w.local ? t("fwo.newLocal") : w.n}</Text>
+            <Text size="xs" lineClamp={1} style={{ flex: 1 }}>{w.t}</Text>
+            <Badge size="xs" variant="light">{t(`status.${w.s}`, { defaultValue: w.s })}</Badge>
+            <WoFlag items={items} id={w.id} />
+          </Group>
+        </Card>); })}
       <Text fw={600} size="sm" mt="md">{t("field.recent")}</Text>
       {recent.length === 0 ? <Text size="sm" c="dimmed">{t("field.noRecent")}</Text> : (
         <Stack gap={4} mt={4}>{recent.map((w) => (
@@ -159,14 +172,23 @@ function RequestForm({ cat, a, online, onClose, onSaved }: { cat: Catalog; a: CA
   );
 }
 
-const ST_COLOR: Record<string, string> = { pending: "orange", sending: "blue", sent: "green", error: "red", auth: "red" };
+/** Lines of work in one batch (for the outbox). */
+function workCount(i: { batch: { start: boolean; checklist: object; fields: object; labor: unknown[]; parts: unknown[]; comments: unknown[]; finish: string | null } }): number {
+  const b = i.batch;
+  return (b.start ? 1 : 0) + Object.keys(b.checklist).length + Object.keys(b.fields).length + b.labor.length + b.parts.length + b.comments.length + (b.finish ? 1 : 0);
+}
+
+const ST_COLOR: Record<string, string> = { pending: "orange", sending: "blue", sent: "green", error: "red", auth: "red", conflict: "red" };
 
 export default function FieldPage() {
   const { t } = useTranslation();
   const { me } = useSession();
   const online = useNetwork().online;
   const [cat, setCat] = useState<Catalog | null | undefined>(undefined);
-  const [items, setItems] = useState<OutItem[]>([]);
+  const [items, setItems] = useState<AnyItem[]>([]);
+  const [tab, setTab] = useState<"eq" | "wo">("eq");
+  const [woForm, setWoForm] = useState(false);
+  const [woOpen, setWoOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [scan, setScan] = useState(false);
@@ -177,7 +199,7 @@ export default function FieldPage() {
 
   // Back closes the camera or the request form first (nothing typed is lost); the next Back leaves the page.
   // The history entry keeps Next.js's own state, so its router treats it as the same page.
-  const overlay = scan || form;
+  const overlay = scan || form || woForm || woOpen !== null;
   const popped = useRef(false);
   const overlayOpen = useRef(false);
   const skipPop = useRef(false);
@@ -186,7 +208,7 @@ export default function FieldPage() {
     if (!overlay) return;
     popped.current = false;
     window.history.pushState({ ...(window.history.state ?? {}), ppOverlay: true }, "");
-    const onPop = () => { popped.current = true; setScan(false); setForm(false); };
+    const onPop = () => { popped.current = true; setScan(false); setForm(false); setWoForm(false); setWoOpen(null); };
     window.addEventListener("popstate", onPop);
     return () => {
       window.removeEventListener("popstate", onPop);
@@ -211,12 +233,14 @@ export default function FieldPage() {
     return () => window.removeEventListener("pagehide", off);
   }, []);
 
-  const reload = useCallback(async () => { setItems(await listOutbox()); }, []);
+  // Items and the catalogue together: sending a work order or its work refreshes the copy on the phone.
+  const reload = useCallback(async () => { const [i, c] = await Promise.all([listOutbox(), loadCatalog()]); setItems(i); if (c) setCat(c); }, []);
   const sync = useCallback(async () => {
     if (!navigator.onLine) return;
     const r = await syncOutbox();
     await reload();
-    if (r.sent) setNote(t("field.sentN", { n: r.sent }));
+    if (r.conflicts) setNote(t("fwo.conflictsN", { n: r.conflicts }));
+    else if (r.sent) setNote(t("field.sentN", { n: r.sent }));
   }, [reload, t]);
   const prepare = useCallback(async () => {
     setBusy(true); setErr(null);
@@ -290,20 +314,26 @@ export default function FieldPage() {
           </Group>
           {err && <Alert color="red">{err}</Alert>}
           {note && <Alert color="blue" withCloseButton onClose={() => setNote(null)}>{note}</Alert>}
-          {scan ? <Scanner onCode={onCode} onClose={() => setScan(false)} /> : (
-            <Button size="lg" leftSection={<IconQrcode size={22} />} onClick={() => setScan(true)} className="tap-target" data-testid="field-scan">{t("field.scan")}</Button>
+          {cat.perms?.execute && (
+            <SegmentedControl fullWidth value={tab} onChange={(v) => setTab(v as "eq" | "wo")} data-testid="field-tabs"
+              data={[{ value: "eq", label: t("fwo.tabEquipment") }, { value: "wo", label: t("fwo.tabWos", { n: (cat.wos ?? []).length }) }]} />
           )}
-          <TextInput leftSection={<IconSearch size={16} />} placeholder={t("field.search")} value={q} onChange={(e) => setQ(e.currentTarget.value)} data-testid="field-search" />
-          {results.length > 0 && !sel && (
-            <Card withBorder padding={0}>{results.map((a) => (
-              <Group key={a.id} px="sm" py={8} gap="xs" wrap="nowrap" style={{ cursor: "pointer", borderBottom: "1px solid var(--mantine-color-default-border)" }}
-                onClick={() => { setSel(a); setQ(""); }}>
-                <Text size="sm" fw={700} className="mono">{a.c}</Text><Text size="sm" lineClamp={1} style={{ flex: 1 }}>{a.n}</Text>
-                <Badge size="xs" color={CRIT_COLOR[a.k] ?? "gray"}>{a.k}</Badge>
-              </Group>))}
-            </Card>)}
-          {sel && <AssetCard cat={cat} a={sel} onRequest={() => setForm(true)} />}
-          {sel && <Button variant="subtle" color="gray" onClick={() => setSel(null)}>{t("field.another")}</Button>}
+          {tab === "wo" && cat.perms?.execute ? <WoList cat={cat} items={items} onOpen={setWoOpen} /> : (<>
+            {scan ? <Scanner onCode={onCode} onClose={() => setScan(false)} /> : (
+              <Button size="lg" leftSection={<IconQrcode size={22} />} onClick={() => setScan(true)} className="tap-target" data-testid="field-scan">{t("field.scan")}</Button>
+            )}
+            <TextInput leftSection={<IconSearch size={16} />} placeholder={t("field.search")} value={q} onChange={(e) => setQ(e.currentTarget.value)} data-testid="field-search" />
+            {results.length > 0 && !sel && (
+              <Card withBorder padding={0}>{results.map((a) => (
+                <Group key={a.id} px="sm" py={8} gap="xs" wrap="nowrap" style={{ cursor: "pointer", borderBottom: "1px solid var(--mantine-color-default-border)" }}
+                  onClick={() => { setSel(a); setQ(""); }}>
+                  <Text size="sm" fw={700} className="mono">{a.c}</Text><Text size="sm" lineClamp={1} style={{ flex: 1 }}>{a.n}</Text>
+                  <Badge size="xs" color={CRIT_COLOR[a.k] ?? "gray"}>{a.k}</Badge>
+                </Group>))}
+              </Card>)}
+            {sel && <AssetCard cat={cat} a={sel} items={items} onRequest={() => setForm(true)} onWo={() => setWoForm(true)} onOpen={setWoOpen} />}
+            {sel && <Button variant="subtle" color="gray" onClick={() => setSel(null)}>{t("field.another")}</Button>}
+          </>)}
 
           <Group justify="space-between" mt="md">
             <Text fw={700}>{t("field.outbox")} {waiting.length > 0 && <Badge color="orange" ms={4}>{waiting.length}</Badge>}</Text>
@@ -311,12 +341,24 @@ export default function FieldPage() {
           </Group>
           {items.length === 0 ? <Text size="sm" c="dimmed">{t("field.nothing")}</Text> : (
             <Stack gap="xs" data-testid="field-outbox">{items.map((i) => (
-              <Card key={i.id} withBorder padding="xs">
+              <Card key={i.id} withBorder padding="xs" data-testid={`out-${i.kind ?? "request"}`}>
                 <Group justify="space-between" wrap="nowrap" align="start">
                   <div style={{ minWidth: 0 }}>
-                    <Text size="sm" fw={600} lineClamp={1}>{i.asset_code} · {i.body.title}</Text>
-                    <Text size="xs" c="dimmed">{new Date(i.created).toLocaleString()}{i.photos.length ? ` · ${t("field.photos", { n: i.photos.length })}` : ""}{i.body.is_breakdown ? ` · ${t("req.breakdown")}` : ""}</Text>
-                    {i.number && <Text size="xs" fw={600}>{i.number}{i.open_on_asset ? ` · ${t("field.openOnAsset", { n: i.open_on_asset })}` : ""}</Text>}
+                    {isRequest(i) ? (<>
+                      <Text size="sm" fw={600} lineClamp={1}>{i.asset_code} · {i.body.title}</Text>
+                      <Text size="xs" c="dimmed">{new Date(i.created).toLocaleString()}{i.photos.length ? ` · ${t("field.photos", { n: i.photos.length })}` : ""}{i.body.is_breakdown ? ` · ${t("req.breakdown")}` : ""}</Text>
+                      {i.number && <Text size="xs" fw={600}>{i.number}{i.open_on_asset ? ` · ${t("field.openOnAsset", { n: i.open_on_asset })}` : ""}</Text>}
+                    </>) : i.kind === "wo_new" ? (<>
+                      <Text size="sm" fw={600} lineClamp={1}>{t("wo.new")} · {i.asset_code} · {i.body.title}</Text>
+                      <Text size="xs" c="dimmed">{new Date(i.created).toLocaleString()} · {t(`woType.${i.body.type}`)}</Text>
+                      {i.number && <Text size="xs" fw={600}>{i.number}</Text>}
+                    </>) : (<>
+                      <Text size="sm" fw={600} lineClamp={1} style={{ cursor: "pointer" }} onClick={() => setWoOpen(i.wo_ref)}>
+                        {i.wo_number || t("fwo.newLocal")} · {i.asset_code} · {i.title}</Text>
+                      <Text size="xs" c="dimmed">{new Date(i.updated).toLocaleString()} · {t("fwo.workDone", { n: workCount(i) })}</Text>
+                      {i.status === "pending" && i.wo_ref.startsWith("local:") && <Text size="xs" c="orange">{t("fwo.waitsForWo")}</Text>}
+                      {i.status === "conflict" && <ConflictCard cat={cat} it={i} onChanged={() => void reload()} />}
+                    </>)}
                     {i.status === "auth" && <Text size="xs" c="red">{i.error === "other-user" ? t("field.otherUser") : t("field.signInAgain")}</Text>}
                     {i.status === "error" && <Text size="xs" c="red">{i.error}</Text>}
                   </div>
@@ -324,8 +366,8 @@ export default function FieldPage() {
                     <Badge size="sm" color={ST_COLOR[i.status] ?? "gray"} variant="light"
                       styles={{ root: { overflow: "visible", maxWidth: "none", flexShrink: 0, textTransform: "none" }, label: { overflow: "visible", textOverflow: "clip" } }}>
                       {t(`field.st_${i.status}`)}</Badge>
-                    {i.status !== "sent" && i.status !== "sending" && <ActionIcon size="sm" variant="subtle" color="red" aria-label={t("common.delete")}
-                      onClick={async () => { if (window.confirm(t("field.deleteConfirm"))) { await deleteItem(i.id); await reload(); } }}><IconTrash size={14} /></ActionIcon>}
+                    {i.status !== "sent" && i.status !== "sending" && i.status !== "conflict" && <ActionIcon size="sm" variant="subtle" color="red" aria-label={t("common.delete")}
+                      onClick={async () => { if (window.confirm(t(isRequest(i) ? "field.deleteConfirm" : i.kind === "wo_new" ? "fwo.deleteNewConfirm" : "fwo.deleteWorkConfirm"))) { await discardItem(i.id); await reload(); } }}><IconTrash size={14} /></ActionIcon>}
                   </Group>
                 </Group>
               </Card>))}
@@ -334,6 +376,9 @@ export default function FieldPage() {
           <Text size="xs" c="dimmed" mt="sm">{t("field.onlineOnly")}</Text>
         </Stack>
       )}
+      {woForm && sel && cat && <WoForm cat={cat} a={sel} online={online} onClose={() => setWoForm(false)}
+        onSaved={(id, startNow) => { setWoForm(false); setNote(online ? t("field.savedSending") : t("fwo.savedOffline")); void reload().then(() => { if (startNow) { setTab("wo"); setWoOpen(id); } return sync(); }); }} />}
+      {woOpen && cat && <WoScreen cat={cat} id={woOpen} items={items} onClose={() => setWoOpen(null)} onChanged={() => void reload()} />}
       {form && sel && cat && <RequestForm cat={cat} a={sel} online={online} onClose={() => setForm(false)}
         onSaved={() => { setForm(false); setSel(null); setNote(online ? t("field.savedSending") : t("field.savedOffline")); void reload().then(() => sync()); }} />}
     </Container>

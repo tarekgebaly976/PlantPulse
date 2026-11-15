@@ -36,12 +36,13 @@ real-device mobile testing, SSO or MFA for privileged users, and a penetration t
 | Performance | Measured on 100k assets / 50k WOs; must be re-measured on target infra |
 | Operations | Health checks, JSON logs, job tracking; alert rules defined but not configured in a monitoring product |
 | Backup/DR | Scripts + passing drill; production should use managed PITR |
-| Mobile | Responsive + PWA installable; **field round offline**: QR scan, equipment card and work requests with photos, sent later without duplicates |
+| Mobile | Responsive + PWA installable; **field round offline**: QR scan, equipment card and work requests with photos, work orders created and carried out (checklist, readings, labour, parts, findings, hold / submit) — sent later without duplicates, with a conflict check per line |
 | i18n | Full EN/AR UI with RTL; backend-generated messages and PDFs are English-only |
 
 ## Known limitations
-1. **Offline work is limited to the field round**: scanning QR labels and raising work requests (with photos) work
-   without internet and are sent later; executing work orders, readings and approvals still need a connection.
+1. **Offline work is limited to the field round**: QR labels, work requests, work orders created and carried out work
+   without internet; LOTO / permit sign-off, approvals, review, closing, stock issues and condition-monitoring
+   rounds still need a connection.
 2. Backend messages (validation errors, KPI "unavailable" reasons, notifications) and PDF reports are English only;
    PDFs do not shape Arabic text.
 3. Some configuration is API-only (shift definitions, numbering prefixes); no UI form yet.
@@ -56,8 +57,8 @@ real-device mobile testing, SSO or MFA for privileged users, and a penetration t
 ## Roadmap (suggested order)
 1. Cloud deployment to staging (GCP template), monitoring alerts, PITR, real-device testing → pilot in one department.
 2. OIDC SSO (Azure AD / Google) + MFA for admins and approvers; nonce-based CSP; WAF.
-3. Offline technician mode, next steps: work orders written directly by engineers, then checklists, readings, labour
-   and parts on assigned work orders (per-record version check, conflict UI). Done: field round (QR, work requests).
+3. Offline technician mode: done (field round with QR and work requests; work orders created and carried out offline
+   with a conflict check per line). Next: condition-monitoring rounds and photos on work orders offline.
 4. Arabic for server-generated messages and PDFs (RTL font shaping).
 5. Planner calendar/Gantt with drag-and-drop scheduling and capacity view; UI for shift definitions/numbering.
 6. OPC UA / MQTT gateway reference implementation; vibration spectrum attachments.

@@ -253,6 +253,21 @@ class WOCreate(In):
     safety_requirements: str | None = None
     supervisor_id: uuid.UUID | None = None
     shutdown_package_id: uuid.UUID | None = None
+    # Field mode (no internet): the phone's own reference (no duplicate when sent again), when it was written, and
+    # "I will do this work myself" (the creator is assigned, if they may execute work).
+    client_ref: str | None = Field(None, min_length=8, max_length=40, pattern=r"^[A-Za-z0-9-]+$")
+    reported_at: datetime | None = None
+    assign_me: bool = False
+
+
+def _phone_time(v: datetime | None) -> datetime | None:
+    """Time written on a phone: kept unless the phone clock is far off (future, or more than 14 days back)."""
+    if v is None:
+        return None
+    if v.tzinfo is None:
+        v = v.replace(tzinfo=UTC)
+    now = utcnow()
+    return None if v > now + timedelta(minutes=5) or v < now - timedelta(days=14) else v
 
 
 class WOUpdate(In):
@@ -372,6 +387,8 @@ class WOOut(ORM):
     condition_alert_id: uuid.UUID | None
     shutdown_package_id: uuid.UUID | None
     work_request_id: uuid.UUID | None
+    client_ref: str | None = None
+    reported_at: datetime | None = None
     version: int
     created_at: datetime
     assignments: list[AssignmentOut]
@@ -458,16 +475,25 @@ def list_work_orders(
 
 @router.post("/work-orders", response_model=WOOut, status_code=201)
 def create_wo(body: WOCreate, ctx: Ctx = Depends(require("wo.create")), db: Session = Depends(get_db, scope="function")) -> WorkOrder:
+    if body.client_ref:  # sent again by the phone: the work order already exists
+        old = db.execute(
+            select(WorkOrder).where(WorkOrder.plant_id == ctx.plant_id, WorkOrder.client_ref == body.client_ref)
+        ).scalar_one_or_none()
+        if old is not None:
+            if old.created_by_id != ctx.user.id:
+                raise HTTPException(409, "This reference belongs to another work order")
+            return old
     a = _asset(db, ctx, body.asset_id)
     if not ctx.dept_ok(a.department_id):
         raise HTTPException(403, "Your access is limited to your department")
     data = body.model_dump()
-    for k in ("asset_id", "type", "title", "priority", "description", "symptoms", "due_date"):
+    for k in ("asset_id", "type", "title", "priority", "description", "symptoms", "due_date", "assign_me"):
         data.pop(k)
+    data["reported_at"] = _phone_time(data["reported_at"])
     if body.planned_start and body.planned_end and body.planned_end < body.planned_start:
         raise HTTPException(422, "planned_end must be after planned_start")
     _check_refs(db, ctx, data)
-    return svc.create_work_order(
+    wo = svc.create_work_order(
         db,
         ctx.plant,
         asset=a,
@@ -480,6 +506,13 @@ def create_wo(body: WOCreate, ctx: Ctx = Depends(require("wo.create")), db: Sess
         due_date=body.due_date,
         **data,
     )
+    if body.assign_me and ctx.has("wo.execute"):
+        try:  # leave on the roster etc. must not lose a work order written offline: it stays unassigned
+            with db.begin_nested():
+                svc.assign(db, ctx, wo, [ctx.user.id], ctx.user.id, force=True)
+        except DomainError:
+            pass
+    return wo
 
 
 def _check_refs(db: Session, ctx: Ctx, data: dict) -> None:
@@ -1017,6 +1050,22 @@ class ChecklistUpdate(In):
     remark: str | None = None
 
 
+def apply_checklist(ctx: Ctx, item: WOChecklistItem, body: ChecklistUpdate, done_at: datetime | None = None) -> None:
+    """Record one checklist line (a reading out of its range is marked not OK). done_at: when it was done on a phone
+    without internet (else now)."""
+    if item.kind.value == "reading" and body.is_done and body.reading_value is None:
+        raise HTTPException(422, "A reading value is required")
+    item.is_done, item.remark = body.is_done, body.remark
+    item.reading_value = body.reading_value  # type: ignore[assignment]
+    if body.reading_value is not None and (item.min_value is not None or item.max_value is not None):
+        lo = float(item.min_value) if item.min_value is not None else float("-inf")
+        hi = float(item.max_value) if item.max_value is not None else float("inf")
+        item.is_ok = lo <= body.reading_value <= hi
+    else:
+        item.is_ok = body.is_ok if body.is_ok is not None else (True if body.is_done else None)
+    item.done_by_id, item.done_at = (ctx.user.id, done_at or utcnow()) if body.is_done else (None, None)
+
+
 def _require_execute(ctx: Ctx, wo: WorkOrder) -> None:
     if not (ctx.has("wo.execute") and (_is_assignee(ctx, wo) or ctx.has("wo.assign"))):
         raise HTTPException(403, "Only assigned technicians or supervisors may record execution")
@@ -1037,17 +1086,7 @@ def update_checklist(
     item = db.get(WOChecklistItem, item_id)
     if item is None or item.work_order_id != wo.id:
         raise HTTPException(404, "Checklist item not found")
-    if item.kind.value == "reading" and body.is_done and body.reading_value is None:
-        raise HTTPException(422, "A reading value is required")
-    item.is_done, item.remark = body.is_done, body.remark
-    item.reading_value = body.reading_value
-    if body.reading_value is not None and (item.min_value is not None or item.max_value is not None):
-        lo = float(item.min_value) if item.min_value is not None else float("-inf")
-        hi = float(item.max_value) if item.max_value is not None else float("inf")
-        item.is_ok = lo <= body.reading_value <= hi
-    else:
-        item.is_ok = body.is_ok if body.is_ok is not None else (True if body.is_done else None)
-    item.done_by_id, item.done_at = (ctx.user.id, utcnow()) if body.is_done else (None, None)
+    apply_checklist(ctx, item, body)
     return {
         "id": item.id,
         "is_done": item.is_done,

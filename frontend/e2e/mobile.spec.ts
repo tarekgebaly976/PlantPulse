@@ -52,3 +52,49 @@ test("field round: equipment card from search and a work request sent from the p
   await page.getByTestId("field-save").click();
   await expect(page.getByTestId("field-outbox")).toContainText(/WR-/, { timeout: 20_000 }); // sent at once when online
 });
+
+test("field round offline: a work order created, started, booked and sent for review without internet, sent when online", async ({ page, context }) => {
+  await login(page, "engineer");
+  await page.goto("/field");
+  const prepare = page.getByTestId("field-prepare");
+  if (await prepare.isVisible().catch(() => false)) await prepare.click();
+  await expect(page.getByTestId("field-tabs")).toBeVisible();
+  await context.setOffline(true);
+  await page.getByTestId("field-search").fill("crusher motor");
+  await page.getByText("L2-CRS-MTR").first().click();
+  await page.getByTestId("field-new-wo").click();
+  await page.getByTestId("fwo-type").click();
+  await page.getByRole("option", { name: "Emergency breakdown" }).click();
+  await page.getByTestId("fwo-title").fill("E2E offline breakdown: motor tripped");
+  await expect(page.getByTestId("fwo-me")).toBeChecked();
+  await page.getByTestId("fwo-save").click();
+  // An emergency the engineer does himself opens at once and can start on the phone.
+  const screen = page.getByTestId("fwo-screen");
+  await expect(screen).toBeVisible();
+  await page.getByTestId("fwo-start").click();
+  await expect(page.getByTestId("fwo-status")).toHaveText("In progress");
+  await page.getByTestId("fwo-hours").fill("1.5");
+  await page.getByTestId("fwo-add-hours").click();
+  await expect(screen).toContainText("1.5 h");
+  await page.getByTestId("fwo-part-text").fill("Motor terminal lug");
+  await page.getByTestId("fwo-add-part").click();
+  await page.getByTestId("fwo-findings").fill("Terminal lug burnt at phase L2");
+  await page.getByTestId("fwo-root_cause").fill("Loose terminal");
+  await page.getByTestId("fwo-root_cause").blur();
+  await page.getByTestId("fwo-submit").click();
+  await expect(page.getByTestId("fwo-status")).toHaveText(/Awaiting review/);
+  await page.getByRole("button", { name: "Close" }).last().click();
+  await expect(page.getByTestId("out-wo_new")).toContainText("Waiting");
+  await expect(page.getByTestId("out-wo_sync")).toContainText("Waiting");
+  // Back online: the work order is created first, then the work done on it.
+  await context.setOffline(false);
+  await expect(page.getByTestId("out-wo_new")).toContainText(/WO-/, { timeout: 30_000 });
+  await expect(page.getByTestId("out-wo_sync")).toContainText("Sent", { timeout: 30_000 });
+  const num = (await page.getByTestId("out-wo_new").innerText()).match(/WO-[\w-]+/)![0];
+  const plant = (await (await page.request.get("/api/v1/auth/me")).json()).plants[0].plant_id as string;
+  const list = await (await page.request.get("/api/v1/work-orders", { params: { q: num }, headers: { "X-Plant-Id": plant } })).json();
+  const wo = list.items.find((w: { number: string }) => w.number === num);
+  expect(wo.status).toBe("awaiting_review");
+  expect(wo.findings).toBe("Terminal lug burnt at phase L2");
+  expect(wo.actual_labor_hours).toBe(1.5);
+});
