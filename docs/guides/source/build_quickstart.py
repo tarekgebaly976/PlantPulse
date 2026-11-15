@@ -1,7 +1,7 @@
 """PlantPulse – quick start and glossary (Arabic or English PDF): how to open and use the system (website, app on a
 phone, links), the main screens, the daily path, working without internet, the basic terms with a short meaning,
 statuses, roles, and the administrator's links and commands. Printed by Chromium like the Arabic guides.
-argv: out.pdf ar|en"""
+argv: out.pdf ar|en [users]  – "users" leaves out the administrator's server and commands (edition for every user)"""
 
 import os
 import sys
@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ar_pdf import grid, page, render, steps  # noqa: E402
 
 OUT, LANG = sys.argv[1], sys.argv[2]
+USERS = len(sys.argv) > 3 and sys.argv[3] == "users"  # edition without the administrator part
 AR = LANG == "ar"
 APP, SITE, DEMO = "https://app.plantpulse-cmms.com", "https://plantpulse-cmms.com", "https://demo.plantpulse-cmms.com"
 PLAY = "https://play.google.com/store/apps/details?id=io.plantpulse.app"
@@ -231,25 +232,26 @@ H.append('<div class="proc">' + sec(8, T("الأدوار باختصار", "Roles
                [T("مشاهد الإدارة", "Management viewer"), T("يرى كل شيء للقراءة فقط ويصدّر التقارير.", "Sees everything read-only, exports reports.")]], [32, 68]) + "</div>")
 
 # ---------------- 9 administrator ----------------
-H.append("<div class='pb'></div>" + sec(9, T("للمسؤول: الخادم والأوامر", "For the administrator: server and commands"),
-         T("تُشغَّل من Oracle Cloud Shell أو PowerShell. الصق الأمر كسطر واحد.", "Run from Oracle Cloud Shell or PowerShell. Paste each command as one line.")))
-H.append(grid([[T("البند", "Item"), T("القيمة", "Value")],
-               [T("الخادم", "Server"), T(f"Oracle VM {L('84.8.106.22')} · الكود في {L('/opt/cmms')} (Docker Compose)", "Oracle VM 84.8.106.22 · code in /opt/cmms (Docker Compose)")],
-               [T("الفرع الحالي", "Current branch"), L(BRANCH)],
-               [T("النسخ الاحتياطية", "Backups"), T(f"يومية، وقبل كل تحديث في {L('/opt/cmms-backups')} وفي Oracle Storage › Buckets", "Daily, and before each update in /opt/cmms-backups and in Oracle Storage › Buckets")]], [28, 72]))
-H.append(h3(T("تحديث النظام", "Update the system")))
-H.append(code(f"ssh ubuntu@84.8.106.22 'cd /opt/cmms &amp;&amp; sudo ENV_FILE=deploy/.env scripts/backup.sh /opt/cmms-backups &amp;&amp; sudo BRANCH={BRANCH} bash deploy/install-server.sh'"))
-H.append(h3(T("تحديث النسخة التجريبية DEMO ونسخ العملاء", "Update the demo and the customer copies")))
-H.append(code("ssh ubuntu@84.8.106.22 'cd /opt/cmms &amp;&amp; sudo bash scripts/demo.sh launch-update &amp;&amp; sudo bash scripts/customer.sh launch-update-all'"))
-H.append(h3(T("متابعة التقدم", "Follow the progress")))
-H.append(code("ssh ubuntu@84.8.106.22 'sudo bash /opt/cmms/scripts/demo.sh progress'\nssh ubuntu@84.8.106.22 'sudo bash /opt/cmms/scripts/customer.sh progress'"))
-H.append(h3(T("عميل جديد بتجربة 30 يومًا", "New customer with a 30-day trial")))
-H.append(code("ssh ubuntu@84.8.106.22 'cd /opt/cmms &amp;&amp; sudo bash scripts/customer.sh new NAME EMAIL COMPANY --trial 30'"))
-H.append(box("note", T(f"انتظر حتى تظهر {L('==&gt; Done')}. إذا انقطعت النافذة شغّل نفس الأمر مرة أخرى؛ هذا آمن. لا تلصق الأوامر داخل جلسة الخادم نفسها (يظهر {L('^[[200~')})، بل من Cloud Shell كسطر واحد. التفاصيل في docs/TRIAL-PLAYBOOK.md.",
-                       "Wait for ==&gt; Done. If the window drops, run the same command again; it is safe. Do not paste inside the server session itself (you get ^[[200~); paste from Cloud Shell as one line. Details in docs/TRIAL-PLAYBOOK.md.")))
+if not USERS:
+    H.append("<div class='pb'></div>" + sec(9, T("للمسؤول: الخادم والأوامر", "For the administrator: server and commands"),
+             T("تُشغَّل من Oracle Cloud Shell أو PowerShell. الصق الأمر كسطر واحد.", "Run from Oracle Cloud Shell or PowerShell. Paste each command as one line.")))
+    H.append(grid([[T("البند", "Item"), T("القيمة", "Value")],
+                   [T("الخادم", "Server"), T(f"Oracle VM {L('84.8.106.22')} · الكود في {L('/opt/cmms')} (Docker Compose)", "Oracle VM 84.8.106.22 · code in /opt/cmms (Docker Compose)")],
+                   [T("الفرع الحالي", "Current branch"), L(BRANCH)],
+                   [T("النسخ الاحتياطية", "Backups"), T(f"يومية، وقبل كل تحديث في {L('/opt/cmms-backups')} وفي Oracle Storage › Buckets", "Daily, and before each update in /opt/cmms-backups and in Oracle Storage › Buckets")]], [28, 72]))
+    H.append(h3(T("تحديث النظام", "Update the system")))
+    H.append(code(f"ssh ubuntu@84.8.106.22 'cd /opt/cmms &amp;&amp; sudo ENV_FILE=deploy/.env scripts/backup.sh /opt/cmms-backups &amp;&amp; sudo BRANCH={BRANCH} bash deploy/install-server.sh'"))
+    H.append(h3(T("تحديث النسخة التجريبية DEMO ونسخ العملاء", "Update the demo and the customer copies")))
+    H.append(code("ssh ubuntu@84.8.106.22 'cd /opt/cmms &amp;&amp; sudo bash scripts/demo.sh launch-update &amp;&amp; sudo bash scripts/customer.sh launch-update-all'"))
+    H.append(h3(T("متابعة التقدم", "Follow the progress")))
+    H.append(code("ssh ubuntu@84.8.106.22 'sudo bash /opt/cmms/scripts/demo.sh progress'\nssh ubuntu@84.8.106.22 'sudo bash /opt/cmms/scripts/customer.sh progress'"))
+    H.append(h3(T("عميل جديد بتجربة 30 يومًا", "New customer with a 30-day trial")))
+    H.append(code("ssh ubuntu@84.8.106.22 'cd /opt/cmms &amp;&amp; sudo bash scripts/customer.sh new NAME EMAIL COMPANY --trial 30'"))
+    H.append(box("note", T(f"انتظر حتى تظهر {L('==&gt; Done')}. إذا انقطعت النافذة شغّل نفس الأمر مرة أخرى؛ هذا آمن. لا تلصق الأوامر داخل جلسة الخادم نفسها (يظهر {L('^[[200~')})، بل من Cloud Shell كسطر واحد. التفاصيل في docs/TRIAL-PLAYBOOK.md.",
+                           "Wait for ==&gt; Done. If the window drops, run the same command again; it is safe. Do not paste inside the server session itself (you get ^[[200~); paste from Cloud Shell as one line. Details in docs/TRIAL-PLAYBOOK.md.")))
 
 # ---------------- 10 help ----------------
-H.append(sec(10, T("المساعدة", "Help")))
+H.append(sec(9 if USERS else 10, T("المساعدة", "Help")))
 H.append(grid([[T("المشكلة", "Problem"), T("الحل", "What to do")],
                [T("نسيت كلمة المرور", "Forgot password"), T("«نسيت كلمة المرور؟» في شاشة الدخول، أو اطلب من المسؤول إعادة التعيين.", "“Forgot password?” on the sign-in page, or ask the administrator to reset it.")],
                [T("لا أرى شاشة أو زرًا", "A screen or button is missing"), T("دورك أو أقسامك لا تسمح؛ اطلب من المسؤول. أو أغلق التطبيق وافتحه بعد التحديث.", "Your role or departments do not allow it; ask the administrator. Or close and reopen the app after an update.")],
