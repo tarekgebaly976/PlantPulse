@@ -90,24 +90,40 @@ sl = slide("", "", "Update to the PlantPulse modules and benefits presentation: 
 text(sl, M, Inches(2.1), Inches(11), Inches(1.2), "PlantPulse", 60, True, WHITE)
 text(sl, M, Inches(3.25), Inches(11), Inches(0.8), "What is new · November 2026", 30, False, AMBER)
 text(sl, M, Inches(4.2), Inches(11), Inches(1.2),
-     "Clear colours, targets for every KPI, control charts with Nelson rules, a dashboard each person chooses, and root cause analysis", 20, color=RGBColor.from_string("DCE6E8"))
-text(sl, M, Inches(5.9), Inches(11), Inches(0.5), "Maintenance management for industrial plants · updated 12 November 2026", 14, color=RGBColor.from_string("9FB3B8"))
+     "Work orders without internet, clear colours, targets for every KPI, control charts with Nelson rules, a dashboard each person chooses, and root cause analysis", 20, color=RGBColor.from_string("DCE6E8"))
+text(sl, M, Inches(5.9), Inches(11), Inches(0.5), "Maintenance management for industrial plants · updated 15 November 2026", 14, color=RGBColor.from_string("9FB3B8"))
 
 # 2 overview
-sl = slide("Overview", "What is new", "Eight changes. The next slides show each one with the screen and the benefit.")
-items = [("One colour code", "Red act now · amber attention · green all clear · grey information"), ("Customise dashboard", "Each person chooses sections, counters and KPIs; same on phone and PC"),
+sl = slide("Overview", "What is new", "Nine changes. The newest first: work orders on the phone without internet. The next slides show each one with the screen and the benefit.")
+items = [("Offline work orders", "Create, start, checklist, readings, hours, parts – sent when back online"), ("One colour code", "Red act now · amber attention · green all clear · grey information"), ("Customise dashboard", "Each person chooses sections, counters and KPIs; same on phone and PC"),
          ("KPI targets", "Set a target on any KPI, for the plant or a department"), ("Result vs target", "KPI tiles: result, target, Met / Close / Missed"),
          ("Nelson control charts", "8 rules with probable cause on readings and KPIs"), ("Clear alarm levels", "“Alarm limit” / “Warning limit” instead of “Critical”; counts match lists"),
          ("Company KPIs in the app", "Add a KPI and enter months without Excel"), ("RCA, search, presentation", "Root cause analysis, one search box, PowerPoint per period")]
-cw, ch = (W - 2 * M - Inches(0.75)) / 4, Inches(2.25)
+cw, ch = (W - 2 * M - Inches(0.5)) / 3, Inches(1.5)
 for i, (a, b) in enumerate(items):
-    x = M + (cw + Inches(0.25)) * (i % 4)
-    y = Inches(1.95) + (ch + Inches(0.3)) * (i // 4)
-    rect(sl, x, y, cw, ch, NAVY)
-    text(sl, x + Inches(0.25), y + Inches(0.2), cw - Inches(0.5), Inches(0.8), a, 20, True, AMBER)
-    text(sl, x + Inches(0.25), y + Inches(1.05), cw - Inches(0.5), ch - Inches(1.1), b, 14, color=RGBColor.from_string("DCE6E8"))
+    x = M + (cw + Inches(0.25)) * (i % 3)
+    y = Inches(1.85) + (ch + Inches(0.18)) * (i // 3)
+    rect(sl, x, y, cw, ch, AMBER if i == 0 else NAVY)
+    text(sl, x + Inches(0.25), y + Inches(0.12), cw - Inches(0.5), Inches(0.5), a, 18, True, NAVY if i == 0 else AMBER)
+    text(sl, x + Inches(0.25), y + Inches(0.6), cw - Inches(0.5), ch - Inches(0.65), b, 13, color=NAVY if i == 0 else RGBColor.from_string("DCE6E8"))
 
-# 3 colour code
+# 3 offline work orders
+sl = slide("Field round · new", "Work orders without internet",
+           "Workshops, basements and remote areas often have no signal. Now the work order goes with the technician. "
+           "Prepare the phone once while connected (Field round, Update): the person's work orders and the spare-parts list are kept on it. "
+           "Engineers and supervisors create work orders there; an emergency the writer does can start at once. Whoever is assigned starts the job, fills the checklist and readings, "
+           "books hours and parts, writes the findings and sends it for review – all without a connection. When the phone is back online everything is sent by itself, and nothing is ever created twice. "
+           "If someone changed the same line meanwhile, the phone shows both values and the person decides: keep mine or keep theirs. "
+           "Safety stays strict: LOTO and permit sign-off, approval, review and closing still need a connection.")
+picture(sl, "offline-wo.png", M, Inches(1.75), h=Inches(5.1))
+card(sl, M + Inches(2.85), Inches(1.75), Inches(4.75), Inches(5.1), "On the phone, no signal needed",
+     "• Prepare once: Field round › Update\n• New work order (engineers, supervisors)\n• Start work, checklist OK / Not OK\n• Readings checked against their range\n"
+     "• Hours, spare parts, findings, root cause\n• Put on hold / send for review\n• Sent by itself when back online – never twice", bsize=18)
+picture(sl, "offline-conflict.png", Inches(8.3), Inches(1.75), w=Inches(4.45))
+text(sl, Inches(8.3), Inches(5.1), Inches(4.45), Inches(1.6),
+     ["Changed by someone else meanwhile? Only that line waits: Keep mine / Keep theirs.", "LOTO, permits, approval and closing stay online."], 14, color=INK2, bullets=True)
+
+# 4 colour code
 sl = slide("Dashboard", "One colour code for the whole dashboard",
            "Before, each counter had a fixed colour by type, even at zero. Now colour means one thing everywhere. "
            "The key is shown on the dashboard itself. Counters at zero turn green with a tick. "
@@ -214,12 +230,12 @@ card(sl, M + Inches(6.1), Inches(1.95), Inches(6.0), Inches(4.4), "Management pr
 
 # 10 next steps
 sl = slide("Next steps", "To get the full benefit",
-           "Targets are the one thing the system cannot know by itself: the manager sets them once. Then train each group with the workbook (sessions A to F). "
+           "Phones carry work orders only after an Update in the field round while connected. Targets are the one thing the system cannot know by itself: the manager sets them once. Then train each group with the workbook (sessions A to F, exercises 18 and 19 for offline work). "
            "Google Play: closed testing ends around 22 November; then the production application is submitted.", dark=True)
-nxt = ["Manager sets targets for the main KPIs (PM compliance, MTBF, MTTR, availability, backlog)", "Each person customises the dashboard for their job",
+nxt = ["Prepare phones before going where there is no signal: Field round › Update", "Manager sets targets for the main KPIs (PM compliance, MTBF, MTTR, availability, backlog)", "Each person customises the dashboard for their job",
        "Train with the workbook: sessions A–F, exercises and quiz", "Reliability engineer reviews points with Nelson signals every week",
        "Use the management presentation in the monthly meeting", "PlantPulse on Google Play after closed testing (about 22 November)"]
-text(sl, M, Inches(1.95), W - 2 * M, Inches(4.8), nxt, 22, color=WHITE, bullets=True)
+text(sl, M, Inches(1.85), W - 2 * M, Inches(4.9), nxt, 20, color=WHITE, bullets=True)
 
 prs.save(OUT)
 print("ok", N[0], "slides")
