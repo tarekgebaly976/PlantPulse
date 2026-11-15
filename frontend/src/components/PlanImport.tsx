@@ -1,6 +1,7 @@
 "use client";
 
-import { Alert, Button, Checkbox, FileInput, Group, Modal, Stack, Table, Text } from "@mantine/core";
+import { Alert, Button, Checkbox, FileInput, Group, Stack, Table, Text } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, download, downloadPost } from "@/lib/api";

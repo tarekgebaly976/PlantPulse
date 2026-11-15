@@ -1,7 +1,8 @@
 "use client";
 
 import { BarChart } from "@mantine/charts";
-import { Alert, Button, Card, FileInput, Group, Modal, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Card, FileInput, Group, SegmentedControl, Stack, Text, TextInput } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, download } from "@/lib/api";

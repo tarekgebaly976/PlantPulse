@@ -1,6 +1,7 @@
 "use client";
 
-import { ActionIcon, Alert, Button, Checkbox, Group, Modal, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Tabs, Text, TextInput, Textarea } from "@mantine/core";
+import { ActionIcon, Alert, Button, Checkbox, Group, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Tabs, Text, TextInput, Textarea } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";

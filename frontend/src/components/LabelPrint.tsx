@@ -1,6 +1,7 @@
 "use client";
 
-import { Button, Group, Modal, MultiSelect, NumberInput, Select, Stack, Text } from "@mantine/core";
+import { Button, Group, MultiSelect, NumberInput, Select, Stack, Text } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";

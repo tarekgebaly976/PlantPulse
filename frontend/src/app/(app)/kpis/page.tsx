@@ -1,7 +1,8 @@
 "use client";
 
 import { BarChart } from "@mantine/charts";
-import { Alert, Anchor, Badge, Button, Card, FileInput, Group, Modal, NumberInput, ScrollArea, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Card, FileInput, Group, NumberInput, ScrollArea, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";

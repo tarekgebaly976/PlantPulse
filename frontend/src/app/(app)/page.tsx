@@ -1,7 +1,8 @@
 "use client";
 
 import { BarChart } from "@mantine/charts";
-import { Anchor, Badge, Button, Card, Checkbox, Grid, Group, Modal, SegmentedControl, SimpleGrid, Stack, Table, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
+import { Anchor, Badge, Button, Card, Checkbox, Grid, Group, SegmentedControl, SimpleGrid, Stack, Table, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import {
   IconAdjustments, IconAlertOctagon, IconAlertTriangle, IconCalendarTime, IconChecklist, IconClipboardList, IconClockExclamation, IconDroplet,
   IconCircleCheck, IconEye, IconHeartRateMonitor, IconPlus, IconQrcode, IconRoute, IconUserCheck,

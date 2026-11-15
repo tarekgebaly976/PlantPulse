@@ -1,6 +1,7 @@
 "use client";
 
-import { Alert, Autocomplete, Badge, Button, Checkbox, Code, FileInput, Group, Modal, MultiSelect, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Switch, Tabs, Text, TextInput } from "@mantine/core";
+import { Alert, Autocomplete, Badge, Button, Checkbox, Code, FileInput, Group, MultiSelect, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Switch, Tabs, Text, TextInput } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";

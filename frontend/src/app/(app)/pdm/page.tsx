@@ -1,6 +1,7 @@
 "use client";
 
-import { Alert, Badge, Button, Checkbox, CloseButton, FileInput, Group, Modal, NumberInput, Paper, SegmentedControl, Select, SimpleGrid, Stack, Tabs, Text, TextInput } from "@mantine/core";
+import { Alert, Badge, Button, Checkbox, CloseButton, FileInput, Group, NumberInput, Paper, SegmentedControl, Select, SimpleGrid, Stack, Tabs, Text, TextInput } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { useDebouncedValue, useMediaQuery } from "@mantine/hooks";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -63,7 +64,8 @@ const PRIO_COLOR: Record<number, string> = { 1: "red", 2: "orange" };
 function PrioBadge({ p }: { p: number }) {
   const { t } = useTranslation();
   const color = PRIO_COLOR[p];
-  return color ? <Badge color={color} variant="filled" size="sm">{t(`pdm.prio${p}`)}</Badge> : null;
+  return color ? <Badge color={color} variant="filled" size="sm"
+    styles={{ root: { overflow: "visible", maxWidth: "none", flexShrink: 0 }, label: { overflow: "visible", textOverflow: "clip" } }}>{t(`pdm.prio${p}`)}</Badge> : null;
 }
 
 /** Planners, engineers, reliability engineers, managers and admins set it; the list puts priority 1 first. */

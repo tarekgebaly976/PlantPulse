@@ -1,6 +1,7 @@
 "use client";
 
-import { Button, Modal, Select, SimpleGrid, Stack, TextInput } from "@mantine/core";
+import { Button, Select, SimpleGrid, Stack, TextInput } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";

@@ -1,6 +1,7 @@
 "use client";
 
-import { ActionIcon, AppShell, Avatar, Badge, Box, useComputedColorScheme, useMantineColorScheme, Burger, Button, Group, Indicator, Menu, Modal, NavLink, PasswordInput, ScrollArea, Select, Stack, Text, Tooltip } from "@mantine/core";
+import { ActionIcon, AppShell, Avatar, Badge, Box, useComputedColorScheme, useMantineColorScheme, Burger, Button, Group, Indicator, Menu, NavLink, PasswordInput, ScrollArea, Select, Stack, Text, Tooltip } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { useDisclosure, useNetwork } from "@mantine/hooks";
 import {
   IconAlertTriangle, IconBell, IconBox, IconCalendarTime, IconChartBar, IconClipboardList, IconDashboard, IconDroplet, IconFishBone, IconHeartRateMonitor,

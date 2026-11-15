@@ -77,7 +77,7 @@ export function ControlChart({ points, unit, specs = [], showTarget = false, hei
               <ReferenceLine y={lim(-2)} stroke={S2} />
               <ReferenceLine y={lim(-3)} stroke={LIMIT} strokeWidth={2.5} label={{ value: `LCL ${fmtNum(lim(-3))}`, position: "right", fontSize: 10 }} />
             </>}
-            {specs.map((s) => <ReferenceLine key={s.label} y={s.y} stroke={s.color} strokeDasharray="8 4" strokeWidth={1.5} label={{ value: s.label, position: "insideTopRight", fontSize: 10, fill: s.color }} />)}
+            {specs.map((s) => <ReferenceLine key={s.label} y={s.y} stroke={s.color} strokeDasharray="8 4" strokeWidth={1.5} label={{ value: s.label, position: "insideTopLeft", fontSize: 10, fill: s.color }} />)}
             {showTarget && <Line dataKey="target" name={t("kpi.target")} stroke="#868e96" strokeDasharray="6 3" dot={false} connectNulls type="stepAfter" isAnimationActive={false} />}
             <Line dataKey="value" name={unit ? `${t("kpi.actual")} (${unit})` : t("kpi.actual")} stroke="#1c2a8c" strokeWidth={1.5} connectNulls isAnimationActive={false}
               dot={(p: DotProps) => <Dot key={p.index} {...p} />} activeDot={false} />

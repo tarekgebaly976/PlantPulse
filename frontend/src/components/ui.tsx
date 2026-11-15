@@ -1,6 +1,7 @@
 "use client";
 
-import { ActionIcon, Autocomplete, Badge, Button, Center, Checkbox, CloseButton, Group, Loader, Modal, MultiSelect, Pagination, Paper, ScrollArea, Select, Skeleton, Stack, Table, Text, ThemeIcon, Title, Tooltip, UnstyledButton, type BadgeProps } from "@mantine/core";
+import { ActionIcon, Autocomplete, Badge, Button, Center, Checkbox, CloseButton, Group, Loader, MultiSelect, Pagination, Paper, ScrollArea, Select, Skeleton, Stack, Table, Text, ThemeIcon, Title, Tooltip, UnstyledButton, type BadgeProps } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { useDebouncedValue, useMediaQuery } from "@mantine/hooks";
 import { IconChevronDown, IconChevronRight, IconInbox, IconSitemap } from "@tabler/icons-react";
 import Link from "next/link";

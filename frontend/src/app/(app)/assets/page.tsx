@@ -1,6 +1,7 @@
 "use client";
 
-import { Alert, Button, FileInput, Group, Modal, Paper, SegmentedControl, Select, Stack, Table, Text, TextInput } from "@mantine/core";
+import { Alert, Button, FileInput, Group, Paper, SegmentedControl, Select, Stack, Table, Text, TextInput } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";

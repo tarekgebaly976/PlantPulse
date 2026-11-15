@@ -1,8 +1,7 @@
 "use client";
 
-import {
-  ActionIcon, Alert, Anchor, Badge, Button, Group, Modal, MultiSelect, Paper, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea,
-} from "@mantine/core";
+import { ActionIcon, Alert, Anchor, Badge, Button, Group, MultiSelect, Paper, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput, Textarea } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { IconPlus, IconPrinter, IconTrash } from "@tabler/icons-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";

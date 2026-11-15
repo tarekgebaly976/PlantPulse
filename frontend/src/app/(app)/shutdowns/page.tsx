@@ -1,6 +1,7 @@
 "use client";
 
-import { Button, Modal, Stack, TextInput, Textarea } from "@mantine/core";
+import { Button, Stack, TextInput, Textarea } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";

@@ -1,6 +1,7 @@
 "use client";
 
-import { Badge, Button, Checkbox, Group, Modal, MultiSelect, NumberInput, Paper, SegmentedControl, SimpleGrid, Stack, Switch, Text, TextInput } from "@mantine/core";
+import { Badge, Button, Checkbox, Group, MultiSelect, NumberInput, Paper, SegmentedControl, SimpleGrid, Stack, Switch, Text, TextInput } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { IconDownload, IconSettings } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";

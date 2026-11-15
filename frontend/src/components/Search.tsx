@@ -1,6 +1,7 @@
 "use client";
 
-import { ActionIcon, Badge, CloseButton, Group, Kbd, Loader, Modal, ScrollArea, Stack, Text, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Badge, CloseButton, Group, Kbd, Loader, ScrollArea, Stack, Text, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
+import { Modal } from "@/components/Modal";
 import { useDebouncedValue, useHotkeys } from "@mantine/hooks";
 import { IconSearch } from "@tabler/icons-react";
 import { useRouter, useSearchParams } from "next/navigation";
