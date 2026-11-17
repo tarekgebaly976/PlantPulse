@@ -220,7 +220,7 @@ function LogView() {
               {can("request.create") && <Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => setRaise(true)} className="no-print">{t("logs.raise")}</Button>}
             </Group>
             <Text size="xs" c="dimmed" mb="xs">{t("logs.issuesHint")}</Text>
-            <Table striped>
+            <Table.ScrollContainer minWidth={460}><Table striped>
               <Table.Thead><Table.Tr><Table.Th>#</Table.Th><Table.Th>{t("common.asset")}</Table.Th><Table.Th>{t("logs.issue")}</Table.Th><Table.Th>{t("common.status")}</Table.Th><Table.Th>{t("common.createdAt")}</Table.Th></Table.Tr></Table.Thead>
               <Table.Tbody>
                 {d.issues.requests.map((r) => (
@@ -239,7 +239,7 @@ function LogView() {
                 ))}
                 {d.issues.requests.length + d.issues.work_orders.length === 0 && <Table.Tr><Table.Td colSpan={5}><Text size="sm" c="dimmed">{t("common.noData")}</Text></Table.Td></Table.Tr>}
               </Table.Tbody>
-            </Table>
+            </Table></Table.ScrollContainer>
           </Paper>
         )}
       </Stack>

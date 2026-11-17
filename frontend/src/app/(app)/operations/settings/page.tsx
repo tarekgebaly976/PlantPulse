@@ -345,7 +345,7 @@ function SettingsView() {
         <Section title={t("ops.set.machines")} actions={add(() => setMf({ code: "", name: "", department_id: null, asset_id: null, trim_width_m: "", day_start: "07:00",
           shifts: [{ code: "D", name: "Day shift", start: "07:00" }, { code: "N", name: "Night shift", start: "19:00" }], is_active: true }))}>
           {machines.length === 0 ? <Alert color="blue">{t("ops.noMachine")}</Alert> : (
-            <Table striped><Table.Tbody>
+            <Table.ScrollContainer minWidth={460}><Table striped><Table.Tbody>
               {machines.map((x) => (
                 <Table.Tr key={x.id} bg={x.id === m?.id ? "var(--mantine-color-blue-light)" : undefined} style={{ cursor: "pointer" }} onClick={() => setMid(x.id)}>
                   <Table.Td fw={600}>{x.code}</Table.Td><Table.Td>{x.name} <Off on={x.is_active} /></Table.Td>
@@ -354,14 +354,14 @@ function SettingsView() {
                   <Table.Td onClick={(e) => e.stopPropagation()}><Edit onClick={() => setMf(editM(x))} /></Table.Td>
                 </Table.Tr>
               ))}
-            </Table.Tbody></Table>
+            </Table.Tbody></Table></Table.ScrollContainer>
           )}
         </Section>
         {m && (
           <SimpleGrid cols={{ base: 1, lg: 2 }}>
             <Section title={`${t("ops.set.grades")} · ${m.code}`} actions={add(() => setGf({ code: "", name: "", gsm: "", speed: "", ideal: "", is_active: true }))}>
               <Text size="xs" c="dimmed" mb="xs">{t("ops.set.rateHint")}</Text>
-              <Table striped>
+              <Table.ScrollContainer minWidth={460}><Table striped>
                 <Table.Thead><Table.Tr><Table.Th>{t("ops.set.gsm")}</Table.Th><Table.Th>{t("ops.set.targetSpeed")}</Table.Th><Table.Th>{t("ops.set.ideal")}</Table.Th>
                   <Table.Th>{t("ops.set.perHour")}</Table.Th><Table.Th>{t("ops.set.perDay")}</Table.Th><Table.Th /></Table.Tr></Table.Thead>
                 <Table.Tbody>
@@ -371,32 +371,32 @@ function SettingsView() {
                       <Table.Td>{fmtNum(g.ideal_mt_min * 1440, 1)}</Table.Td><Table.Td><Edit onClick={() => setGf(editG(g))} /></Table.Td></Table.Tr>
                   ))}
                 </Table.Tbody>
-              </Table>
+              </Table></Table.ScrollContainer>
             </Section>
             <Section title={`${t("ops.set.sections")} · ${m.code}`} actions={add(() => setSf({ name: "", asset_id: null, sort: (m.sections?.length ?? 0) + 1, is_active: true }))}>
-              <Table striped><Table.Tbody>
+              <Table.ScrollContainer minWidth={460}><Table striped><Table.Tbody>
                 {(m.sections ?? []).map((s) => (
                   <Table.Tr key={s.id}><Table.Td>{s.name} <Off on={s.is_active} /></Table.Td><Table.Td>{s.asset_id ? "✓" : ""}</Table.Td><Table.Td><Edit onClick={() => setSf(editS(s))} /></Table.Td></Table.Tr>
                 ))}
-              </Table.Tbody></Table>
+              </Table.Tbody></Table></Table.ScrollContainer>
             </Section>
           </SimpleGrid>
         )}
         <SimpleGrid cols={{ base: 1, lg: 2 }}>
           <Section title={t("ops.set.disciplines")} actions={add(() => setDf({ code: "", name: "", maintenance: false, sort: disciplines.length + 1, is_active: true }))}>
-            <Table striped><Table.Tbody>
+            <Table.ScrollContainer minWidth={460}><Table striped><Table.Tbody>
               {disciplines.map((d) => (
                 <Table.Tr key={d.id}><Table.Td fw={600}>{d.code}</Table.Td><Table.Td>{d.name} <Off on={d.is_active} /></Table.Td>
                   <Table.Td>{d.maintenance && <Badge size="xs" color="orange" variant="light">{t("ops.set.maint")}</Badge>}</Table.Td><Table.Td><Edit onClick={() => setDf(editD(d))} /></Table.Td></Table.Tr>
               ))}
-            </Table.Tbody></Table>
+            </Table.Tbody></Table></Table.ScrollContainer>
           </Section>
           <Section title={t("ops.set.defects")} actions={add(() => setXf({ name: "", disposition: "R/P", is_active: true }))}>
-            <Table striped><Table.Tbody>
+            <Table.ScrollContainer minWidth={460}><Table striped><Table.Tbody>
               {defects.map((d) => (
                 <Table.Tr key={d.id}><Table.Td>{d.name} <Off on={d.is_active} /></Table.Td><Table.Td>{d.disposition}</Table.Td><Table.Td><Edit onClick={() => setXf(editX(d))} /></Table.Td></Table.Tr>
               ))}
-            </Table.Tbody></Table>
+            </Table.Tbody></Table></Table.ScrollContainer>
           </Section>
         </SimpleGrid>
         <LogForms />

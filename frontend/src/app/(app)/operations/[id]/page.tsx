@@ -367,7 +367,14 @@ function ReportView() {
           <Tile label={t("ops.tiles.breaks")} value={String(c.stops.breaks_count)} sub={`${hhmm(c.stops.breaks_hours)} · ${t("ops.tiles.downtime")} ${hhmm(c.stops.downtime_hours)}`} />
         </SimpleGrid>
         <Text size="xs" c="dimmed">{t("ops.report.oeeFormula")}</Text>
+        <Group gap={6} className="no-print">
+          {[["sec-shifts", t("ops.shifts.title")], ["sec-runs", t("ops.runs.title")], ["sec-stops", t("ops.stops.title")], ["sec-reels", t("ops.reels.title")],
+            ["sec-quality", t("ops.losses.title")], ...r.shift_logs.map((x) => [`sec-sp-${x.template.code}`, x.template.name])].map(([id, label]) => (
+            <Button key={id} size="compact-xs" variant="light" onClick={() => document.getElementById(id!)?.scrollIntoView({ behavior: "smooth", block: "start" })}>{label}</Button>
+          ))}
+        </Group>
 
+        <div id="sec-shifts" style={{ scrollMarginTop: 72 }} />
         <Section title={t("ops.shifts.title")}>
           <Table.ScrollContainer minWidth={760}>
             <Table striped>
@@ -396,12 +403,7 @@ function ReportView() {
           </Table.ScrollContainer>
         </Section>
 
-        {r.shift_logs.map((sec) => (
-          <Section key={sec.template.id} title={sec.template.name}>
-            <ShiftLogs sec={sec} date={r.report_date} canStart={can("op.enter")} />
-          </Section>
-        ))}
-
+        <div id="sec-runs" style={{ scrollMarginTop: 72 }} />
         <Section title={t("ops.runs.title")} actions={ed ? <Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => setRun(newRun())}>{t("ops.runs.add")}</Button> : undefined}>
           <Table.ScrollContainer minWidth={700}>
             <Table striped>
@@ -425,6 +427,7 @@ function ReportView() {
           {machineGrades.length === 0 && <Text size="sm" c="orange">{t("ops.runs.noGrade")}</Text>}
         </Section>
 
+        <div id="sec-stops" style={{ scrollMarginTop: 72 }} />
         <Section title={t("ops.stops.title")} actions={ed ? <Button size="xs" leftSection={<IconPlus size={14} />}
           onClick={() => setStop({ type: "breakdown", start: "", end: "", section_id: null, reason: "", parts: [{ discipline_id: null, hours: "" }] })}>{t("ops.stops.add")}</Button> : undefined}>
           <Table.ScrollContainer minWidth={760}>
@@ -465,6 +468,7 @@ function ReportView() {
           )}
         </Section>
 
+        <div id="sec-reels" style={{ scrollMarginTop: 72 }} />
         <Section title={`${t("ops.reels.title")} (${r.reels.length})`} actions={ed ? <Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => setReel(newReel())}>{t("ops.reels.add")}</Button> : undefined}>
           <Table.ScrollContainer minWidth={700}>
             <Table striped>
@@ -488,9 +492,10 @@ function ReportView() {
           {Object.keys(c.gross_by_gsm).length > 0 && <Text size="sm" mt="xs">{t("ops.tables.byGsm")}: {Object.entries(c.gross_by_gsm).map(([g, v]) => `${g} gsm ${t3(v)}`).join(" · ")}</Text>}
         </Section>
 
+        <div id="sec-quality" style={{ scrollMarginTop: 72 }} />
         <Section title={t("ops.losses.title")} actions={ed ? <Button size="xs" leftSection={<IconPlus size={14} />}
           onClick={() => setLoss({ kind: "reject", shift: null, defect_id: null, defect_text: "", qty: "", disposition: "" })}>{t("ops.losses.add")}</Button> : undefined}>
-          <Table striped>
+          <Table.ScrollContainer minWidth={460}><Table striped>
             <Table.Thead><Table.Tr><Table.Th>{t("ops.losses.kind")}</Table.Th><Table.Th>{t("ops.reels.shift")}</Table.Th><Table.Th>{t("ops.losses.defect")}</Table.Th>
               <Table.Th>{t("ops.losses.qty")}</Table.Th><Table.Th>{t("ops.losses.disposition")}</Table.Th><Table.Th /></Table.Tr></Table.Thead>
             <Table.Tbody>
@@ -503,9 +508,15 @@ function ReportView() {
                 </Table.Tr>
               ))}
             </Table.Tbody>
-          </Table>
+          </Table></Table.ScrollContainer>
           <Text size="xs" c="dimmed" mt="xs">{t("ops.losses.explained", { r: t3(c.day.reject), d: t3(c.day.b + c.day.s) })}</Text>
         </Section>
+
+        {r.shift_logs.map((sec) => (
+          <div id={`sec-sp-${sec.template.code}`} key={sec.template.id}><Section title={sec.template.name}>
+            <ShiftLogs sec={sec} date={r.report_date} canStart={can("op.enter")} />
+          </Section></div>
+        ))}
 
         <Utilities key={`${r.id}-${r.status}`} r={r} />
 

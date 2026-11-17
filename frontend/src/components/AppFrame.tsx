@@ -110,7 +110,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
               </Stack>
             </Group></Link>
           </Group>
-          <Group gap="xs" wrap="nowrap">
+          <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
             <Tooltip label={net.online ? t("app.online") : t("field.offlineHint")}>
               {net.online ? (
                 <Badge data-testid="net-status" color="teal" variant="light" leftSection={<IconWifi size={14} />}>
@@ -123,7 +123,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
               )}
             </Tooltip>
             {me.plants.length > 1 ? (
-              <Select size="xs" w={150} aria-label={t("app.plant")} value={plant.plant_id} onChange={(v) => v && setPlant(v)} allowDeselect={false}
+              <Select size="xs" w={{ base: 84, sm: 150 }} aria-label={t("app.plant")} value={plant.plant_id} onChange={(v) => v && setPlant(v)} allowDeselect={false}
                 data={me.plants.map((p) => ({ value: p.plant_id, label: p.plant_code }))} />
             ) : <Badge variant="outline" visibleFrom="sm">{plant.plant_code}</Badge>}
             <GlobalSearch />
@@ -131,11 +131,11 @@ export function AppFrame({ children }: { children: ReactNode }) {
               <ActionIcon variant="subtle" component={Link} href="/notifications" aria-label={t("nav.notifications")}><IconBell size={20} /></ActionIcon>
             </Indicator>
             <Tooltip label={dark ? t("app.lightMode") : t("app.darkMode")}>
-              <ActionIcon variant="subtle" aria-label={dark ? t("app.lightMode") : t("app.darkMode")} data-testid="color-scheme"
+              <ActionIcon visibleFrom="sm" variant="subtle" aria-label={dark ? t("app.lightMode") : t("app.darkMode")} data-testid="color-scheme"
                 onClick={() => setColorScheme(dark ? "light" : "dark")}>{dark ? <IconSun size={20} /> : <IconMoon size={20} />}</ActionIcon>
             </Tooltip>
             <Menu>
-              <Menu.Target><ActionIcon variant="subtle" aria-label={t("app.language")}><IconLanguage size={20} /></ActionIcon></Menu.Target>
+              <Menu.Target><ActionIcon visibleFrom="sm" variant="subtle" aria-label={t("app.language")}><IconLanguage size={20} /></ActionIcon></Menu.Target>
               <Menu.Dropdown>
                 {LANGS.map((l) => <Menu.Item key={l.code} onClick={() => void setLocale(l.code)} fw={i18n.language === l.code ? 700 : 400}>{l.label}</Menu.Item>)}
               </Menu.Dropdown>
@@ -144,6 +144,12 @@ export function AppFrame({ children }: { children: ReactNode }) {
               <Menu.Target><ActionIcon variant="subtle" aria-label="account" data-testid="account-menu"><IconUserCheck size={20} /></ActionIcon></Menu.Target>
               <Menu.Dropdown>
                 <Menu.Label>{me.full_name}<br />{plant.plant_name} · {plant.role}</Menu.Label>
+                {/* Phones: the header has no room for these two, so they live here */}
+                <Menu.Item hiddenFrom="sm" leftSection={dark ? <IconSun size={16} /> : <IconMoon size={16} />} onClick={() => setColorScheme(dark ? "light" : "dark")}>
+                  {dark ? t("app.lightMode") : t("app.darkMode")}</Menu.Item>
+                {LANGS.map((l) => <Menu.Item hiddenFrom="sm" key={`m-${l.code}`} leftSection={<IconLanguage size={16} />} fw={i18n.language === l.code ? 700 : 400}
+                  onClick={() => void setLocale(l.code)}>{l.label}</Menu.Item>)}
+                <Menu.Divider hiddenFrom="sm" />
                 <Menu.Item leftSection={<IconKey size={16} />} onClick={pw.open}>{t("auth.changePassword")}</Menu.Item>
                 <Menu.Item leftSection={<IconLogout size={16} />} onClick={() => void logout()}>{t("app.logout")}</Menu.Item>
               </Menu.Dropdown>

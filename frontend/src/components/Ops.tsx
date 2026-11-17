@@ -59,26 +59,21 @@ export function ShiftLogs({ sec, date, canStart, print }: { sec: ShiftLogSection
     if (l.kind === "text") return String(v);
     return fmtVal(Number(v), l.decimals);
   };
-  const head = (
-    <tr>
-      <th />
+  const head = <tr><th />{codes.map((c) => <th key={c}>{name(c)}</th>)}<th>{t("ops.sp.day")}</th></tr>;
+  const bar = print ? null : (
+    <Group gap="xs" mb="xs" wrap="wrap">
       {codes.map((c) => {
         const lg = sec.logs[c];
         return (
-          <th key={c}>
-            {print ? name(c) : (
-              <Group gap={4} wrap="nowrap">
-                <Text size="sm" fw={600}>{name(c)}</Text>
-                {lg ? <><StatusBadge value={lg.status} size="xs" /><Button size="compact-xs" variant="light" component={Link} href={`/operations/logs/${lg.id}`}>{t("ops.sp.open")}</Button></>
-                  : canStart ? <Button size="compact-xs" leftSection={<IconPlus size={12} />} loading={start.isPending} onClick={() => start.mutate(c)}>{t("ops.sp.start")}</Button>
-                  : <Badge size="xs" color="gray" variant="light">{t("ops.sp.none")}</Badge>}
-              </Group>
-            )}
-          </th>
+          <Group key={c} gap={4} wrap="nowrap">
+            <Text size="sm" fw={600}>{name(c)}:</Text>
+            {lg ? <><StatusBadge value={lg.status} size="sm" /><Button size="compact-sm" variant="light" component={Link} href={`/operations/logs/${lg.id}`}>{t("ops.sp.open")}</Button></>
+              : canStart ? <Button size="compact-sm" leftSection={<IconPlus size={12} />} loading={start.isPending} onClick={() => start.mutate(c)}>{t("ops.sp.start")}</Button>
+              : <Badge size="sm" color="gray" variant="light">{t("ops.sp.none")}</Badge>}
+          </Group>
         );
       })}
-      <th>{t("ops.sp.day")}</th>
-    </tr>
+    </Group>
   );
   const rows = sec.lines.map((l, i) => {
     const sh = i === 0 || sec.lines[i - 1]!.section !== l.section;
@@ -93,9 +88,12 @@ export function ShiftLogs({ sec, date, canStart, print }: { sec: ShiftLogSection
   });
   if (print) return <table><thead>{head}</thead><tbody>{rows}</tbody></table>;
   return (
-    <Table.ScrollContainer minWidth={520}>
-      <Table striped withTableBorder fz="sm"><Table.Thead>{head}</Table.Thead><Table.Tbody>{rows}</Table.Tbody></Table>
-    </Table.ScrollContainer>
+    <>
+      {bar}
+      <Table.ScrollContainer minWidth={420}>
+        <Table striped withTableBorder fz="sm"><Table.Thead>{head}</Table.Thead><Table.Tbody>{rows}</Table.Tbody></Table>
+      </Table.ScrollContainer>
+    </>
   );
 }
 
