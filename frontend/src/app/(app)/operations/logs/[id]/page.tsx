@@ -13,7 +13,7 @@ import { Modal } from "@/components/Modal";
 import { AssetPicker, ConfirmButton, Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { del, post, put } from "@/lib/api";
 import { fmtDate, useMut, useQ } from "@/lib/hooks";
-import { fmtVal, hm, type LogDetail, type LogField, type LogValue } from "@/lib/ops";
+import { fmtVal, hm, logBase, type LogDetail, type LogField, type LogValue } from "@/lib/ops";
 import { useSession } from "@/lib/session";
 
 type Draft = Record<string, { opening: number | string; closing: number | string; value: number | string | boolean; text: string }>;
@@ -155,17 +155,17 @@ function LogView() {
     if (last && last[0] === f.section) last[1].push(f); else sections.push([f.section, [f]]);
   }
   const shiftName = d.template.shifts.find((s) => s.code === d.shift)?.name;
-  const go = (x: { id: string } | null) => x && router.push(`/operations/logs/${x.id}`);
+  const go = (x: { id: string } | null) => x && router.push(`${logBase(d.template.in_pm_report)}/${x.id}`);
   return (
     <>
       {d.pm_report_id ? <BackLink href={`/operations/${d.pm_report_id}`} label={t("ops.report.title")} />
-        : <BackLink href={d.template.in_pm_report ? `/operations/logs?form=${d.template.id}` : "/operations/logs"} label={d.template.in_pm_report ? d.template.name : t("logs.title")} />}
+        : <BackLink href={d.template.in_pm_report ? "/operations/sp" : "/operations/logs"} label={d.template.in_pm_report ? d.template.name : t("logs.title")} />}
       <PageHeader title={`${d.template.name} · ${d.log_date}${shiftName ? ` · ${shiftName}` : ""}`} actions={<>
         <Button variant="default" leftSection={<IconPrinter size={16} />} onClick={() => window.print()} className="no-print">{t("ops.report.print")}</Button>
-        {ed && <Button loading={save.isPending} onClick={() => save.mutate(undefined)} className="no-print">{t("common.save")}</Button>}
+        {ed && !phone && <Button loading={save.isPending} onClick={() => save.mutate(undefined)} className="no-print">{t("common.save")}</Button>}
         {d.status === "draft" && !d.in_progress && can("op.enter") && <ConfirmButton color="blue" loading={act.isPending} onConfirm={() => act.mutate("submit")}>{t("ops.report.submit")}</ConfirmButton>}
         {d.status !== "confirmed" && !d.in_progress && can("op.confirm") && <ConfirmButton color="teal" loading={act.isPending} onConfirm={() => act.mutate("confirm")}>{t("ops.report.confirm")}</ConfirmButton>}
-        {d.status !== "draft" && can("op.confirm") && <Button variant="light" color="orange" onClick={() => setReopen(true)} className="no-print">{t("ops.report.reopen")}</Button>}
+        {d.status !== "draft" && can("op.confirm") && <Button variant="light" color="orange" onClick={() => setReopen(true)} className="no-print">{d.status === "submitted" ? t("ops.report.returnDraft") : t("ops.report.reopen")}</Button>}
         {d.status === "draft" && can("op.confirm") && <ActionIcon variant="subtle" color="red" size="lg" aria-label={t("ops.report.delete")} className="no-print"
           onClick={() => { if (window.confirm(t("ops.report.deleteConfirm"))) remove.mutate(undefined); }}><IconTrash size={18} /></ActionIcon>}
       </>}>

@@ -237,27 +237,40 @@ function LossModal({ r, s, form, onClose }: { r: Report; s: OpSettings; form: Lo
 // ------------------------------------------------------------------ header fields
 function Utilities({ r }: { r: Report }) {
   const { t } = useTranslation();
-  const [f, setF] = useState({ steam_mt: r.steam_mt ?? "", water_pm_m3: r.water_pm_m3 ?? "", water_sp_m3: r.water_sp_m3 ?? "", water_ut_m3: r.water_ut_m3 ?? "",
-    broke_tower_pct: r.broke_tower_pct ?? "", notes: r.notes ?? "" } as Record<string, Num>);
-  const save = useMut(() => patch(`/operations/reports/${r.id}`, {
-    steam_mt: num(f.steam_mt), water_pm_m3: num(f.water_pm_m3), water_sp_m3: num(f.water_sp_m3), water_ut_m3: num(f.water_ut_m3),
-    broke_tower_pct: num(f.broke_tower_pct), notes: String(f.notes ?? "").trim() || null,
-  }));
-  const field = (k: string, label: string, scale = 1) => (
-    <NumberInput label={label} min={0} decimalScale={scale} value={f[k]} disabled={!r.can_edit} onChange={(v) => setF({ ...f, [k]: v })} />
-  );
+  const [broke, setBroke] = useState<Num>(r.broke_tower_pct ?? "");
+  const [notes, setNotes] = useState(r.notes ?? "");
+  const save = useMut(() => patch(`/operations/reports/${r.id}`, { broke_tower_pct: num(broke), notes: notes.trim() || null }));
   return (
-    <Section title={t("ops.util.title")} actions={r.can_edit ? <Button size="xs" loading={save.isPending} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button> : undefined}>
-      <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }}>
-        {field("steam_mt", t("ops.util.steam"))}
-        {field("water_pm_m3", t("ops.util.waterPm"))}
-        {field("water_sp_m3", t("ops.util.waterSp"))}
-        {field("water_ut_m3", t("ops.util.waterUt"))}
-        {field("broke_tower_pct", t("ops.util.broke"))}
-      </SimpleGrid>
-      {r.calc.steam_per_t !== null && <Text size="sm" mt="xs">{t("ops.util.steamPerT")}: <b>{fmtNum(r.calc.steam_per_t, 3)}</b> t/t</Text>}
-      <Textarea mt="sm" label={t("ops.util.notes")} autosize minRows={2} value={String(f.notes ?? "")} disabled={!r.can_edit} onChange={(e) => setF({ ...f, notes: e.currentTarget.value })} />
+    <Section title={t("ops.util.notesTitle")} actions={r.can_edit ? <Button size="xs" loading={save.isPending} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button> : undefined}>
+      <NumberInput label={t("ops.util.broke")} min={0} max={100} maw={220} value={broke} disabled={!r.can_edit} onChange={setBroke} />
+      <Textarea mt="sm" label={t("ops.util.notes")} autosize minRows={2} value={notes} disabled={!r.can_edit} onChange={(e) => setNotes(e.currentTarget.value)} />
     </Section>
+  );
+}
+
+/** The day's utility figures, read from the utilities daily report (entered there once, never typed twice). */
+function DayUtilities({ r }: { r: Report }) {
+  const { t } = useTranslation();
+  if (!r.utilities.length) return null;
+  return (
+    <>
+      {r.utilities.map((u) => (
+        <Section key={u.template.id} title={t("ops.util.fromUt", { name: u.template.name })} actions={u.logs[0]
+          ? <Button size="xs" variant="light" component={Link} href={`/operations/logs/${u.logs[0].id}`}>{t("ops.sp.open")}</Button> : undefined}>
+          {!u.logs.length ? <Text size="sm" c="dimmed">{t("ops.util.notYet")}</Text> : (
+            <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }}>
+              {u.items.map((x) => (
+                <Paper key={x.label} withBorder p="xs" radius="md">
+                  <Text size="xs" c="dimmed">{x.label}</Text>
+                  <Text fw={700}>{fmtNum(x.value, x.decimals)} {x.unit}</Text>
+                  {x.per_ton !== null && <Text size="xs" c="dimmed">{fmtNum(x.per_ton, 3)} {x.unit}/t</Text>}
+                </Paper>
+              ))}
+            </SimpleGrid>
+          )}
+        </Section>
+      ))}
+    </>
   );
 }
 
@@ -333,9 +346,9 @@ function ReportView() {
         <Button variant="default" component={Link} href={`/operations/${id}/print`} leftSection={<IconPrinter size={16} />}>{t("ops.report.print")}</Button>
         {r.status === "draft" && !inProgress && can("op.enter") && <ConfirmButton color="blue" loading={act.isPending} onConfirm={() => act.mutate("submit")}>{t("ops.report.submit")}</ConfirmButton>}
         {r.status !== "confirmed" && !inProgress && can("op.confirm") && <ConfirmButton color="teal" loading={act.isPending} onConfirm={() => act.mutate("confirm")}>{t("ops.report.confirm")}</ConfirmButton>}
-        {r.status !== "draft" && can("op.confirm") && <Button variant="light" color="orange" onClick={() => setReopen(true)}>{t("ops.report.reopen")}</Button>}
-        {r.status === "draft" && can("op.confirm") && <ActionIcon variant="subtle" color="red" size="lg" aria-label={t("ops.report.delete")}
-          onClick={() => { if (window.confirm(t("ops.report.deleteConfirm"))) remove.mutate(undefined); }}><IconTrash size={18} /></ActionIcon>}
+        {r.status !== "draft" && can("op.confirm") && <Button variant="light" color="orange" onClick={() => setReopen(true)}>{r.status === "submitted" ? t("ops.report.returnDraft") : t("ops.report.reopen")}</Button>}
+        {r.status === "draft" && can("op.confirm") && <Button variant="subtle" color="red" leftSection={<IconTrash size={16} />}
+          onClick={() => { if (window.confirm(t("ops.report.deleteConfirm"))) remove.mutate(undefined); }}>{t("ops.report.delete")}</Button>}
       </>}>
         <Group gap="xs">
           <Button variant="default" size="compact-sm" disabled={!r.prev} leftSection={<IconChevronLeft size={14} />} onClick={() => r.prev && router.push(`/operations/${r.prev.id}`)}>{t("ops.prevDay")}</Button>
@@ -518,6 +531,7 @@ function ReportView() {
           </Section></div>
         ))}
 
+        <DayUtilities r={r} />
         <Utilities key={`${r.id}-${r.status}`} r={r} />
 
         <Paper withBorder p="md" radius="md"><Stack><PeriodTiles p={c.mtd} title={t("ops.tiles.mtd")} /><PeriodTiles p={c.ytd} title={t("ops.tiles.ytd")} /></Stack></Paper>

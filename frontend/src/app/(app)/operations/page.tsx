@@ -56,7 +56,7 @@ function List() {
       <PageHeader title={t("ops.title")} actions={<>
         {can("op.enter") && machines.length > 0 && <Button leftSection={<IconPlus size={16} />} onClick={() => setOpen(true)}>{t("ops.newReport")}</Button>}
         {(logForms.data ?? []).filter((x) => x.in_pm_report && x.is_active).map((x) => (
-          <Button key={x.id} variant="default" component={Link} href={`/operations/logs?form=${x.id}`} leftSection={<IconNotebook size={16} />}>{x.name}</Button>
+          <Button key={x.id} variant="default" component={Link} href="/operations/sp" leftSection={<IconNotebook size={16} />}>{x.name}</Button>
         ))}
         {can("op.manage") && <Button variant="default" component={Link} href="/operations/settings" leftSection={<IconSettings size={16} />}>{t("ops.settings")}</Button>}
       </>}>

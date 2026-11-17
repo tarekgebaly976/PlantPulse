@@ -559,6 +559,7 @@ def get_report(rid: uuid.UUID, ctx: Ctx = Depends(require("op.view")), db: Sessi
         ],
         "calc": calc,
         "shift_logs": oplog_svc.report_sections(db, ctx.plant, r.report_date, ctx.dept_ok),
+        "utilities": oplog_svc.report_utilities(db, ctx.plant, r.report_date, calc["day"]["net"], ctx.dept_ok),
     }
 
 

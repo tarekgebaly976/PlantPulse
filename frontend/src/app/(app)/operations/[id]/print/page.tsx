@@ -95,15 +95,16 @@ export default function OpsPrint() {
             <h2>{t("ops.tables.byGsm")}</h2>
             <table><tbody>{Object.entries(c.gross_by_gsm).map(([g, v]) => <tr key={g}><th>{g} gsm</th><td>{t3(v)}</td></tr>)}
               <tr style={{ fontWeight: 700 }}><th>{t("ops.tables.total")}</th><td>{t3(c.day.gross)}</td></tr></tbody></table>
-            <h2>{t("ops.util.title")}</h2>
-            <table><tbody>
-              {P(t("ops.util.steam"), r.steam_mt === null ? "—" : String(r.steam_mt))}
-              {P(t("ops.util.steamPerT"), c.steam_per_t === null ? "—" : c.steam_per_t.toFixed(3))}
-              {P(t("ops.util.waterPm"), String(r.water_pm_m3 ?? "—"))}
-              {P(t("ops.util.waterSp"), String(r.water_sp_m3 ?? "—"))}
-              {P(t("ops.util.waterUt"), String(r.water_ut_m3 ?? "—"))}
-              {P(t("ops.util.broke"), String(r.broke_tower_pct ?? "—"))}
-            </tbody></table>
+            {r.utilities.map((u) => (
+              <div key={u.template.id}>
+                <h2>{t("ops.util.fromUt", { name: u.template.name })}</h2>
+                <table><tbody>
+                  {u.items.map((x) => P(`${x.label}${x.unit ? `, ${x.unit}` : ""}`, x.value === null ? "—" : `${x.value.toLocaleString(undefined, { maximumFractionDigits: x.decimals })}${x.per_ton !== null ? `  (${x.per_ton.toFixed(3)} /t)` : ""}`))}
+                </tbody></table>
+              </div>
+            ))}
+            <h2>{t("ops.util.notesTitle")}</h2>
+            <table><tbody>{P(t("ops.util.broke"), String(r.broke_tower_pct ?? "—"))}</tbody></table>
           </td>
           <td style={{ width: "50%", border: 0, paddingInlineEnd: 0 }} className="rca-keep">
             <h2>OEE</h2>

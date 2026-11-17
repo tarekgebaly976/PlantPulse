@@ -310,7 +310,7 @@ def _day(
         for i, (pa, pb) in enumerate(pieces):
             if change_at and pa >= change_at and state.get("changed") != d:
                 state["changed"] = d
-                state["gsm"] = rnd.choice([g for g in (250, 280, 300, 320, 350, 380, 400, 450) if g != state["gsm"]])
+                state["gsm"] = rnd.choice([g for g, _ in GRADES if g >= 250 and g != state["gsm"]])
                 reason = "Grade change as per production plan"
                 gc_h, gc_rej = round(rnd.uniform(0.25, 0.6), 2), round(rnd.uniform(0.5, 3.0), 1)
             else:
@@ -376,11 +376,6 @@ def _day(
         )
     db.flush()
     if until is None:
-        net = sum(float(x.net_mt + x.reject_mt) for x in db.execute(select(OpReel).where(OpReel.report_id == r.id)).scalars())
-        r.steam_mt = Decimal(str(round(net * rnd.uniform(1.9, 2.2), 0)))
-        r.water_pm_m3 = Decimal(rnd.randint(2100, 3400))
-        r.water_sp_m3 = Decimal(rnd.randint(1800, 2300))
-        r.water_ut_m3 = Decimal(rnd.randint(500, 1400))
         r.broke_tower_pct = Decimal(rnd.randint(20, 80))
     return r
 

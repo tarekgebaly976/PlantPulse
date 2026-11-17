@@ -249,3 +249,32 @@ def report_sections(db: Session, plant: Plant, d: date, dept_ok) -> list[dict]:
             "shift_codes": shifts, "lines": lines,
         })  # fmt: skip
     return out
+
+
+def report_utilities(db: Session, plant: Plant, d: date, net_t: float, dept_ok) -> list[dict]:
+    """The day's figures of the daily log forms that are not part of the PM report (e.g. the utilities daily report)
+    shown read-only in the PM & SP daily report: their "per tonne" lines, with the value per tonne of net paper."""
+    out = []
+    for t in db.execute(
+        select(OpLogTemplate).where(OpLogTemplate.plant_id == plant.id, OpLogTemplate.in_pm_report.is_(False), OpLogTemplate.is_active.is_(True))
+        .order_by(OpLogTemplate.sort)
+    ).scalars():  # fmt: skip
+        if not dept_ok(t.department_id):
+            continue
+        all_fields = fields_of(db, t.id)
+        fields = [x for x in all_fields if x.per_ton and x.is_active]
+        if not fields:
+            continue
+        logs = list(db.execute(select(OpLog).where(OpLog.template_id == t.id, OpLog.log_date == d)).scalars())
+        vals = values_of(db, [lg.id for lg in logs])
+        calcs = [compute(all_fields, vals[lg.id])[0] for lg in logs]
+        items = []
+        for fl in fields:
+            vs = [c[str(fl.id)]["value"] for c in calcs]
+            nums = [v for v in vs if v is not None]
+            v = (sum(nums) / len(nums) if averaged(fl) else sum(nums)) if nums else None
+            items.append({"label": fl.label, "unit": fl.unit, "decimals": fl.decimals, "value": v,
+                          "per_ton": round(v / net_t, 4) if v is not None and net_t else None})  # fmt: skip
+        out.append({"template": {"id": str(t.id), "name": t.name}, "logs": [{"id": str(lg.id), "shift": lg.shift, "status": lg.status.value} for lg in logs],
+                    "items": items})  # fmt: skip
+    return out

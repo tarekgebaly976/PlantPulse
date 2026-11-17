@@ -45,7 +45,7 @@ export interface Report {
   water_ut_m3: number | null; broke_tower_pct: number | null; created_by: string | null; submitted_by: string | null; submitted_at: string | null;
   confirmed_by: string | null; confirmed_at: string | null; reopen_note: string | null;
   prev: { id: string; date: string } | null; next: { id: string; date: string } | null;
-  segments: Segment[]; reels: Reel[]; stops: Stop[]; losses: Loss[]; calc: Calc; shift_logs: ShiftLogSection[];
+  segments: Segment[]; reels: Reel[]; stops: Stop[]; losses: Loss[]; calc: Calc; shift_logs: ShiftLogSection[]; utilities: DayUtilities[];
 }
 export interface ReportRow {
   id: string; machine_id: string; machine: string; report_date: string; status: string; revision: number; gross: number; net: number; a: number;
@@ -161,3 +161,11 @@ export interface ShiftLogSection {
   lines: { id: string; section: string; label: string; kind: LogKind; unit: string | null; decimals: number; shifts: Record<string, number | string | null>;
     flags: Record<string, "low" | "high" | null>; day: number | null }[];
 }
+
+/** Figures of the day from the utilities daily report, shown read-only in the PM & SP daily report. */
+export interface DayUtilities {
+  template: { id: string; name: string }; logs: { id: string; shift: string; status: string }[];
+  items: { label: string; unit: string | null; decimals: number; value: number | null; per_ton: number | null }[];
+}
+/** Where a log form's pages live: stock preparation (shown in the PM report) under /operations/sp, the others under /operations/logs. */
+export const logBase = (inPm: boolean | undefined) => (inPm ? "/operations/sp" : "/operations/logs");

@@ -99,9 +99,7 @@ SP_FIELDS = [
     ("CIL", "Shift", "CIL (clean, inspect, lubricate) done", "check", None, 0, None, 1, None, False, False, None),
     ("S5", "Shift", "5S activity", "text", None, 0, None, None, None, False, False, None),
     ("OPNOTE", "Shift", "Operation notes (stock off / on)", "text", None, 0, None, None, None, False, False, None),
-    ("GSM", "Paper machine", "Grade", "number", "gsm", 0, None, None, None, False, False, None),
-    ("SPEED", "Paper machine", "PM speed", "number", "m/min", 0, None, None, None, False, False, None),
-    ("BROKE", "Paper machine", "Broke flow", "number", "L/min", 0, None, None, 5000, True, False, None),
+    ("BROKE", "Broke", "Broke flow to SP", "number", "L/min", 0, None, None, 5000, True, False, None),
     ("B_OCC", "Furnish (bales)", "Line 1 – OCC", "number", "bales", 0, None, None, None, True, False, None),
     ("B_MW", "Furnish (bales)", "Line 2 – mixed waste", "number", "bales", 0, None, None, None, False, False, None),
     ("B_ONP", "Furnish (bales)", "Line 3 – newsprint", "number", "bales", 0, None, None, None, False, False, None),
@@ -112,7 +110,6 @@ SP_FIELDS = [
     ("T_DUMP2", "Stock levels", "Dump tank 2", "number", "%", 0, None, 20, 90, False, False, None),
     ("T_STORE1", "Stock levels", "Storage tank 1", "number", "%", 0, None, 20, 90, False, False, None),
     ("T_STORE2", "Stock levels", "Storage tank 2", "number", "%", 0, None, 20, 90, False, False, None),
-    ("SP_FW", "Water", "SP fresh water", "meter", "m³", 0, None, None, None, True, False, None),
     ("FL1", "Forklifts", "Forklift 1 in service", "check", None, 0, None, 1, None, False, False, None),
     ("FL2", "Forklifts", "Forklift 2 in service", "check", None, 0, None, 1, None, False, False, None),
 ]
@@ -221,7 +218,7 @@ def build_logs(db: Session, plant: Plant, ref: dict, current: date, now: datetim
         )
 
     rd = {"RAW_IN": 2_431_000.0, "RO1": 182_000.0, "RO2": 585_000.0, "RO_FEED": 1_210_000.0, "FW_PM": 1_390_000.0, "FW_SP": 1_501_000.0,
-          "FW_UT": 1_396_000.0, "EFF_IN": 571_000.0, "EFF": 545_000.0, "GAS": 961_000.0, "GAS_GE": 512_000.0, "SP_FW": 802_000.0,
+          "FW_UT": 1_396_000.0, "EFF_IN": 571_000.0, "EFF": 545_000.0, "GAS": 961_000.0, "GAS_GE": 512_000.0,
           "GE1_H": 41_250.0, "GE2_H": 38_910.0, "AC1_H": 144_200.0, "AC2_H": 30_300.0, "BLR1_H": 61_480.0}  # fmt: skip
     n = 0
     for i in range(days, -1, -1):
@@ -276,18 +273,14 @@ def build_logs(db: Session, plant: Plant, ref: dict, current: date, now: datetim
             db.add(lg)
             db.flush()
             half = net / 2
-            sw = half * rnd.uniform(2.0, 2.5)
             vals = {"INCIDENT": 0 if rnd.random() > 0.02 else 1, "CIL": 1 if rnd.random() > 0.1 else 0, "S5": rnd.choice(TEXTS_5S),
-                    "OPNOTE": rnd.choice(["", "", "", "Stock off 30 min for screen basket change"]), "GSM": rnd.choice([280, 300, 350, 380]),
-                    "SPEED": rnd.choice([400, 410, 420, 430]), "BROKE": rnd.uniform(2500, 4800), "B_OCC": round(half * rnd.uniform(0.28, 0.34)),
+                    "OPNOTE": rnd.choice(["", "", "", "Stock off 30 min for screen basket change"]),
+                    "BROKE": rnd.uniform(2500, 4800), "B_OCC": round(half * rnd.uniform(0.28, 0.34)),
                     "B_MW": round(half * rnd.uniform(0.06, 0.1)), "B_ONP": round(half * rnd.uniform(0.02, 0.05)), "B_HW": round(half * rnd.uniform(0.04, 0.07)),
                     "B_SW": round(half * rnd.uniform(0.04, 0.07)), "T_DUMP1": rnd.uniform(35, 92), "T_DUMP2": rnd.uniform(40, 85),
-                    "T_STORE1": rnd.uniform(40, 88), "T_STORE2": rnd.uniform(25, 80), "FL1": 1, "FL2": 1 if rnd.random() > 0.15 else 0,
-                    "SP_FW": (rd["SP_FW"], None if running else rd["SP_FW"] + sw)}  # fmt: skip
-            if not running:
-                rd["SP_FW"] += sw
+                    "T_STORE1": rnd.uniform(40, 88), "T_STORE2": rnd.uniform(25, 80), "FL1": 1, "FL2": 1 if rnd.random() > 0.15 else 0}  # fmt: skip
             if running:
-                vals = {k: vals[k] for k in ("SP_FW", "GSM", "SPEED", "T_DUMP1", "T_DUMP2", "T_STORE1", "T_STORE2", "FL1", "FL2")}
+                vals = {k: vals[k] for k in ("T_DUMP1", "T_DUMP2", "T_STORE1", "T_STORE2", "FL1", "FL2")}
             _put(db, lg, spf, vals)
             _status(lg, 0 if running else (2 if end < now - timedelta(hours=14) else 1), end, users)
             n += 1

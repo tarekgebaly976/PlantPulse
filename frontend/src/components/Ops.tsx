@@ -50,7 +50,7 @@ export function ShiftLogs({ sec, date, canStart, print }: { sec: ShiftLogSection
   const { t } = useTranslation();
   const router = useRouter();
   const start = useMut((shift: string) => post<{ id: string }>("/operations/logs", { template_id: sec.template.id, log_date: date, shift }),
-    { success: false, onDone: (r) => router.push(`/operations/logs/${r.id}`) });
+    { success: false, onDone: (r) => router.push(`/operations/sp/${r.id}`) });
   const codes = sec.shift_codes;
   const name = (c: string) => sec.template.shifts.find((x) => x.code === c)?.name ?? c;
   const cell = (l: ShiftLogSection["lines"][number], v: number | string | null | undefined) => {
@@ -67,7 +67,7 @@ export function ShiftLogs({ sec, date, canStart, print }: { sec: ShiftLogSection
         return (
           <Group key={c} gap={4} wrap="nowrap">
             <Text size="sm" fw={600}>{name(c)}:</Text>
-            {lg ? <><StatusBadge value={lg.status} size="sm" /><Button size="compact-sm" variant="light" component={Link} href={`/operations/logs/${lg.id}`}>{t("ops.sp.open")}</Button></>
+            {lg ? <><StatusBadge value={lg.status} size="sm" /><Button size="compact-sm" variant="light" component={Link} href={`/operations/sp/${lg.id}`}>{t("ops.sp.open")}</Button></>
               : canStart ? <Button size="compact-sm" leftSection={<IconPlus size={12} />} loading={start.isPending} onClick={() => start.mutate(c)}>{t("ops.sp.start")}</Button>
               : <Badge size="sm" color="gray" variant="light">{t("ops.sp.none")}</Badge>}
           </Group>
