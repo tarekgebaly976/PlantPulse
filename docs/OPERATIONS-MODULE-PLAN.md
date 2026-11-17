@@ -32,6 +32,11 @@ Branch: `claude/serene-davinci-0arq11` (migrations up to 0021)
 - **Production dashboard:** production per day (A / B+S / reject), OEE and A×P×Q trends, breaks per day, downtime and
   breaks by discipline, and every log line marked "Dashboard" as a trend, per tonne of paper where marked
   (water, steam, gas, electricity, bales per t).
+- **Names and layout (17 Nov, migration 0024):** menu "PM & SP daily report" (the paper machine report with the
+  stock preparation shift logs inside, D / N / day side by side, also printed) and "Utilities daily report" (one form:
+  water & RO, WWTP with pH / COD / TSS / sludge, power house, power consumption, boiler house, compressed air, natural
+  gas). Log forms can be marked "show inside the PM & SP daily report"; each line can add up or average its shifts.
+  Clear back buttons and "Previous day / Next day" on the detail pages (phones).
 - Not yet: Excel import of past daily sheets, winder/FSC, Q-factors (phase 2).
 
 To switch it on for the real installation later: add `CMMS_OPERATIONS_MODULE=true` to `deploy/.env` and restart.

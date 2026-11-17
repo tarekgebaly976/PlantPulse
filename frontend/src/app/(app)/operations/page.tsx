@@ -1,7 +1,7 @@
 "use client";
 
 import { Alert, Badge, Button, Group, Paper, Select, Stack, Text, TextInput } from "@mantine/core";
-import { IconFileReport, IconPlus, IconSettings } from "@tabler/icons-react";
+import { IconFileReport, IconNotebook, IconPlus, IconSettings } from "@tabler/icons-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -12,7 +12,7 @@ import { DataTable, Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { post } from "@/lib/api";
 import { fmtNum, useMut, useQ } from "@/lib/hooks";
 import { oeeColor, PeriodTiles } from "@/components/Ops";
-import { currentProductionDay, hhmm, pct, type OpSettings, type ReportList } from "@/lib/ops";
+import { currentProductionDay, hhmm, pct, type LogTemplate, type OpSettings, type ReportList } from "@/lib/ops";
 import { useSession } from "@/lib/session";
 
 function NewReport({ opened, onClose, settings }: { opened: boolean; onClose: () => void; settings: OpSettings }) {
@@ -41,6 +41,7 @@ function List() {
   const { can, plant, me, setPlant } = useSession();
   const others = (me?.plants ?? []).filter((p) => p.plant_id !== plant?.plant_id && p.permissions.includes("op.view"));
   const settings = useQ<OpSettings>("/operations/settings");
+  const logForms = useQ<LogTemplate[]>("/operations/log-templates");
   const machines = settings.data?.machines ?? [];
   const [mid, setMid] = useState<string | null>(null);
   const machineId = mid ?? machines[0]?.id ?? null;
@@ -54,6 +55,9 @@ function List() {
     <>
       <PageHeader title={t("ops.title")} actions={<>
         {can("op.enter") && machines.length > 0 && <Button leftSection={<IconPlus size={16} />} onClick={() => setOpen(true)}>{t("ops.newReport")}</Button>}
+        {(logForms.data ?? []).filter((x) => x.in_pm_report && x.is_active).map((x) => (
+          <Button key={x.id} variant="default" component={Link} href={`/operations/logs?form=${x.id}`} leftSection={<IconNotebook size={16} />}>{x.name}</Button>
+        ))}
         {can("op.manage") && <Button variant="default" component={Link} href="/operations/settings" leftSection={<IconSettings size={16} />}>{t("ops.settings")}</Button>}
       </>}>
         <Text size="sm" c="dimmed">{t("ops.subtitle")}</Text>

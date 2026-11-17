@@ -181,6 +181,8 @@ class OpLogTemplate(Base, PlantScoped, Timestamped):
     day_start: Mapped[time] = mapped_column(Time, default=time(7, 0))
     shifts: Mapped[list] = mapped_column(JSONB, default=list)  # [{"code": "D", "name": "Day shift", "start": "07:00"}]
     issues: Mapped[bool] = mapped_column(Boolean, default=False)  # show the department's open work requests / orders
+    # shown inside the paper machine's daily report (e.g. the stock preparation shift log): "PM & SP daily report"
+    in_pm_report: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     sort: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -206,6 +208,8 @@ class OpLogField(Base):
     meter_id: Mapped[uuid.UUID | None] = fk("meters.id", nullable=True, ondelete="SET NULL", index=False)
     chart: Mapped[bool] = mapped_column(Boolean, default=False)  # shown on the production dashboard
     per_ton: Mapped[bool] = mapped_column(Boolean, default=False)  # dashboard also shows it per tonne of paper
+    # day figure of a per-shift log (and dashboard): "sum" (bales, tonnes), "avg" (levels, flows); None = automatic
+    day_agg: Mapped[str | None] = mapped_column(String(8))
     sort: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 

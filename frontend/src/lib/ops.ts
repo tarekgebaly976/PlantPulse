@@ -45,7 +45,7 @@ export interface Report {
   water_ut_m3: number | null; broke_tower_pct: number | null; created_by: string | null; submitted_by: string | null; submitted_at: string | null;
   confirmed_by: string | null; confirmed_at: string | null; reopen_note: string | null;
   prev: { id: string; date: string } | null; next: { id: string; date: string } | null;
-  segments: Segment[]; reels: Reel[]; stops: Stop[]; losses: Loss[]; calc: Calc;
+  segments: Segment[]; reels: Reel[]; stops: Stop[]; losses: Loss[]; calc: Calc; shift_logs: ShiftLogSection[];
 }
 export interface ReportRow {
   id: string; machine_id: string; machine: string; report_date: string; status: string; revision: number; gross: number; net: number; a: number;
@@ -118,11 +118,11 @@ export function currentProductionDay(dayStart: string, tz?: string): string {
 export type LogKind = "meter" | "counter" | "number" | "check" | "text" | "calc";
 export interface LogField {
   id: string; section: string; code: string; label: string; kind: LogKind; unit: string | null; decimals: number; formula: string | null;
-  low: number | null; high: number | null; meter_id: string | null; chart: boolean; per_ton: boolean; sort: number; is_active: boolean;
+  low: number | null; high: number | null; meter_id: string | null; chart: boolean; per_ton: boolean; day_agg: "sum" | "avg" | null; sort: number; is_active: boolean;
 }
 export interface LogTemplate {
   id: string; code: string; name: string; department_id: string; frequency: "day" | "shift"; day_start: string; shifts: OpShift[];
-  issues: boolean; sort: number; is_active: boolean; fields?: LogField[];
+  issues: boolean; in_pm_report: boolean; sort: number; is_active: boolean; fields?: LogField[];
 }
 export interface LogValue { opening: number | null; closing: number | null; value: number | null; text: string | null; flag: "low" | "high" | null }
 export interface LogWarning { code: string; item: string }
@@ -131,7 +131,7 @@ export interface LogDetail {
   can_edit: boolean; in_progress: boolean; window: { start: string; end: string }; created_by: string | null; submitted_by: string | null;
   confirmed_by: string | null; submitted_at: string | null; confirmed_at: string | null; reopen_note: string | null;
   prev: { id: string; date: string; shift: string } | null; next: { id: string; date: string; shift: string } | null;
-  fields: LogField[]; values: Record<string, LogValue>; warnings: LogWarning[];
+  fields: LogField[]; values: Record<string, LogValue>; warnings: LogWarning[]; pm_report_id: string | null;
   issues: { requests: { id: string; number: string; title: string; asset: string; breakdown: boolean; created_at: string }[];
     work_orders: { id: string; number: string; title: string; asset: string; status: string; priority: string; created_at: string }[] } | null;
 }
@@ -152,4 +152,12 @@ export interface Dashboard {
 export function fmtVal(v: number | null | undefined, decimals = 1): string {
   if (v === null || v === undefined) return "—";
   return v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: decimals });
+}
+
+/** A log form shown inside the PM daily report (e.g. stock preparation shift log): shifts side by side and the day. */
+export interface ShiftLogSection {
+  template: { id: string; code: string; name: string; frequency: "day" | "shift"; shifts: { code: string; name: string }[] };
+  logs: Record<string, { id: string; status: string; warnings: number }>; shift_codes: string[];
+  lines: { id: string; section: string; label: string; kind: LogKind; unit: string | null; decimals: number; shifts: Record<string, number | string | null>;
+    flags: Record<string, "low" | "high" | null>; day: number | null }[];
 }

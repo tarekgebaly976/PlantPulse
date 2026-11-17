@@ -5,6 +5,7 @@ import { IconArrowBack, IconPrinter } from "@tabler/icons-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
+import { ShiftLogs } from "@/components/Ops";
 import { Loading } from "@/components/ui";
 import { fmtDate, useQ } from "@/lib/hooks";
 import { hhmm, hm, nextDay, pct, t3, type OpSettings, type Report } from "@/lib/ops";
@@ -58,6 +59,8 @@ export default function OpsPrint() {
           <tr style={{ fontWeight: 700 }}><td colSpan={4}>{t("ops.tables.total")}</td><td>{hhmm(c.run_hours)}</td><td>{t3(c.day.gross)}</td><td>{t3(c.day.net)}</td><td>{t3(c.day.a)}</td>
             <td>{t3(c.day.b)}</td><td>{t3(c.day.s)}</td><td>{t3(c.day.reject)}</td><td>{t3(c.day.trim)}</td><td>{pct(c.day.b_pct, 2)}</td><td>{pct(c.day.reject_pct, 2)}</td></tr>
         </tbody></table>
+
+        {r.shift_logs.map((sec) => <div key={sec.template.id} className="rca-keep"><h2>{sec.template.name}</h2><ShiftLogs sec={sec} date={r.report_date} print /></div>)}
 
         <h2>{t("ops.tables.downtime")} · {t("ops.tables.breaks")}</h2>
         <table><thead><tr><th />{discIds.map((d) => <th key={d}>{disc(d)}</th>)}<th>{t("ops.tables.planned")}</th><th>{t("ops.tables.total")}</th></tr></thead><tbody>

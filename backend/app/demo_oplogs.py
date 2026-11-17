@@ -20,39 +20,42 @@ from app.services.common import next_number
 
 # code, section, label, kind, unit, decimals, formula, low, high, chart, per_ton, meter asset
 UT_FIELDS = [
-    ("RAW_IN", "Water", "Raw water intake", "meter", "m³", 0, None, None, None, True, False, None),
-    ("RO1", "Water", "RO plant 1 product", "meter", "m³", 0, None, None, None, False, False, None),
-    ("RO2", "Water", "RO plant 2 product", "meter", "m³", 0, None, None, None, False, False, None),
-    ("RO_FEED", "Water", "Feed water to RO", "meter", "m³", 0, None, None, None, False, False, None),
-    ("RO_REC", "Water", "RO recovery", "calc", "%", 1, "(RO1 + RO2) / RO_FEED * 100", 65, None, True, False, None),
-    ("FW_PM", "Water", "Fresh water – paper machine", "meter", "m³", 0, None, None, None, False, True, None),
-    ("FW_SP", "Water", "Fresh water – stock preparation", "meter", "m³", 0, None, None, None, False, False, None),
-    ("FW_UT", "Water", "Fresh water – utilities & boiler", "meter", "m³", 0, None, None, None, False, False, None),
-    ("FW_TOTAL", "Water", "Fresh water – total", "calc", "m³", 0, "FW_PM + FW_SP + FW_UT", None, None, True, True, None),
-    ("TANK", "Water", "Product water tank level", "number", "%", 0, None, 30, 95, False, False, None),
-    ("EFF", "Effluent", "Effluent treated", "meter", "m³", 0, None, None, None, True, False, None),
-    ("STEAM", "Steam & fuel", "Steam generated", "number", "t", 0, None, None, None, True, True, None),
-    ("COND", "Steam & fuel", "Condensate returned", "number", "t", 0, None, None, None, False, False, None),
-    ("COND_PCT", "Steam & fuel", "Condensate recovery", "calc", "%", 1, "COND / STEAM * 100", 60, None, True, False, None),
-    ("GAS", "Steam & fuel", "Natural gas", "meter", "Nm³", 0, None, None, None, True, True, None),
-    ("AIR", "Steam & fuel", "Compressed air produced", "number", "Nm³", 0, None, None, None, False, False, None),
-    ("GE1_H", "Electricity – generation", "Gas engine 1 running hours", "counter", "h", 1, None, None, None, False, False, "UT-GE1"),
-    ("GE1_MWH", "Electricity – generation", "Gas engine 1 generated", "number", "MWh", 1, None, None, None, False, False, None),
-    ("GE1_FS", "Electricity – generation", "Gas engine 1 forced stoppage", "number", "h", 1, None, None, 2, False, False, None),
-    ("GE2_H", "Electricity – generation", "Gas engine 2 running hours", "counter", "h", 1, None, None, None, False, False, "UT-GE2"),
-    ("GE2_MWH", "Electricity – generation", "Gas engine 2 generated", "number", "MWh", 1, None, None, None, False, False, None),
-    ("GE2_FS", "Electricity – generation", "Gas engine 2 forced stoppage", "number", "h", 1, None, None, 2, False, False, None),
-    ("GEN", "Electricity – generation", "Total generated", "calc", "MWh", 1, "GE1_MWH + GE2_MWH", None, None, True, False, None),
-    ("GRID", "Electricity – generation", "Imported from the grid", "number", "MWh", 1, None, None, None, True, False, None),
-    ("P_PM", "Electricity – consumption", "Paper machine", "number", "MWh", 1, None, None, None, False, True, None),
-    ("P_SP", "Electricity – consumption", "Stock preparation", "number", "MWh", 1, None, None, None, False, False, None),
-    ("P_BH", "Electricity – consumption", "Boiler house", "number", "MWh", 1, None, None, None, False, False, None),
-    ("P_UT", "Electricity – consumption", "Utilities & water treatment", "number", "MWh", 1, None, None, None, False, False, None),
-    ("P_FH", "Electricity – consumption", "Finishing house", "number", "MWh", 1, None, None, None, False, False, None),
-    ("P_OF", "Electricity – consumption", "Offices & workshop", "number", "MWh", 1, None, None, None, False, False, None),
+    ("RAW_IN", "Water & RO", "Raw water intake", "meter", "m³", 0, None, None, None, True, False, None),
+    ("RO1", "Water & RO", "RO plant 1 product", "meter", "m³", 0, None, None, None, False, False, None),
+    ("RO2", "Water & RO", "RO plant 2 product", "meter", "m³", 0, None, None, None, False, False, None),
+    ("RO_FEED", "Water & RO", "Feed water to RO", "meter", "m³", 0, None, None, None, False, False, None),
+    ("RO_REC", "Water & RO", "RO recovery", "calc", "%", 1, "(RO1 + RO2) / RO_FEED * 100", 65, None, True, False, None),
+    ("FW_PM", "Water & RO", "Fresh water – paper machine", "meter", "m³", 0, None, None, None, False, True, None),
+    ("FW_SP", "Water & RO", "Fresh water – stock preparation", "meter", "m³", 0, None, None, None, False, False, None),
+    ("FW_UT", "Water & RO", "Fresh water – utilities & boiler", "meter", "m³", 0, None, None, None, False, False, None),
+    ("FW_TOTAL", "Water & RO", "Fresh water – total", "calc", "m³", 0, "FW_PM + FW_SP + FW_UT", None, None, True, True, None),
+    ("TANK", "Water & RO", "Product water tank level", "number", "%", 0, None, 30, 95, False, False, None),
+    ("EFF_IN", "WWTP", "Effluent inlet", "meter", "m³", 0, None, None, None, True, True, None),
+    ("EFF", "WWTP", "Treated effluent outlet", "meter", "m³", 0, None, None, None, False, False, None),
+    ("PH_IN", "WWTP", "pH inlet", "number", "pH", 1, None, 6, 9, False, False, None),
+    ("PH_OUT", "WWTP", "pH outlet", "number", "pH", 1, None, 6.5, 8.5, True, False, None),
+    ("COD_IN", "WWTP", "COD inlet", "number", "mg/L", 0, None, None, None, False, False, None),
+    ("COD_OUT", "WWTP", "COD outlet", "number", "mg/L", 0, None, None, 200, True, False, None),
+    ("COD_RED", "WWTP", "COD removal", "calc", "%", 1, "(COD_IN - COD_OUT) / COD_IN * 100", 85, None, True, False, None),
+    ("TSS_OUT", "WWTP", "TSS outlet", "number", "mg/L", 0, None, None, 50, False, False, None),
+    ("SLUDGE", "WWTP", "Sludge dewatered", "number", "t", 1, None, None, None, False, False, None),
+    ("GE1_H", "Power house", "Gas engine 1 running hours", "counter", "h", 1, None, None, None, False, False, "UT-GE1"),
+    ("GE1_MWH", "Power house", "Gas engine 1 generated", "number", "MWh", 1, None, None, None, False, False, None),
+    ("GE1_FS", "Power house", "Gas engine 1 forced stoppage", "number", "h", 1, None, None, 2, False, False, None),
+    ("GE2_H", "Power house", "Gas engine 2 running hours", "counter", "h", 1, None, None, None, False, False, "UT-GE2"),
+    ("GE2_MWH", "Power house", "Gas engine 2 generated", "number", "MWh", 1, None, None, None, False, False, None),
+    ("GE2_FS", "Power house", "Gas engine 2 forced stoppage", "number", "h", 1, None, None, 2, False, False, None),
+    ("GEN", "Power house", "Total generated", "calc", "MWh", 1, "GE1_MWH + GE2_MWH", None, None, True, False, None),
+    ("GRID", "Power house", "Imported from the grid", "number", "MWh", 1, None, None, None, True, False, None),
+    ("P_PM", "Power consumption", "Paper machine", "number", "MWh", 1, None, None, None, False, True, None),
+    ("P_SP", "Power consumption", "Stock preparation", "number", "MWh", 1, None, None, None, False, False, None),
+    ("P_BH", "Power consumption", "Boiler house", "number", "MWh", 1, None, None, None, False, False, None),
+    ("P_UT", "Power consumption", "Utilities, WWTP & water treatment", "number", "MWh", 1, None, None, None, False, False, None),
+    ("P_FH", "Power consumption", "Finishing house", "number", "MWh", 1, None, None, None, False, False, None),
+    ("P_OF", "Power consumption", "Offices & workshop", "number", "MWh", 1, None, None, None, False, False, None),
     (
         "P_TOTAL",
-        "Electricity – consumption",
+        "Power consumption",
         "Total consumed",
         "calc",
         "MWh",
@@ -66,7 +69,7 @@ UT_FIELDS = [
     ),
     (
         "P_BAL",
-        "Electricity – consumption",
+        "Power consumption",
         "Balance (generated + imported − consumed)",
         "calc",
         "MWh",
@@ -78,9 +81,18 @@ UT_FIELDS = [
         False,
         None,
     ),
-    ("AC1_H", "Running hours", "Air compressor 1", "counter", "h", 1, None, None, None, False, False, "UT-AC1"),
-    ("AC2_H", "Running hours", "Air compressor 2", "counter", "h", 1, None, None, None, False, False, "UT-AC2"),
-    ("BLR1_H", "Running hours", "Boiler 1", "counter", "h", 1, None, None, None, False, False, "UT-BLR1"),
+    ("STEAM", "Boiler house", "Steam generated", "number", "t", 0, None, None, None, True, True, None),
+    ("COND", "Boiler house", "Condensate returned", "number", "t", 0, None, None, None, False, False, None),
+    ("COND_PCT", "Boiler house", "Condensate recovery", "calc", "%", 1, "COND / STEAM * 100", 60, None, True, False, None),
+    ("FEED_W", "Boiler house", "Boiler feed water", "number", "m³", 0, None, None, None, False, False, None),
+    ("BLR1_H", "Boiler house", "Boiler 1 running hours", "counter", "h", 1, None, None, None, False, False, "UT-BLR1"),
+    ("AIR", "Compressed air", "Compressed air produced", "number", "Nm³", 0, None, None, None, True, False, None),
+    ("DEW", "Compressed air", "Dryer dew point", "number", "°C", 1, None, None, 3, False, False, None),
+    ("AC1_H", "Compressed air", "Air compressor 1 running hours", "counter", "h", 1, None, None, None, False, False, "UT-AC1"),
+    ("AC2_H", "Compressed air", "Air compressor 2 running hours", "counter", "h", 1, None, None, None, False, False, "UT-AC2"),
+    ("GAS", "Natural gas", "Natural gas – total", "meter", "Nm³", 0, None, None, None, True, True, None),
+    ("GAS_GE", "Natural gas", "Natural gas – to gas engines", "meter", "Nm³", 0, None, None, None, False, False, None),
+    ("GAS_BLR", "Natural gas", "Natural gas – to boilers", "calc", "Nm³", 0, "GAS - GAS_GE", None, None, True, False, None),
 ]
 SP_FIELDS = [
     ("INCIDENT", "Shift", "Incident / accident", "check", None, 0, None, None, 0, False, False, None),
@@ -134,6 +146,7 @@ def _template(
     fields = {}
     for i, (c, sec, label, kind, unit, dec, formula, low, high, chart, per_ton, meter) in enumerate(rows):
         x = OpLogField(
+            day_agg="sum" if unit == "bales" else None,
             template_id=t.id, section=sec, code=c, label=label, kind=kind, unit=unit, decimals=dec, formula=formula,
             low=Decimal(str(low)) if low is not None else None, high=Decimal(str(high)) if high is not None else None,
             meter_id=meters[meter].id if meter else None, chart=chart, per_ton=per_ton, sort=(i + 1) * 10,
@@ -197,10 +210,9 @@ def build_logs(db: Session, plant: Plant, ref: dict, current: date, now: datetim
     for acode, title, bd in SP_ISSUES:
         db.add(WorkRequest(plant_id=plant.id, number=next_number(db, plant, "WR"), asset_id=assets[acode].id, title=title,
                            description="Raised from the stock preparation shift log (sample).", is_breakdown=bd, created_by_id=users["prod.sup"].id))  # fmt: skip
-    ut, utf = _template(
-        db, plant, "UT-DAILY", "Utilities – daily generation & electricity", depts["UTIL"].id, "day", False, 10, UT_FIELDS, meters
-    )
+    ut, utf = _template(db, plant, "UT-DAILY", "Utilities daily report", depts["UTIL"].id, "day", False, 10, UT_FIELDS, meters)
     sp, spf = _template(db, plant, "SP-SHIFT", "Stock preparation – shift report", depts["SP"].id, "shift", True, 20, SP_FIELDS, meters)
+    sp.in_pm_report = True  # shown inside the PM & SP daily report
 
     net_by_day: dict[date, float] = {}
     for r in db.execute(select(OpDailyReport).where(OpDailyReport.plant_id == plant.id)).scalars():
@@ -209,7 +221,7 @@ def build_logs(db: Session, plant: Plant, ref: dict, current: date, now: datetim
         )
 
     rd = {"RAW_IN": 2_431_000.0, "RO1": 182_000.0, "RO2": 585_000.0, "RO_FEED": 1_210_000.0, "FW_PM": 1_390_000.0, "FW_SP": 1_501_000.0,
-          "FW_UT": 1_396_000.0, "EFF": 545_000.0, "GAS": 961_000.0, "SP_FW": 802_000.0,
+          "FW_UT": 1_396_000.0, "EFF_IN": 571_000.0, "EFF": 545_000.0, "GAS": 961_000.0, "GAS_GE": 512_000.0, "SP_FW": 802_000.0,
           "GE1_H": 41_250.0, "GE2_H": 38_910.0, "AC1_H": 144_200.0, "AC2_H": 30_300.0, "BLR1_H": 61_480.0}  # fmt: skip
     n = 0
     for i in range(days, -1, -1):
@@ -222,30 +234,7 @@ def build_logs(db: Session, plant: Plant, ref: dict, current: date, now: datetim
         db.add(lg)
         db.flush()
         if i == 0:  # in progress: openings only, as the next morning's form starts
-            _put(
-                db,
-                lg,
-                utf,
-                {
-                    c: (rd[c], None)
-                    for c in (
-                        "RAW_IN",
-                        "RO1",
-                        "RO2",
-                        "RO_FEED",
-                        "FW_PM",
-                        "FW_SP",
-                        "FW_UT",
-                        "EFF",
-                        "GAS",
-                        "GE1_H",
-                        "GE2_H",
-                        "AC1_H",
-                        "AC2_H",
-                        "BLR1_H",
-                    )
-                },
-            )
+            _put(db, lg, utf, {c: (rd[c], None) for c, f in utf.items() if f.kind in ("meter", "counter")})
         else:
             fw_pm = net * rnd.uniform(6.5, 8.0)
             fw_sp = net * rnd.uniform(4.0, 5.0)
@@ -259,15 +248,21 @@ def build_logs(db: Session, plant: Plant, ref: dict, current: date, now: datetim
             p = {"P_PM": net * rnd.uniform(0.27, 0.31), "P_SP": net * rnd.uniform(0.14, 0.17), "P_BH": rnd.uniform(18, 26), "P_UT": rnd.uniform(14, 20),
                  "P_FH": rnd.uniform(6, 10), "P_OF": rnd.uniform(3, 5)}  # fmt: skip
             grid = sum(p.values()) - sum(ge_mwh) + rnd.uniform(-1.5, 1.5)
+            eff_in = rnd.uniform(3500, 4300)
+            gas_ge = sum(ge_mwh) * rnd.uniform(225, 235)
+            cod_in = rnd.uniform(1800, 2600)
+            cod_out = rnd.uniform(90, 180) if rnd.random() > 0.06 else rnd.uniform(210, 260)
             inc = {"RAW_IN": fw_pm + fw_sp + fw_ut + rnd.uniform(300, 600), "RO1": ro1, "RO2": ro2, "RO_FEED": ro_feed, "FW_PM": fw_pm, "FW_SP": fw_sp,
-                   "FW_UT": fw_ut, "EFF": rnd.uniform(3400, 4200), "GAS": steam * rnd.uniform(75, 85) + sum(ge_mwh) * 230,
+                   "FW_UT": fw_ut, "EFF_IN": eff_in, "EFF": eff_in * rnd.uniform(0.95, 0.99), "GAS": steam * rnd.uniform(75, 85) + gas_ge, "GAS_GE": gas_ge,
                    "GE1_H": ge_h[0], "GE2_H": ge_h[1], "AC1_H": 24, "AC2_H": rnd.choice([0, 12, 24, 24]), "BLR1_H": rnd.choice([24, 24, 23, 22])}  # fmt: skip
             vals: dict = {}
             for c, add in inc.items():
                 vals[c] = (rd[c], rd[c] + add)
                 rd[c] += add
             vals.update({"TANK": rnd.uniform(45, 92), "STEAM": steam, "COND": steam * rnd.uniform(0.55, 0.8), "AIR": rnd.uniform(160_000, 180_000),
-                         "GE1_MWH": ge_mwh[0], "GE2_MWH": ge_mwh[1], "GE1_FS": ge_fs[0], "GE2_FS": ge_fs[1], "GRID": max(grid, 0), **p})  # fmt: skip
+                         "GE1_MWH": ge_mwh[0], "GE2_MWH": ge_mwh[1], "GE1_FS": ge_fs[0], "GE2_FS": ge_fs[1], "GRID": max(grid, 0), **p,
+                         "PH_IN": rnd.uniform(6.6, 8.4), "PH_OUT": rnd.uniform(7.0, 8.1) if rnd.random() > 0.05 else 8.7, "COD_IN": cod_in, "COD_OUT": cod_out,
+                         "TSS_OUT": rnd.uniform(15, 45), "SLUDGE": rnd.uniform(8, 14), "FEED_W": steam * rnd.uniform(1.03, 1.08), "DEW": rnd.uniform(1.0, 3.4)})  # fmt: skip
             _put(db, lg, utf, vals)
         _status(lg, i, t1, users)
         n += 1

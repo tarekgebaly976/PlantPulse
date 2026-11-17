@@ -2,12 +2,13 @@
 
 import { ActionIcon, Alert, Badge, Button, Checkbox, Group, NumberInput, Paper, Stack, Switch, Table, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { IconAlertTriangle, IconArrowLeft, IconArrowRight, IconLock, IconPlus, IconPrinter, IconTrash } from "@tabler/icons-react";
+import { IconAlertTriangle, IconChevronLeft, IconChevronRight, IconLock, IconPlus, IconPrinter, IconTrash } from "@tabler/icons-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
+import { BackLink } from "@/components/Ops";
 import { Modal } from "@/components/Modal";
 import { AssetPicker, ConfirmButton, Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { del, post, put } from "@/lib/api";
@@ -157,6 +158,8 @@ function LogView() {
   const go = (x: { id: string } | null) => x && router.push(`/operations/logs/${x.id}`);
   return (
     <>
+      {d.pm_report_id ? <BackLink href={`/operations/${d.pm_report_id}`} label={t("ops.report.title")} />
+        : <BackLink href={d.template.in_pm_report ? `/operations/logs?form=${d.template.id}` : "/operations/logs"} label={d.template.in_pm_report ? d.template.name : t("logs.title")} />}
       <PageHeader title={`${d.template.name} · ${d.log_date}${shiftName ? ` · ${shiftName}` : ""}`} actions={<>
         <Button variant="default" leftSection={<IconPrinter size={16} />} onClick={() => window.print()} className="no-print">{t("ops.report.print")}</Button>
         {ed && <Button loading={save.isPending} onClick={() => save.mutate(undefined)} className="no-print">{t("common.save")}</Button>}
@@ -167,14 +170,13 @@ function LogView() {
           onClick={() => { if (window.confirm(t("ops.report.deleteConfirm"))) remove.mutate(undefined); }}><IconTrash size={18} /></ActionIcon>}
       </>}>
         <Group gap="xs">
-          <ActionIcon variant="default" disabled={!d.prev} aria-label={t("common.prev")} onClick={() => go(d.prev)}><IconArrowLeft size={16} /></ActionIcon>
-          <ActionIcon variant="default" disabled={!d.next} aria-label={t("common.next")} onClick={() => go(d.next)}><IconArrowRight size={16} /></ActionIcon>
+          <Button variant="default" size="compact-sm" disabled={!d.prev} leftSection={<IconChevronLeft size={14} />} onClick={() => go(d.prev)}>{t("ops.prev")}</Button>
+          <Button variant="default" size="compact-sm" disabled={!d.next} rightSection={<IconChevronRight size={14} />} onClick={() => go(d.next)}>{t("ops.next")}</Button>
           <StatusBadge value={d.status} />
           {d.revision > 1 && <Badge variant="outline" color="gray">{t("ops.report.revision", { n: d.revision })}</Badge>}
           <Text size="sm" c="dimmed">{hm(d.window.start, tz)}–{hm(d.window.end, tz)}</Text>
           {d.submitted_by && <Text size="sm" c="dimmed">· {t("ops.report.submittedBy", { who: d.submitted_by })}</Text>}
           {d.confirmed_by && <Text size="sm" c="dimmed">· {t("ops.report.confirmedBy", { who: d.confirmed_by })}</Text>}
-          <Button variant="subtle" size="compact-sm" component={Link} href="/operations/logs" className="no-print">{t("logs.title")}</Button>
         </Group>
       </PageHeader>
       <Stack>

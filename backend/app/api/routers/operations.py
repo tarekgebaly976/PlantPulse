@@ -36,6 +36,7 @@ from app.models.operations import (
 from app.models.tenancy import Department
 from app.schemas.common import In
 from app.services import operations as svc
+from app.services import oplogs as oplog_svc
 from app.services.common import audit, plant_today, utcnow
 
 router = APIRouter(prefix="/operations", tags=["operations"])
@@ -557,6 +558,7 @@ def get_report(rid: uuid.UUID, ctx: Ctx = Depends(require("op.view")), db: Sessi
             for x in losses
         ],
         "calc": calc,
+        "shift_logs": oplog_svc.report_sections(db, ctx.plant, r.report_date, ctx.dept_ok),
     }
 
 

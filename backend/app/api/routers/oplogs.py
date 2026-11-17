@@ -58,6 +58,7 @@ class TemplateIn(In):
     day_start: time = time(7, 0)
     shifts: list[ShiftIn] = Field(default_factory=list, max_length=4)
     issues: bool = False
+    in_pm_report: bool = False
     sort: int = Field(0, ge=0, le=999)
     is_active: bool = True
 
@@ -82,6 +83,7 @@ class FieldIn(In):
     meter_id: uuid.UUID | None = None
     chart: bool = False
     per_ton: bool = False
+    day_agg: Literal["sum", "avg"] | None = None
     sort: int = Field(0, ge=0, le=9999)
     is_active: bool = True
 
@@ -89,7 +91,7 @@ class FieldIn(In):
 def template_out(t: OpLogTemplate, fields: list[OpLogField] | None = None) -> dict:
     out = {
         "id": str(t.id), "code": t.code, "name": t.name, "department_id": str(t.department_id), "frequency": t.frequency,
-        "day_start": t.day_start.strftime("%H:%M"), "shifts": t.shifts, "issues": t.issues, "sort": t.sort, "is_active": t.is_active,
+        "day_start": t.day_start.strftime("%H:%M"), "shifts": t.shifts, "issues": t.issues, "in_pm_report": t.in_pm_report, "sort": t.sort, "is_active": t.is_active,
     }  # fmt: skip
     if fields is not None:
         out["fields"] = [field_out(x) for x in fields]
@@ -100,7 +102,7 @@ def field_out(x: OpLogField) -> dict:
     return {
         "id": str(x.id), "section": x.section, "code": x.code, "label": x.label, "kind": x.kind, "unit": x.unit, "decimals": x.decimals,
         "formula": x.formula, "low": _num(x.low), "high": _num(x.high), "meter_id": str(x.meter_id) if x.meter_id else None,
-        "chart": x.chart, "per_ton": x.per_ton, "sort": x.sort, "is_active": x.is_active,
+        "chart": x.chart, "per_ton": x.per_ton, "day_agg": x.day_agg, "sort": x.sort, "is_active": x.is_active,
     }  # fmt: skip
 
 
@@ -313,6 +315,17 @@ def _issues(db: Session, t: OpLogTemplate) -> dict:
     }  # fmt: skip
 
 
+def _pm_report_id(db: Session, ctx: Ctx, d: date) -> str | None:
+    """The paper machine report of the same day (a stock preparation shift log goes back to it)."""
+    rid = db.execute(
+        select(OpDailyReport.id)
+        .where(OpDailyReport.plant_id == ctx.plant_id, OpDailyReport.report_date == d)
+        .order_by(OpDailyReport.created_at)
+        .limit(1)
+    ).scalar_one_or_none()
+    return str(rid) if rid else None
+
+
 @router.get("/logs/{lid}")
 def get_log(lid: uuid.UUID, ctx: Ctx = Depends(require("op.view")), db: Session = DB) -> dict:
     lg, t = _log(db, ctx, lid)
@@ -350,6 +363,7 @@ def get_log(lid: uuid.UUID, ctx: Ctx = Depends(require("op.view")), db: Session 
         "next": {"id": str(nxt[0]), "date": nxt[1].isoformat(), "shift": nxt[2]} if nxt else None,
         "fields": [field_out(x) for x in fields if x.is_active or str(x.id) in {str(k) for k in vals}],
         "values": calc, "warnings": warns, "issues": _issues(db, t) if t.issues else None,
+        "pm_report_id": _pm_report_id(db, ctx, lg.log_date) if t.in_pm_report else None,
     }  # fmt: skip
 
 

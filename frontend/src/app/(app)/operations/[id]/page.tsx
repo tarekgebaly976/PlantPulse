@@ -3,7 +3,7 @@
 import {
   ActionIcon, Alert, Badge, Button, Group, NumberInput, Paper, SegmentedControl, Select, SimpleGrid, Stack, Table, Text, Textarea, TextInput,
 } from "@mantine/core";
-import { IconAlertTriangle, IconArrowLeft, IconArrowRight, IconLock, IconPencil, IconPlus, IconPrinter, IconTool, IconTrash } from "@tabler/icons-react";
+import { IconAlertTriangle, IconChevronLeft, IconChevronRight, IconLock, IconPencil, IconPlus, IconPrinter, IconTool, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -11,7 +11,7 @@ import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
 import { Modal } from "@/components/Modal";
-import { oeeColor, PeriodTiles, Tile } from "@/components/Ops";
+import { BackLink, oeeColor, PeriodTiles, ShiftLogs, Tile } from "@/components/Ops";
 import { ConfirmButton, Loading, PageHeader, Section, StatusBadge } from "@/components/ui";
 import { del, patch, post, put } from "@/lib/api";
 import { fmtNum, useMut, useQ } from "@/lib/hooks";
@@ -328,6 +328,7 @@ function ReportView() {
   const warnText = (w: { code: string; item?: string; hours?: number; reels?: number; losses?: number }) => t(`ops.warn.${w.code}`, { hours: w.hours, reels: w.reels, losses: w.losses, item: w.item });
   return (
     <>
+      <BackLink href="/operations" label={t("ops.title")} />
       <PageHeader title={`${t("ops.report.title")} · ${r.machine.code} · ${r.report_date}`} actions={<>
         <Button variant="default" component={Link} href={`/operations/${id}/print`} leftSection={<IconPrinter size={16} />}>{t("ops.report.print")}</Button>
         {r.status === "draft" && !inProgress && can("op.enter") && <ConfirmButton color="blue" loading={act.isPending} onConfirm={() => act.mutate("submit")}>{t("ops.report.submit")}</ConfirmButton>}
@@ -337,14 +338,13 @@ function ReportView() {
           onClick={() => { if (window.confirm(t("ops.report.deleteConfirm"))) remove.mutate(undefined); }}><IconTrash size={18} /></ActionIcon>}
       </>}>
         <Group gap="xs">
-          <ActionIcon variant="default" disabled={!r.prev} aria-label={t("common.prev")} onClick={() => r.prev && router.push(`/operations/${r.prev.id}`)}><IconArrowLeft size={16} /></ActionIcon>
-          <ActionIcon variant="default" disabled={!r.next} aria-label={t("common.next")} onClick={() => r.next && router.push(`/operations/${r.next.id}`)}><IconArrowRight size={16} /></ActionIcon>
+          <Button variant="default" size="compact-sm" disabled={!r.prev} leftSection={<IconChevronLeft size={14} />} onClick={() => r.prev && router.push(`/operations/${r.prev.id}`)}>{t("ops.prevDay")}</Button>
+          <Button variant="default" size="compact-sm" disabled={!r.next} rightSection={<IconChevronRight size={14} />} onClick={() => r.next && router.push(`/operations/${r.next.id}`)}>{t("ops.nextDay")}</Button>
           <StatusBadge value={r.status} />
           {r.revision > 1 && <Badge variant="outline" color="gray">{t("ops.report.revision", { n: r.revision })}</Badge>}
           <Text size="sm" c="dimmed">{r.machine.name} · {hm(c.window.start, tz)}–{hm(c.window.end, tz)}</Text>
           {r.submitted_by && <Text size="sm" c="dimmed">· {t("ops.report.submittedBy", { who: r.submitted_by })}</Text>}
           {r.confirmed_by && <Text size="sm" c="dimmed">· {t("ops.report.confirmedBy", { who: r.confirmed_by })}</Text>}
-          <Button variant="subtle" size="compact-sm" component={Link} href="/operations">{t("ops.title")}</Button>
         </Group>
       </PageHeader>
       <Stack>
@@ -395,6 +395,12 @@ function ReportView() {
             </Table>
           </Table.ScrollContainer>
         </Section>
+
+        {r.shift_logs.map((sec) => (
+          <Section key={sec.template.id} title={sec.template.name}>
+            <ShiftLogs sec={sec} date={r.report_date} canStart={can("op.enter")} />
+          </Section>
+        ))}
 
         <Section title={t("ops.runs.title")} actions={ed ? <Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => setRun(newRun())}>{t("ops.runs.add")}</Button> : undefined}>
           <Table.ScrollContainer minWidth={700}>

@@ -1,9 +1,14 @@
 "use client";
 
-import { Paper, SimpleGrid, Stack, Text } from "@mantine/core";
+import { Badge, Button, Group, Paper, SimpleGrid, Stack, Table, Text } from "@mantine/core";
+import { IconArrowLeft, IconPlus } from "@tabler/icons-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { fmtNum } from "@/lib/hooks";
-import { hhmm, pct, type Period } from "@/lib/ops";
+import { post } from "@/lib/api";
+import { fmtNum, useMut } from "@/lib/hooks";
+import { fmtVal, hhmm, pct, type Period, type ShiftLogSection } from "@/lib/ops";
+import { StatusBadge } from "./ui";
 
 export function Tile({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
@@ -38,3 +43,67 @@ export function PeriodTiles({ p, title }: { p: Period; title: string }) {
   );
 }
 
+
+
+/** Shift logs shown inside the PM daily report (e.g. stock preparation): one column per shift, then the day figure. */
+export function ShiftLogs({ sec, date, canStart, print }: { sec: ShiftLogSection; date: string; canStart?: boolean; print?: boolean }) {
+  const { t } = useTranslation();
+  const router = useRouter();
+  const start = useMut((shift: string) => post<{ id: string }>("/operations/logs", { template_id: sec.template.id, log_date: date, shift }),
+    { success: false, onDone: (r) => router.push(`/operations/logs/${r.id}`) });
+  const codes = sec.shift_codes;
+  const name = (c: string) => sec.template.shifts.find((x) => x.code === c)?.name ?? c;
+  const cell = (l: ShiftLogSection["lines"][number], v: number | string | null | undefined) => {
+    if (v === null || v === undefined || v === "") return "—";
+    if (l.kind === "check") return Number(v) ? "✓" : "✗";
+    if (l.kind === "text") return String(v);
+    return fmtVal(Number(v), l.decimals);
+  };
+  const head = (
+    <tr>
+      <th />
+      {codes.map((c) => {
+        const lg = sec.logs[c];
+        return (
+          <th key={c}>
+            {print ? name(c) : (
+              <Group gap={4} wrap="nowrap">
+                <Text size="sm" fw={600}>{name(c)}</Text>
+                {lg ? <><StatusBadge value={lg.status} size="xs" /><Button size="compact-xs" variant="light" component={Link} href={`/operations/logs/${lg.id}`}>{t("ops.sp.open")}</Button></>
+                  : canStart ? <Button size="compact-xs" leftSection={<IconPlus size={12} />} loading={start.isPending} onClick={() => start.mutate(c)}>{t("ops.sp.start")}</Button>
+                  : <Badge size="xs" color="gray" variant="light">{t("ops.sp.none")}</Badge>}
+              </Group>
+            )}
+          </th>
+        );
+      })}
+      <th>{t("ops.sp.day")}</th>
+    </tr>
+  );
+  const rows = sec.lines.map((l, i) => {
+    const sh = i === 0 || sec.lines[i - 1]!.section !== l.section;
+    return [
+      sh ? <tr key={`s-${l.id}`}><td colSpan={codes.length + 2} style={{ fontWeight: 600, background: "var(--pp-thead-bg)" }}>{l.section}</td></tr> : null,
+      <tr key={l.id}>
+        <td>{l.label}{l.unit ? <Text span size="xs" c="dimmed"> ({l.unit})</Text> : null}</td>
+        {codes.map((c) => <td key={c} style={l.flags[c] ? { color: "var(--mantine-color-red-7)", fontWeight: 600 } : undefined}>{cell(l, l.shifts[c])}</td>)}
+        <td style={{ fontWeight: 600 }}>{l.day === null ? "" : fmtVal(l.day, l.decimals)}</td>
+      </tr>,
+    ];
+  });
+  if (print) return <table><thead>{head}</thead><tbody>{rows}</tbody></table>;
+  return (
+    <Table.ScrollContainer minWidth={520}>
+      <Table striped withTableBorder fz="sm"><Table.Thead>{head}</Table.Thead><Table.Tbody>{rows}</Table.Tbody></Table>
+    </Table.ScrollContainer>
+  );
+}
+
+/** A clear way back at the top of a detail page (phones have no browser back button inside the app). */
+export function BackLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Button component={Link} href={href} variant="subtle" size="compact-md" px={4} mb={6} leftSection={<IconArrowLeft size={18} />} className="no-print">
+      {label}
+    </Button>
+  );
+}

@@ -3,10 +3,11 @@
 import { Alert, Badge, Button, Group, SegmentedControl, Select, Stack, Text, TextInput } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { IconNotebook, IconPlus } from "@tabler/icons-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
+import { BackLink } from "@/components/Ops";
 import { Modal } from "@/components/Modal";
 import { DataTable, Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { post } from "@/lib/api";
@@ -38,8 +39,12 @@ function List() {
   const router = useRouter();
   const { can } = useSession();
   const tq = useQ<LogTemplate[]>("/operations/log-templates");
-  const templates = (tq.data ?? []).filter((x) => x.is_active);
-  const [tid, setTid] = useState<string | null>(null);
+  const sp = useSearchParams();
+  const form = sp.get("form");
+  // Forms shown inside the PM & SP daily report (stock preparation) are reached from there; here only when asked for.
+  const all = (tq.data ?? []).filter((x) => x.is_active);
+  const templates = form && all.find((x) => x.id === form)?.in_pm_report ? all.filter((x) => x.in_pm_report) : all.filter((x) => !x.in_pm_report);
+  const [tid, setTid] = useState<string | null>(form);
   const tpl = templates.find((x) => x.id === tid) ?? templates[0];
   const [month, setMonth] = useState("");
   const q = useQ<LogList>(tpl ? "/operations/logs" : null, { template_id: tpl?.id, month: month || undefined });
@@ -49,7 +54,8 @@ function List() {
   const cols = q.data?.columns ?? [];
   return (
     <>
-      <PageHeader title={t("logs.title")} actions={tpl && can("op.enter") ? <Button leftSection={<IconPlus size={16} />} onClick={() => setOpen(true)}>{tpl.frequency === "shift" ? t("logs.newShift") : t("logs.newDay")}</Button> : undefined}>
+      {tpl?.in_pm_report && <BackLink href="/operations" label={t("ops.title")} />}
+      <PageHeader title={tpl?.in_pm_report ? tpl.name : t("logs.title")} actions={tpl && can("op.enter") ? <Button leftSection={<IconPlus size={16} />} onClick={() => setOpen(true)}>{tpl.frequency === "shift" ? t("logs.newShift") : t("logs.newDay")}</Button> : undefined}>
         <Text size="sm" c="dimmed">{t("logs.subtitle")}</Text>
       </PageHeader>
       {open && tpl && <NewLog t={tpl} onClose={() => setOpen(false)} />}
@@ -72,5 +78,5 @@ function List() {
 }
 
 export default function LogsPage() {
-  return <Guard perm="op.view"><List /></Guard>;
+  return <Guard perm="op.view"><Suspense><List /></Suspense></Guard>;
 }

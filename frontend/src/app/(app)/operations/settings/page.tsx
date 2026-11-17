@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
+import { BackLink } from "@/components/Ops";
 import { Modal } from "@/components/Modal";
 import { AssetPicker, DeptSelect, Loading, PageHeader, Section } from "@/components/ui";
 import { post, put } from "@/lib/api";
@@ -171,15 +172,15 @@ function DefectModal({ form, onClose }: { form: XForm | null; onClose: () => voi
 
 
 // ---------------- daily log forms
-interface TForm { id?: string; code: string; name: string; department_id: string | null; frequency: "day" | "shift"; day_start: string; shifts: OpShift[]; issues: boolean; sort: Num; is_active: boolean }
-interface FForm { id?: string; section: string; code: string; label: string; kind: LogKind; unit: string; decimals: Num; formula: string; low: Num; high: Num; meter_id: string | null; chart: boolean; per_ton: boolean; sort: Num; is_active: boolean }
+interface TForm { id?: string; code: string; name: string; department_id: string | null; frequency: "day" | "shift"; day_start: string; shifts: OpShift[]; issues: boolean; in_pm_report: boolean; sort: Num; is_active: boolean }
+interface FForm { id?: string; section: string; code: string; label: string; kind: LogKind; unit: string; decimals: Num; formula: string; low: Num; high: Num; meter_id: string | null; chart: boolean; per_ton: boolean; day_agg: string | null; sort: Num; is_active: boolean }
 
 function TemplateModal({ form, onClose }: { form: TForm | null; onClose: () => void }) {
   const { t } = useTranslation();
   const [f, setF] = useState<TForm | null>(form);
   const save = useMut(() => {
     if (!f) return Promise.resolve();
-    const body = { code: f.code, name: f.name, department_id: f.department_id, frequency: f.frequency, day_start: f.day_start, shifts: f.frequency === "shift" ? f.shifts : [], issues: f.issues, sort: n(f.sort) ?? 0, is_active: f.is_active };
+    const body = { code: f.code, name: f.name, department_id: f.department_id, frequency: f.frequency, day_start: f.day_start, shifts: f.frequency === "shift" ? f.shifts : [], issues: f.issues, in_pm_report: f.in_pm_report, sort: n(f.sort) ?? 0, is_active: f.is_active };
     return f.id ? put(`/operations/log-templates/${f.id}`, body) : post("/operations/log-templates", body);
   }, { onDone: onClose });
   if (!f) return null;
@@ -209,6 +210,7 @@ function TemplateModal({ form, onClose }: { form: TForm | null; onClose: () => v
           {f.shifts.length < 4 && <Button size="xs" variant="subtle" leftSection={<IconPlus size={14} />} onClick={() => set({ shifts: [...f.shifts, { code: "", name: "", start: "" }] })}>{t("ops.set.addShift")}</Button>}
         </>}
         <Checkbox label={t("logs.set.issues")} checked={f.issues} onChange={(e) => set({ issues: e.currentTarget.checked })} />
+        <Checkbox label={t("logs.set.inPm")} checked={f.in_pm_report} onChange={(e) => set({ in_pm_report: e.currentTarget.checked })} />
         <Checkbox label={t("ops.set.active")} checked={f.is_active} onChange={(e) => set({ is_active: e.currentTarget.checked })} />
         <Button loading={save.isPending} disabled={!f.code || !f.name || !f.department_id || (f.frequency === "shift" && (!f.shifts.length || f.shifts.some((s) => !s.code || !s.name || !s.start)))} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
       </Stack>
@@ -225,7 +227,7 @@ function FieldModal({ tpl, form, onClose }: { tpl: LogTemplate; form: FForm | nu
   const save = useMut(() => {
     if (!f) return Promise.resolve();
     const body = { section: f.section, code: f.code, label: f.label, kind: f.kind, unit: f.unit || null, decimals: n(f.decimals) ?? 1, formula: f.kind === "calc" ? f.formula : null,
-      low: n(f.low), high: n(f.high), meter_id: f.kind === "counter" ? f.meter_id : null, chart: f.chart, per_ton: f.per_ton, sort: n(f.sort) ?? 0, is_active: f.is_active };
+      low: n(f.low), high: n(f.high), meter_id: f.kind === "counter" ? f.meter_id : null, chart: f.chart, per_ton: f.per_ton, day_agg: f.day_agg || null, sort: n(f.sort) ?? 0, is_active: f.is_active };
     return f.id ? put(`/operations/log-fields/${f.id}`, body) : post(`/operations/log-templates/${tpl.id}/fields`, body);
   }, { onDone: onClose });
   if (!f) return null;
@@ -253,6 +255,8 @@ function FieldModal({ tpl, form, onClose }: { tpl: LogTemplate; form: FForm | nu
           <NumberInput label={t("logs.set.low")} value={f.low} onChange={(v) => set({ low: v })} />
           <NumberInput label={t("logs.set.high")} value={f.high} onChange={(v) => set({ high: v })} />
         </SimpleGrid>}
+        {f.kind !== "text" && f.kind !== "check" && <Select label={t("logs.set.dayAgg")} value={f.day_agg ?? ""} onChange={(v) => set({ day_agg: v || null })}
+          data={[{ value: "", label: t("logs.set.aggAuto") }, { value: "sum", label: t("logs.set.aggSum") }, { value: "avg", label: t("logs.set.aggAvg") }]} />}
         {f.kind !== "text" && <Group>
           <Checkbox label={t("logs.set.chart")} checked={f.chart} onChange={(e) => set({ chart: e.currentTarget.checked })} />
           <Checkbox label={t("logs.set.perTon")} checked={f.per_ton} onChange={(e) => set({ per_ton: e.currentTarget.checked })} />
@@ -276,13 +280,13 @@ function LogForms() {
   const phone = useMediaQuery("(max-width: 48em)");
   const list = q.data ?? [];
   const tpl = list.find((x) => x.id === tid) ?? list[0];
-  const editT = (x: LogTemplate): TForm => ({ id: x.id, code: x.code, name: x.name, department_id: x.department_id, frequency: x.frequency, day_start: x.day_start, shifts: x.shifts, issues: x.issues, sort: x.sort, is_active: x.is_active });
+  const editT = (x: LogTemplate): TForm => ({ id: x.id, code: x.code, name: x.name, department_id: x.department_id, frequency: x.frequency, day_start: x.day_start, shifts: x.shifts, issues: x.issues, in_pm_report: x.in_pm_report, sort: x.sort, is_active: x.is_active });
   const editF = (x: LogField): FForm => ({ id: x.id, section: x.section, code: x.code, label: x.label, kind: x.kind, unit: x.unit ?? "", decimals: x.decimals, formula: x.formula ?? "",
-    low: x.low ?? "", high: x.high ?? "", meter_id: x.meter_id, chart: x.chart, per_ton: x.per_ton, sort: x.sort, is_active: x.is_active });
+    low: x.low ?? "", high: x.high ?? "", meter_id: x.meter_id, chart: x.chart, per_ton: x.per_ton, day_agg: x.day_agg, sort: x.sort, is_active: x.is_active });
   const last = (tpl?.fields ?? []).at(-1);
   return (
     <Section title={t("logs.set.title")} actions={<Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => setTf({ code: "", name: "", department_id: null, frequency: "day", day_start: "07:00",
-      shifts: [{ code: "D", name: "Day shift", start: "07:00" }, { code: "N", name: "Night shift", start: "19:00" }], issues: false, sort: list.length * 10 + 10, is_active: true })}>{t("logs.set.newForm")}</Button>}>
+      shifts: [{ code: "D", name: "Day shift", start: "07:00" }, { code: "N", name: "Night shift", start: "19:00" }], issues: false, in_pm_report: false, sort: list.length * 10 + 10, is_active: true })}>{t("logs.set.newForm")}</Button>}>
       <Text size="xs" c="dimmed" mb="xs">{t("logs.set.hint")}</Text>
       {tpl && <>
         <Group mb="sm" gap="xs">
@@ -290,7 +294,7 @@ function LogForms() {
             orientation={phone ? "vertical" : "horizontal"} fullWidth={phone} w={phone ? "100%" : undefined} />
           <Edit onClick={() => setTf(editT(tpl))} />
           <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={() => setFf({ section: last?.section ?? "", code: "", label: "", kind: "number", unit: "", decimals: 1, formula: "",
-            low: "", high: "", meter_id: null, chart: false, per_ton: false, sort: (last?.sort ?? 0) + 10, is_active: true })}>{t("logs.set.addLine")}</Button>
+            low: "", high: "", meter_id: null, chart: false, per_ton: false, day_agg: null, sort: (last?.sort ?? 0) + 10, is_active: true })}>{t("logs.set.addLine")}</Button>
         </Group>
         <Table.ScrollContainer minWidth={700}>
           <Table striped>
@@ -335,7 +339,8 @@ function SettingsView() {
   const add = (onClick: () => void) => <Button size="xs" leftSection={<IconPlus size={14} />} onClick={onClick}>{t("common.add")}</Button>;
   return (
     <>
-      <PageHeader title={t("ops.set.title")} actions={<Button variant="default" component={Link} href="/operations">{t("ops.title")}</Button>} />
+      <BackLink href="/operations" label={t("ops.title")} />
+      <PageHeader title={t("ops.set.title")} />
       <Stack>
         <Section title={t("ops.set.machines")} actions={add(() => setMf({ code: "", name: "", department_id: null, asset_id: null, trim_width_m: "", day_start: "07:00",
           shifts: [{ code: "D", name: "Day shift", start: "07:00" }, { code: "N", name: "Night shift", start: "19:00" }], is_active: true }))}>

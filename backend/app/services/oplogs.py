@@ -180,6 +180,14 @@ def values_of(db: Session, log_ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[uui
     return out
 
 
+def averaged(fl: OpLogField) -> bool:
+    """Is the line's day figure the average of the shifts (else their sum)? Set per line (day_agg); automatically:
+    numbers and % lines are averaged, meters, counters and other calculated lines are added up."""
+    if fl.day_agg in ("sum", "avg"):
+        return fl.day_agg == "avg"
+    return fl.kind == "number" or (fl.kind == "calc" and (fl.unit or "").strip() == "%")
+
+
 def daily_series(db: Session, t: OpLogTemplate, d0: date, d1: date) -> dict[str, dict[str, float]]:
     """{field id: {date: value}} for the template's dashboard lines from d0 to d1. Shift logs: meters, counters and
     calc lines … are added up over the day's shifts, numbers are averaged, checks count the shifts ticked."""
@@ -197,6 +205,47 @@ def daily_series(db: Session, t: OpLogTemplate, d0: date, d1: date) -> dict[str,
     out: dict[str, dict[str, float]] = {}
     for fl in fields:
         per = acc.get(str(fl.id), {})
-        avg = fl.kind == "number" or (fl.kind == "calc" and (fl.unit or "").strip() == "%")
+        avg = averaged(fl)
         out[str(fl.id)] = {d: round(sum(xs) / len(xs) if avg else sum(xs), 4) for d, xs in per.items()}
+    return out
+
+
+def report_sections(db: Session, plant: Plant, d: date, dept_ok) -> list[dict]:
+    """Log forms shown inside the paper machine's daily report (in_pm_report), for production day d: each shift's
+    log (id, status) and, per line, the shifts' values and the day figure (sum; numbers and % averaged)."""
+    out = []
+    templates = db.execute(
+        select(OpLogTemplate).where(OpLogTemplate.plant_id == plant.id, OpLogTemplate.in_pm_report.is_(True), OpLogTemplate.is_active.is_(True))
+        .order_by(OpLogTemplate.sort)
+    ).scalars()  # fmt: skip
+    for t in templates:
+        if not dept_ok(t.department_id):
+            continue
+        fields = [x for x in fields_of(db, t.id, active_only=True)]
+        logs = {lg.shift: lg for lg in db.execute(select(OpLog).where(OpLog.template_id == t.id, OpLog.log_date == d)).scalars()}
+        vals = values_of(db, [lg.id for lg in logs.values()])
+        shifts = [w[0] for w in windows(t, plant, d)]
+        per: dict[str, dict] = {}
+        warn_n: dict[str, int] = {}
+        for sh, lg in logs.items():
+            calc, warns = compute(fields, vals[lg.id])
+            per[sh] = calc
+            warn_n[sh] = len(warns)
+        lines = []
+        for fl in fields:
+            by_shift = {sh: (per[sh][str(fl.id)]["value"] if fl.kind != "text" else per[sh][str(fl.id)]["text"]) for sh in per}
+            flags = {sh: per[sh][str(fl.id)]["flag"] for sh in per}
+            nums = [v for v in by_shift.values() if isinstance(v, (int, float))]
+            day = None
+            if nums and fl.kind not in ("text", "check"):
+                avg = averaged(fl)
+                day = round(sum(nums) / len(nums) if avg else sum(nums), 4)
+            lines.append({"id": str(fl.id), "section": fl.section, "label": fl.label, "kind": fl.kind, "unit": fl.unit, "decimals": fl.decimals,
+                          "shifts": by_shift, "flags": flags, "day": day})  # fmt: skip
+        out.append({
+            "template": {"id": str(t.id), "code": t.code, "name": t.name, "frequency": t.frequency,
+                         "shifts": [{"code": s["code"], "name": s.get("name") or s["code"]} for s in (t.shifts or [])] or [{"code": "-", "name": ""}]},
+            "logs": {sh: {"id": str(lg.id), "status": lg.status.value, "warnings": warn_n.get(sh, 0)} for sh, lg in logs.items()},
+            "shift_codes": shifts, "lines": lines,
+        })  # fmt: skip
     return out

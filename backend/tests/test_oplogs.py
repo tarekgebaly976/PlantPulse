@@ -139,3 +139,37 @@ def test_dashboard(world: World):
     assert p_pm["series"] == {"2026-11-05": 117.69}
     assert p_pm["per_ton_series"]["2026-11-05"] == pytest.approx(117.69 / 392.3, abs=0.0001)  # MWh per t net
     assert rid
+
+
+def test_sp_shift_log_inside_pm_report(world: World):
+    from tests.test_operations import DAY, fill_day, setup_mill
+
+    s = setup_mill(world)
+    mgr = s["mgr"]
+    rid = fill_day(mgr, s)
+    t = mgr.ok("post", "/operations/log-templates", {
+        "code": "SP", "name": "SP shift", "department_id": str(world.depts["SP"].id), "frequency": "shift", "in_pm_report": True,
+        "shifts": [{"code": "D", "name": "Day", "start": "07:00"}, {"code": "N", "name": "Night", "start": "19:00"}],
+    }, status=201)  # fmt: skip
+    base = f"/operations/log-templates/{t['id']}/fields"
+    bales = mgr.ok(
+        "post",
+        base,
+        {"section": "Furnish", "code": "OCC", "label": "OCC bales", "kind": "number", "unit": "bales", "day_agg": "sum"},
+        status=201,
+    )["id"]
+    tank = mgr.ok(
+        "post", base, {"section": "Levels", "code": "TANK", "label": "Dump tank", "kind": "number", "unit": "%", "high": 90}, status=201
+    )["id"]
+    for shift, b, lv in (("D", 80, 60), ("N", 70, 95)):
+        lid = mgr.ok("post", "/operations/logs", {"template_id": t["id"], "log_date": DAY, "shift": shift}, status=201)["id"]
+        mgr.ok("put", f"/operations/logs/{lid}/values", {"values": [{"field_id": bales, "value": b}, {"field_id": tank, "value": lv}]})
+    r = mgr.ok("get", f"/operations/reports/{rid}")
+    sec = r["shift_logs"][0]
+    assert sec["template"]["code"] == "SP" and set(sec["logs"]) == {"D", "N"}
+    lines = {x["label"]: x for x in sec["lines"]}
+    assert lines["OCC bales"]["day"] == 150  # added up over the shifts
+    assert lines["Dump tank"]["day"] == pytest.approx(77.5)  # averaged
+    assert lines["Dump tank"]["flags"] == {"D": None, "N": "high"}
+    # the shift log points back to the PM report of the same day
+    assert mgr.ok("get", f"/operations/logs/{sec['logs']['N']['id']}")["pm_report_id"] == rid
