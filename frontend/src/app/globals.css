@@ -24,7 +24,12 @@ body { background: var(--mantine-color-body); -webkit-font-smoothing: antialiase
 /* Side menu scrollbar: only while scrolling, thin and in the menu colours (no pale bar beside the page). */
 .pp-nav-scroll .mantine-ScrollArea-scrollbar { background: transparent; padding: 0; }
 .pp-nav-scroll .mantine-ScrollArea-scrollbar:hover { background: rgba(255, 255, 255, .06); }
-.pp-nav-scroll .mantine-ScrollArea-thumb { background: rgba(255, 255, 255, .28); }
+.pp-nav-scroll .mantine-ScrollArea-thumb { background: rgba(255, 255, 255, .35); }
+/* Short screens (laptops, zoomed browsers): tighter menu so more of it fits; the rest scrolls (bar always shown). */
+@media (max-height: 820px) {
+  .pp-nav-group { padding: 8px 12px 2px; }
+  .pp-navlink { padding-block: 5px; margin-bottom: 0; }
+}
 .pp-nav-scroll .mantine-ScrollArea-thumb:hover { background: rgba(255, 255, 255, .45); }
 
 /* Tables as white cards on the grey page. */
