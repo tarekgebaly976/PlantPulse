@@ -102,7 +102,8 @@ KPI_DEFINITIONS: list[dict] = [
         "unit": "%",
         "formula": "Availability (run ÷ planned hours) × Performance (tons ÷ (run hours × ideal t/h)) × Quality (good ÷ total tons)",
         "source_data": "production_records",
-        "inclusion_rules": "Only records with planned hours, run hours, ideal rate and good tons; incomplete records counted as excluded.",
+        "inclusion_rules": "Only records with planned hours, run hours, ideal rate and good tons; incomplete records counted as excluded. "
+        "Days from the Operations daily report use their ideal tonnes (sum over grade runs) and net tonnes (good ÷ net for quality).",
         "period": "record_date within period",
         "missing_data": "Unavailable without complete production data — never estimated.",
     },

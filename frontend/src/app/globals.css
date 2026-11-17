@@ -87,3 +87,10 @@ body { background: var(--mantine-color-body); -webkit-font-smoothing: antialiase
   .rca-sheet { box-shadow: none; padding: 0; max-width: none; }
   .pp-bottom-nav, .mantine-AppShell-navbar, .mantine-AppShell-header { display: none !important; }
 }
+
+/* Operations: daily production report (form layout), A4 landscape when printed. */
+.ops-sheet { max-width: 297mm; font-size: 11px; }
+.ops-sheet h2 { font-size: 12px; margin-top: 10px; }
+.ops-sheet td, .ops-sheet th { padding: 2px 4px; }
+@page ops { size: A4 landscape; margin: 8mm; }
+@media print { .ops-sheet { page: ops; font-size: 9.5px; } }

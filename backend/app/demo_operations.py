@@ -1,0 +1,424 @@
+"""Operations trial on the public demo: a second sample plant "DPM – Demo Paper Mill (operations, sample)" in the DEMO
+organization, with paper machine PM1, its grades and ideal rates, disciplines, sections, defects and about 30 days of
+daily production reports (runs, reels, stops, sheet breaks, quality losses). All names and figures are invented.
+
+cli: python -m app.cli demo-operations   (after seed-demo; scripts/demo.sh runs it, so the nightly reset rebuilds it)"""
+
+import random
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from zoneinfo import ZoneInfo
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.security import hash_password
+from app.models.assets import Asset, DowntimeEvent
+from app.models.enums import AssetLevel, Criticality, DepartmentType, OpEventType, OpLossKind, OpReportStatus
+from app.models.identity import Membership, Role, User
+from app.models.operations import (
+    OpDailyReport,
+    OpDefect,
+    OpDiscipline,
+    OpGrade,
+    OpMachine,
+    OpQualityLoss,
+    OpReel,
+    OpRunSegment,
+    OpSection,
+    OpStopPart,
+)
+from app.models.tenancy import Department, Organization, Plant
+from app.services import operations as svc
+from app.services.assets import compute_path, new_qr_token
+from app.services.common import utcnow
+from app.services.workflow import ensure_default_transitions
+
+PLANT_CODE = "DPM"
+DAYS = 30
+
+# GSM, target speed (m/min): invented sample rate table (ideal MT/min = GSM × speed × width), 3.20 m trim width
+GRADES = [(200, 480), (250, 470), (280, 460), (300, 450), (330, 430), (350, 420), (380, 395), (400, 370), (450, 330)]
+WIDTH_M = 3.2
+DISCIPLINES = [  # code, name, maintenance (breakdown = equipment failure); invented sample list
+    ("SUPPLY", "Supply / planning (no orders, raw material)", False),
+    ("PROC", "Process (paper machine operation)", False),
+    ("INST", "Instrumentation & automation", True),
+    ("MECH", "Mechanical maintenance", True),
+    ("ELEC", "Electrical maintenance", True),
+    ("STEAM", "Steam & power supply", False),
+    ("PREP", "Stock preparation", False),
+    ("UTIL", "Utilities", False),
+    ("OTHER", "Other", False),
+]
+SECTIONS = [  # name, asset code
+    ("Headbox & wire section", "PM1-WIRE"),
+    ("Press section", "PM1-PRESS"),
+    ("Dryer section", "PM1-DRY"),
+    ("Pre coater", "PM1-PC"),
+    ("Curtain coater", "PM1-CC"),
+    ("Top coater", "PM1-TC"),
+    ("Back coater", "PM1-BC"),
+    ("Calender section", "PM1-CAL"),
+    ("Reel", "PM1-REEL"),
+]
+DEFECTS = [
+    ("Rough surface", "R/P"),
+    ("Machine start-up", "R/P"),
+    ("Coating streaks", "F/H"),
+    ("Holes / spots", "R/P"),
+    ("Moisture out of range", "F/H"),
+    ("Curl", "F/H"),
+    ("Wrinkles", "R/P"),
+    ("Edge crack", "R/P"),
+]
+BREAKDOWNS = [  # section, disciplines, text
+    ("Calender section", ["MECH"], "Calender hydraulic unit: pressure low, pump coupling replaced"),
+    ("Calender section", ["MECH", "INST"], "Calender nip not closing: valve block, then position sensor reset"),
+    ("Dryer section", ["MECH"], "Dryer felt guide roll bearing hot, replaced"),
+    ("Press section", ["ELEC"], "Press drive trip (overcurrent)"),
+    ("Top coater", ["MECH"], "Top coater blade holder leak"),
+    ("Curtain coater", ["INST"], "Curtain coater flow meter fault"),
+    ("Reel", ["ELEC", "INST"], "Reel drive fault, then speed control retuned"),
+    ("Headbox & wire section", ["PROC"], "Headbox consistency unstable (process)"),
+    ("Dryer section", ["STEAM"], "Low steam pressure from boiler"),
+    ("Headbox & wire section", ["PREP"], "No stock from stock preparation (pulper screen blocked)"),
+]
+BREAKS = [  # section, discipline
+    ("Press section", "PROC"),
+    ("Dryer section", "PROC"),
+    ("Top coater", "PROC"),
+    ("Reel", "PROC"),
+    ("Calender section", "PROC"),
+    ("Headbox & wire section", "PREP"),
+    ("Dryer section", "INST"),
+]
+SUPERVISORS = {"D": ["A. Rahman", "J. Santos"], "N": ["M. Karim", "R. Dela Cruz"]}
+MEMBERS = {  # existing demo account (local part) -> role in the operations plant
+    "manager": "maintenance_manager",
+    "planner": "planner",
+    "mech.sup": "mech_supervisor",
+    "elec.sup": "elec_supervisor",
+    "reliability": "reliability_engineer",
+    "engineer": "engineer",
+    "tech1": "technician",
+    "tech2": "technician",
+    "tech3": "technician",
+    "production": "production_user",
+    "viewer": "management_viewer",
+}
+NEW_USERS = [  # email, name, role
+    ("prod.sup@demo.example.com", "PM1 Shift Supervisor (sample)", "production_supervisor"),
+    ("prod.mgr@demo.example.com", "Production Manager (sample)", "production_manager"),
+]
+
+
+def _ideal(gsm: int, speed: int) -> float:
+    return round(gsm * speed * WIDTH_M / 1_000_000, 5)
+
+
+def _setup(db: Session, org: Organization, password: str) -> tuple[Plant, OpMachine, dict]:
+    plant = Plant(
+        organization_id=org.id,
+        code=PLANT_CODE,
+        name="Demo Paper Mill – Operations (sample data)",
+        timezone="Asia/Riyadh",
+        currency="SAR",
+        settings={"demo": True, "profile": "operations"},
+    )
+    db.add(plant)
+    db.flush()
+    ensure_default_transitions(db, plant.id)
+    depts = {}
+    for code, name, ar, t in (
+        ("PM", "Paper Machine", "آلة الورق", DepartmentType.PM),
+        ("SP", "Stock Preparation", "تحضير العجينة", DepartmentType.SP),
+        ("FH", "Finishing House", "التشطيب", DepartmentType.FH),
+        ("UTIL", "Utilities", "المرافق", DepartmentType.UTIL),
+    ):
+        d = Department(plant_id=plant.id, code=code, name=name, name_ar=ar, type=t)
+        db.add(d)
+        depts[code] = d
+    db.flush()
+    assets: dict[str, Asset] = {}
+    for code, name, parent in [
+        ("PM1", "Paper Machine 1 (board machine)", None),
+        ("PM1-WIRE", "Headbox & wire section", "PM1"),
+        ("PM1-PRESS", "Press section", "PM1"),
+        ("PM1-DRY", "Dryer section", "PM1"),
+        ("PM1-PC", "Pre coater", "PM1"),
+        ("PM1-CC", "Curtain coater", "PM1"),
+        ("PM1-TC", "Top coater", "PM1"),
+        ("PM1-BC", "Back coater", "PM1"),
+        ("PM1-CAL", "Calender", "PM1"),
+        ("PM1-REEL", "Reel (pope reeler)", "PM1"),
+    ]:
+        p = assets.get(parent) if parent else None
+        a = Asset(
+            plant_id=plant.id,
+            department_id=depts["PM"].id,
+            parent_id=p.id if p else None,
+            level=AssetLevel.PRODUCTION_LINE if p is None else AssetLevel.UNIT,
+            code=code,
+            name=name,
+            criticality=Criticality.A,
+            qr_token=new_qr_token(),
+            install_date=date(2016, 3, 1),
+            location="PM hall",
+        )
+        db.add(a)
+        db.flush()
+        a.path = compute_path(p, a.id)
+        assets[code] = a
+    m = OpMachine(
+        plant_id=plant.id,
+        code="PM1",
+        name="Paper Machine 1",
+        department_id=depts["PM"].id,
+        asset_id=assets["PM1"].id,
+        trim_width_m=Decimal(str(WIDTH_M)),
+        day_start=time(7, 0),
+        shifts=[{"code": "D", "name": "Day shift", "start": "07:00"}, {"code": "N", "name": "Night shift", "start": "19:00"}],
+    )
+    db.add(m)
+    db.flush()
+    ref: dict = {"grades": {}, "disc": {}, "sec": {}, "defects": {}, "assets": assets}
+    for gsm, speed in GRADES:
+        g = OpGrade(
+            plant_id=plant.id, machine_id=m.id, code=str(gsm), name=f"Coated board {gsm} gsm", gsm=gsm,
+            target_speed_mpm=Decimal(speed), ideal_mt_min=Decimal(str(_ideal(gsm, speed))),
+        )  # fmt: skip
+        db.add(g)
+        ref["grades"][gsm] = g
+    for i, (code, name, maint) in enumerate(DISCIPLINES):
+        disc = OpDiscipline(plant_id=plant.id, code=code, name=name, maintenance=maint, sort=i)
+        db.add(disc)
+        ref["disc"][code] = disc
+    for i, (name, acode) in enumerate(SECTIONS):
+        s = OpSection(plant_id=plant.id, machine_id=m.id, name=name, asset_id=assets[acode].id, sort=i)
+        db.add(s)
+        ref["sec"][name] = s
+    for name, disp in DEFECTS:
+        x = OpDefect(plant_id=plant.id, name=name, disposition=disp)
+        db.add(x)
+        ref["defects"][name] = x
+    db.flush()
+    roles = {r.code: r for r in db.execute(select(Role)).scalars()}
+    users = {u.email.split("@")[0]: u for u in db.execute(select(User).where(User.organization_id == org.id)).scalars()}
+    for local, role in MEMBERS.items():
+        u = users.get(local)
+        if u is not None and role in roles:
+            db.add(Membership(user_id=u.id, plant_id=plant.id, role_id=roles[role].id))
+    pw = hash_password(password)
+    for email, name, role in NEW_USERS:
+        u = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+        if u is None:
+            u = User(organization_id=org.id, email=email, full_name=name, password_hash=pw, password_changed_at=utcnow())
+            db.add(u)
+            db.flush()
+        users[email.split("@")[0]] = u
+        db.add(Membership(user_id=u.id, plant_id=plant.id, role_id=roles[role].id))
+    db.flush()
+    ref["users"] = users
+    return plant, m, ref
+
+
+def _day(
+    db: Session, rnd: random.Random, plant: Plant, m: OpMachine, ref: dict, d: date, state: dict, until: datetime | None
+) -> OpDailyReport:
+    """One production day: stops placed first, the machine runs in the gaps, reels are made from the run time."""
+    tz = ZoneInfo(plant.timezone)
+    t0 = datetime.combine(d, time(7, 0), tzinfo=tz)
+    t1 = t0 + timedelta(days=1)
+    end = min(t1, until) if until else t1
+    users = ref["users"]
+    r = OpDailyReport(
+        plant_id=plant.id, machine_id=m.id, report_date=d, created_by_id=users["prod.sup"].id,
+        supervisors={"D": rnd.choice(SUPERVISORS["D"]), "N": rnd.choice(SUPERVISORS["N"])},
+    )  # fmt: skip
+    db.add(r)
+    db.flush()
+    # ---- stops
+    stops: list[tuple[datetime, datetime, str, str, list[tuple[str, float]], str]] = []
+
+    def free(a: datetime, b: datetime) -> bool:
+        return a >= t0 and b <= end and all(b <= s0 or a >= s1 for s0, s1, *_ in stops)
+
+    def place(minutes: int, kind: str, section: str, parts: list[str], text: str) -> None:
+        for _ in range(20):
+            a = t0 + timedelta(minutes=rnd.randrange(30, 24 * 60 - minutes - 30, 2))
+            b = a + timedelta(minutes=minutes)
+            if free(a - timedelta(minutes=20), b + timedelta(minutes=20)):
+                h = minutes / 60
+                if len(parts) == 2:
+                    first = round(h * rnd.uniform(0.35, 0.65), 2)
+                    shares = [(parts[0], first), (parts[1], round(h - first, 4))]
+                else:
+                    shares = [(p, round(h, 4)) for p in parts]
+                stops.append((a, b, kind, section, shares, text))
+                return
+
+    if state["wash_in"] <= 0:
+        place(
+            rnd.choice([180, 240, 300, 360]), OpEventType.PLANNED, "Headbox & wire section", [], "Planned wash-up, wire and felt cleaning"
+        )
+        state["wash_in"] = rnd.randint(9, 13)
+    state["wash_in"] -= 1
+    if rnd.random() < 0.25:
+        place(rnd.choice([60, 90, 100]), OpEventType.PLANNED, "Back coater", [], "Back coater cleaning (planned)")
+    for _ in range(rnd.choices([0, 1, 2, 3], [30, 40, 22, 8])[0]):
+        sec, parts, text = rnd.choice(BREAKDOWNS)
+        place(rnd.choice([25, 40, 60, 90, 105, 150, 210]), OpEventType.BREAKDOWN, sec, parts, text)
+    for _ in range(rnd.choices([0, 1, 2, 3, 4], [25, 30, 25, 12, 8])[0]):
+        sec, disc = rnd.choice(BREAKS)
+        place(rnd.choice([12, 15, 20, 25, 35, 45]), OpEventType.SHEET_BREAK, sec, [disc], f"Sheet break at {sec.lower()}")
+    if rnd.random() < 0.04:
+        place(rnd.choice([120, 240]), OpEventType.BREAKDOWN, "Headbox & wire section", ["SUPPLY"], "No orders for the grade: machine stopped")
+    stops.sort()
+    for a, b, kind, section, shares, text in stops:
+        discs = [ref["disc"][c] for c, _ in shares]
+        failure, planned = svc.classify(kind, discs)
+        sec = ref["sec"][section]
+        e = DowntimeEvent(
+            plant_id=plant.id, asset_id=sec.asset_id or m.asset_id, started_at=a, ended_at=b, is_failure=failure, is_planned=planned,
+            reason=text, source="operations", event_type=kind, section_id=sec.id, op_report_id=r.id, created_by_id=users["prod.sup"].id,
+        )  # fmt: skip
+        db.add(e)
+        db.flush()
+        for c, h in shares:
+            db.add(OpStopPart(downtime_event_id=e.id, discipline_id=ref["disc"][c].id, hours=Decimal(str(round(h, 3)))))
+    # ---- runs in the gaps; the grade changes every 1–4 days, at the first gap after 10:00
+    gaps, cur = [], t0
+    for a, b, *_ in stops:
+        if a > cur:
+            gaps.append((cur, a))
+        cur = max(cur, b)
+    if cur < end:
+        gaps.append((cur, end))
+    change_at = None
+    state["grade_days"] -= 1
+    if state["grade_days"] <= 0:
+        change_at = t0 + timedelta(hours=rnd.randint(3, 15))
+        state["grade_days"] = rnd.randint(1, 4)
+    segs: list[tuple[datetime, datetime, OpGrade, float]] = []
+    for a, b in gaps:
+        pieces = [(a, b)]
+        if change_at and a < change_at < b - timedelta(minutes=30):
+            pieces = [(a, change_at), (change_at, b)]
+        for i, (pa, pb) in enumerate(pieces):
+            if change_at and pa >= change_at and state.get("changed") != d:
+                state["changed"] = d
+                state["gsm"] = rnd.choice([g for g in (250, 280, 300, 320, 350, 380, 400, 450) if g != state["gsm"]])
+                reason = "Grade change as per production plan"
+                gc_h, gc_rej = round(rnd.uniform(0.25, 0.6), 2), round(rnd.uniform(0.5, 3.0), 1)
+            else:
+                reason, gc_h, gc_rej = None, None, None
+            g = ref["grades"][state["gsm"]]
+            speed = float(g.target_speed_mpm) - rnd.choice([0, 10, 20, 30, 40])
+            if (pb - pa).total_seconds() < 300:
+                continue
+            db.add(OpRunSegment(
+                report_id=r.id, started_at=pa, ended_at=pb, grade_id=g.id, gsm=g.gsm, speed_mpm=Decimal(str(speed)),
+                ideal_mt_min=g.ideal_mt_min, reason=reason if i or not segs else reason,
+                grade_change_hours=Decimal(str(gc_h)) if gc_h else None, grade_change_reject_mt=Decimal(str(gc_rej)) if gc_rej else None,
+            ))  # fmt: skip
+            segs.append((pa, pb, g, speed / float(g.target_speed_mpm or speed)))
+    # ---- reels: about 15 t each, made over the run time; shift = when the reel was finished
+    noon = t0 + timedelta(hours=12)
+    carry = state.get("carry", 0.0)
+    rejects: list[tuple[str, float]] = []
+    downgrades: list[tuple[str, float]] = []
+    for pa, pb, g, speed_ratio in segs:
+        made = (pb - pa).total_seconds() / 60 * float(g.ideal_mt_min) * speed_ratio * rnd.uniform(0.86, 0.97)
+        pos = pa
+        rate = made / max((pb - pa).total_seconds(), 1)
+        total = carry + made
+        while total >= 15.0:
+            need = 15.0 - carry
+            pos = pos + timedelta(seconds=need / rate) if rate else pos
+            carry = 0.0
+            total -= 15.0
+            gross = round(rnd.uniform(14.6, 15.6), 3)
+            trim = gross * rnd.uniform(0.012, 0.022)
+            rej = 0.0
+            if rnd.random() < 0.08:
+                rej = round(rnd.choice([1.0, 1.5, 2.0, 5.0]), 1)
+            net = round(gross - trim - rej, 3)
+            bg = net if rnd.random() < 0.03 else 0.0
+            shift = "D" if pos < noon else "N"
+            state["reel"] += 1
+            db.add(OpReel(
+                report_id=r.id, shift=shift, reel_no=str(state["reel"]), gsm=g.gsm, gross_mt=Decimal(str(gross)),
+                net_mt=Decimal(str(net)), reject_mt=Decimal(str(rej)), b_grade_mt=Decimal(str(bg)),
+            ))  # fmt: skip
+            if rej:
+                rejects.append((shift, rej))
+            if bg:
+                downgrades.append((shift, bg))
+        carry = total
+    state["carry"] = carry
+    rej_defects = ["Rough surface", "Machine start-up", "Holes / spots", "Wrinkles", "Edge crack"]
+    for shift, q in rejects:
+        x = ref["defects"][rnd.choice(rej_defects)]
+        db.add(
+            OpQualityLoss(
+                report_id=r.id, kind=OpLossKind.REJECT, shift=shift, defect_id=x.id, qty_mt=Decimal(str(q)), disposition=x.disposition
+            )
+        )
+    for shift, q in downgrades:
+        x = ref["defects"][rnd.choice(["Coating streaks", "Moisture out of range", "Curl"])]
+        db.add(
+            OpQualityLoss(
+                report_id=r.id, kind=OpLossKind.DOWNGRADE, shift=shift, defect_id=x.id, qty_mt=Decimal(str(round(q, 3))), disposition="F/H"
+            )
+        )
+    db.flush()
+    if until is None:
+        net = sum(float(x.net_mt + x.reject_mt) for x in db.execute(select(OpReel).where(OpReel.report_id == r.id)).scalars())
+        r.steam_mt = Decimal(str(round(net * rnd.uniform(1.9, 2.2), 0)))
+        r.water_pm_m3 = Decimal(rnd.randint(2100, 3400))
+        r.water_sp_m3 = Decimal(rnd.randint(1800, 2300))
+        r.water_ut_m3 = Decimal(rnd.randint(500, 1400))
+        r.broke_tower_pct = Decimal(rnd.randint(20, 80))
+    return r
+
+
+def build(db: Session, password: str, now: datetime | None = None) -> str:
+    org = db.execute(select(Organization).where(Organization.code == "DEMO")).scalar_one_or_none()
+    if org is None:
+        return "No DEMO organization: run seed-demo first."
+    if db.execute(select(Plant).where(Plant.organization_id == org.id, Plant.code == PLANT_CODE)).scalar_one_or_none():
+        return "Operations sample plant already there; nothing to do."
+    plant, m, ref = _setup(db, org, password)
+    tz = ZoneInfo(plant.timezone)
+    now = (now or utcnow()).astimezone(tz)
+    current = (now - timedelta(hours=7)).date()  # production day in progress (starts 07:00)
+    rnd = random.Random(20261105)
+    state = {"gsm": 350, "grade_days": 2, "wash_in": 4, "reel": 100, "carry": 0.0}
+    users = ref["users"]
+    n = 0
+    for i in range(DAYS, -1, -1):
+        d = current - timedelta(days=i)
+        if d.day == 1:
+            state["reel"] = 100  # reel numbers start again each month
+        until = now if i == 0 else None
+        r = _day(db, rnd, plant, m, ref, d, state, until)
+        n += 1
+        if i == 0:
+            continue  # today: still being written (draft)
+        r.status = OpReportStatus.SUBMITTED
+        r.submitted_by_id, r.submitted_at = users["prod.sup"].id, datetime.combine(d + timedelta(days=1), time(7, 30), tzinfo=tz)
+        if i >= 2:  # yesterday waits for the manager's confirmation
+            r.status = OpReportStatus.CONFIRMED
+            r.confirmed_by_id, r.confirmed_at = users["prod.mgr"].id, datetime.combine(d + timedelta(days=1), time(10, 0), tzinfo=tz)
+            db.flush()
+            svc.write_production_record(db, r, plant, svc.compute(db, r, plant))
+    db.flush()
+    return f"{PLANT_CODE}: operations sample plant with paper machine PM1 and {n} daily reports"
+
+
+def run_for_demo(password: str) -> str:
+    from app.core.db import SessionLocal
+
+    with SessionLocal() as db, db.begin():
+        return build(db, password)

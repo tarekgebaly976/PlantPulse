@@ -3,6 +3,29 @@
 Status: draft for review, 17 Nov 2026. Start planned after 22 Nov 2026 (after the Google Play production application).
 Branch: `claude/serene-davinci-0arq11` (migrations up to 0021)
 
+## 0. Progress
+
+**Phase 1 built (17 Nov 2026), on trial on the demo only.** Setting `CMMS_OPERATIONS_MODULE` (off by default; on in
+`deploy/docker-compose.demo.yml`). Migration 0022.
+
+- Menu "Production → Production reports" (permission `op.view`); new built-in roles Production Supervisor
+  (`op.enter`) and Production Manager (`op.enter`, `op.confirm`, `op.manage`); Production User can enter reports.
+- Settings: machines (production line asset, day start, shifts), grades with ideal rates, disciplines (maintenance
+  or not), machine sections (with their equipment), quality defects.
+- Daily report: runs and GSM changes (ideal tonnes per grade), reels, stops and sheet breaks split between
+  disciplines, quality rejects/downgrades, utilities and notes; calculated shift and day totals, OEE as the mill
+  calculates it, downtime and breaks by discipline, gross by GSM, month and year to date, checks (24 h accounted,
+  rejects explained …). Draft → submitted → confirmed (locked) → reopen (new revision). Print / PDF in form layout.
+- A stop is a maintenance downtime event too: a breakdown with a maintenance discipline counts as an equipment failure
+  (MTBF), sheet breaks and process stops do not. Breakdown → "Work request" button. Confirming writes the day's
+  production record, so OEE and cost per ton on the KPI pages match the report.
+- Demo: second sample plant **DPM – Demo Paper Mill – Operations** with about 30 days of **invented** reports (no real
+  mill data), rebuilt every night. Accounts `prod.sup@demo.example.com` (enters reports) and
+  `prod.mgr@demo.example.com` (confirms, settings), demo password; other demo accounts also see plant DPM.
+- Not yet: Excel import of past daily sheets, winder/FSC, Q-factors, utilities and SP reports (phases 2–5).
+
+To switch it on for the real installation later: add `CMMS_OPERATIONS_MODULE=true` to `deploy/.env` and restart.
+
 ## 1. Goal
 
 Replace the mill's four daily Excel forms with one Operations module in

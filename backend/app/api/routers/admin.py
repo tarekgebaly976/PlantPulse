@@ -20,7 +20,7 @@ from app.models.workorders import WOStatusTransition
 from app.schemas.common import ORM, In
 from app.services import failure_modes as fm
 from app.services import user_import
-from app.services.common import audit, reset_role, role_permissions, utcnow
+from app.services.common import audit, hidden_permissions, reset_role, role_permissions, utcnow
 from app.services.plants import create_plant
 from app.services.workflow import ensure_default_transitions
 
@@ -632,7 +632,8 @@ def _editable_role(db: Session, code: str, ctx: Ctx) -> Role:
 def list_permissions(ctx: Ctx = Depends(require("user.manage"))) -> list[dict]:
     from app.core.permissions import PERMISSIONS
 
-    return [{"code": c, "description": d, "group": c.split(".")[0]} for c, d in PERMISSIONS.items()]
+    hidden = hidden_permissions()
+    return [{"code": c, "description": d, "group": c.split(".")[0]} for c, d in PERMISSIONS.items() if c not in hidden]
 
 
 @router.get("/roles/matrix")
@@ -682,6 +683,7 @@ def set_role_permissions(
     if unknown:
         raise HTTPException(422, f"Unknown permission(s): {', '.join(sorted(unknown))}")
     before = role_permissions(db, role.id)
+    wanted |= before & hidden_permissions()  # the screen does not show a switched-off module: keep what the role had there
     for p in wanted - before:
         db.add(RolePermission(role_id=role.id, permission_code=p))
     for p in before - wanted:

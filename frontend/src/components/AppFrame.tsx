@@ -4,7 +4,7 @@ import { ActionIcon, AppShell, Avatar, Badge, Box, useComputedColorScheme, useMa
 import { Modal } from "@/components/Modal";
 import { useDisclosure, useNetwork } from "@mantine/hooks";
 import {
-  IconAlertTriangle, IconBell, IconBox, IconCalendarTime, IconChartBar, IconClipboardList, IconDashboard, IconDroplet, IconFishBone, IconHeartRateMonitor,
+  IconAlertTriangle, IconBell, IconBox, IconBuildingFactory2, IconCalendarTime, IconChartBar, IconClipboardList, IconDashboard, IconDroplet, IconFishBone, IconHeartRateMonitor,
   IconKey, IconLanguage, IconLogout, IconMoon, IconPlus, IconSun, IconQrcode, IconSettings, IconSitemap, IconTool, IconToolsKitchen, IconUserCheck, IconWifi, IconWifiOff, IconRoute,
 } from "@tabler/icons-react";
 import Link from "next/link";
@@ -28,6 +28,9 @@ const NAV_GROUPS: { key: string | null; items: NavItem[] }[] = [
     { href: "/field", key: "nav.field", icon: IconRoute, perm: "request.create" },
     { href: "/requests", key: "nav.requests", icon: IconAlertTriangle, perm: "request.create" },
     { href: "/work-orders", key: "nav.workOrders", icon: IconClipboardList, perm: "wo.view" },
+  ] },
+  { key: "navGroup.operations", items: [
+    { href: "/operations", key: "nav.operations", icon: IconBuildingFactory2, perm: "op.view" },
   ] },
   { key: "navGroup.maintenance", items: [
     { href: "/pm", key: "nav.pm", icon: IconCalendarTime, perm: "pm.view" },

@@ -5,6 +5,7 @@ from app.models import (  # noqa: F401
     identity,
     inventory,
     lubrication,
+    operations,
     pdm,
     pm,
     rca,

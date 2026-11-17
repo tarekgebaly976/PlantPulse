@@ -58,7 +58,14 @@ PERMISSIONS: dict[str, str] = {
     "rca.lead": "Can be chosen as RCA leader (engineering positions)",
     "rca.approve": "Decide which RCA candidates go ahead, approve analyses and close RCAs",
     "rca.settings": "Set the RCA rules (what counts as a major breakdown)",
+    "op.view": "View operations: daily production reports, OEE, stops and sheet breaks",
+    "op.enter": "Enter and submit the daily production report (runs, reels, stops, quality losses)",
+    "op.confirm": "Confirm (lock) or reopen daily production reports",
+    "op.manage": "Manage operations settings: machines, grades and ideal rates, disciplines, sections, defects",
 }
+
+# Permissions of the Operations module: present only when the installation switches the module on (CMMS_OPERATIONS_MODULE).
+OP_PERMISSIONS = {p for p in PERMISSIONS if p.startswith("op.")}
 
 _ALL = set(PERMISSIONS)
 _VIEW = {p for p in PERMISSIONS if p.endswith(".view")} | {"report.export"}
@@ -202,6 +209,28 @@ ROLES: dict[str, tuple[str, set[str]]] = {
             "lube.view",
         },
     ),
-    "production_user": ("Production User", {"asset.view", "wo.view", "request.create", "pdm.view", "kpi.view", "rca.view"}),
+    "production_user": (
+        "Production User",
+        {"asset.view", "wo.view", "request.create", "pdm.view", "kpi.view", "rca.view", "op.view", "op.enter"},
+    ),
+    "production_supervisor": (
+        "Production Supervisor",
+        {
+            "asset.view",
+            "wo.view",
+            "request.create",
+            "pdm.view",
+            "kpi.view",
+            "rca.view",
+            "shift.view",
+            "op.view",
+            "op.enter",
+            "attachment.upload",
+        },
+    ),
+    "production_manager": (
+        "Production Manager",
+        _VIEW - {"audit.view"} | {"request.create", "op.enter", "op.confirm", "op.manage", "kpi.manage", "report.management"},
+    ),
     "management_viewer": ("Management Viewer", _VIEW - {"audit.view"}),
 }

@@ -119,6 +119,10 @@ class ProductionRecord(Base, PlantScoped):
     planned_production_hours: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
     run_hours: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
     ideal_rate_tph: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    # Written by the Operations module's daily report: tonnes the machine could have made in its run time (sum over grade
+    # runs, so a GSM change during the day is exact) and net tonnes (saleable + reject: the base of the quality rate).
+    ideal_tons: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    net_tons: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
 

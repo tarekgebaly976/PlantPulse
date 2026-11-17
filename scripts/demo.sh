@@ -23,7 +23,7 @@ DENV=deploy/.env.demo
 SENV=deploy/.env.site
 DEMO=(docker compose -p plantpulse-demo -f deploy/docker-compose.demo.yml --env-file "$DENV")
 CRONFILE=/etc/cron.d/plantpulse-demo
-DEMO_DOMAIN_ACCOUNTS="manager@demo.example.com planner@demo.example.com tech1@demo.example.com"
+DEMO_DOMAIN_ACCOUNTS="manager@demo.example.com planner@demo.example.com tech1@demo.example.com prod.sup@demo.example.com prod.mgr@demo.example.com"
 
 getenv() { grep -s "^$1=" "$2" | tail -n1 | cut -d= -f2- || true; }
 setenv() {
@@ -74,6 +74,8 @@ wait_api() {
 seed() {
   log "Loading the sample data"
   "${DEMO[@]}" exec -T -e "CMMS_DEMO_PASSWORD=$(getenv DEMO_PASSWORD "$DENV")" demo-api python -m app.cli seed-demo --profile general
+  # Second sample plant (DPM): paper machine with about 30 days of invented daily production reports (Operations module)
+  "${DEMO[@]}" exec -T -e "CMMS_DEMO_PASSWORD=$(getenv DEMO_PASSWORD "$DENV")" demo-api python -m app.cli demo-operations
 }
 
 # Visitors share the demo accounts: put the password back if someone changed it, and lift any login lock-out.

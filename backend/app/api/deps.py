@@ -14,7 +14,7 @@ from app.core.db import get_db
 from app.core.security import hash_token
 from app.models.identity import Membership, User, UserSession
 from app.models.tenancy import Plant
-from app.services.common import role_permissions, utcnow
+from app.services.common import hidden_permissions, role_permissions, utcnow
 
 SESSION_COOKIE = "cmms_session"
 CSRF_COOKIE = "cmms_csrf"
@@ -149,6 +149,7 @@ def get_ctx(
     else:
         assert membership is not None
         perms = role_permissions(db, membership.role_id)
+    perms -= hidden_permissions()
     return Ctx(user=user, plant=plant, membership=membership, permissions=perms, ip=client_ip(request))
 
 

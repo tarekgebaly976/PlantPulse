@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     public_url: str = ""
     # Product website (e.g. plantpulse-cmms.com): the sign-in page links to its "Try the demo" form. Empty = no link.
     product_domain: str = ""
+    # Operations module (paper-mill production reports). Off by default: switched on per installation (the demo first).
+    operations_module: bool = False
     log_level: str = "INFO"
     log_json: bool = True
 

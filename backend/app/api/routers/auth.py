@@ -21,7 +21,7 @@ from app.models.identity import LoginAttempt, Membership, User, UserSession
 from app.models.tenancy import Plant
 from app.schemas.common import In
 from app.services import password_reset as pwreset
-from app.services.common import audit, role_permissions, utcnow
+from app.services.common import audit, hidden_permissions, role_permissions, utcnow
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 # Constant-time-ish failure path: verify against a dummy hash when the user does not exist.
@@ -83,7 +83,7 @@ def build_me(db: Session, user: User, csrf: str) -> MeOut:
                     currency=p.currency,
                     role="system_admin",
                     department_id=None,
-                    permissions=sorted(PERMISSIONS),
+                    permissions=sorted(set(PERMISSIONS) - hidden_permissions()),
                 )
             )
     else:
@@ -104,7 +104,7 @@ def build_me(db: Session, user: User, csrf: str) -> MeOut:
                     role=m.role.code,
                     department_id=m.department_id,
                     department_ids=m.department_ids,
-                    permissions=sorted(role_permissions(db, m.role_id)),
+                    permissions=sorted(role_permissions(db, m.role_id) - hidden_permissions()),
                 )
             )
     return MeOut(

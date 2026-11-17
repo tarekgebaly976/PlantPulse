@@ -23,6 +23,7 @@ from app.api.routers import (
     lubrication,
     notifications,
     offline,
+    operations,
     pdm,
     pm,
     rca,
@@ -188,6 +189,7 @@ def create_app() -> FastAPI:
         rca.router,
         search.router,
         offline.router,
+        operations.router,
     ):
         app.include_router(r, prefix=API)
 

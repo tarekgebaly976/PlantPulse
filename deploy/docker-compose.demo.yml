@@ -16,6 +16,8 @@ x-demo-env: &demo-env
   # No mail server: nothing is ever e-mailed from the demo.
   CMMS_SMTP_HOST: ""
   CMMS_SMTP_FROM: ""
+  # Operations module (production reports) on trial here first; the real installation keeps it off until approved.
+  CMMS_OPERATIONS_MODULE: ${CMMS_OPERATIONS_MODULE:-true}
 
 services:
   demo-db:

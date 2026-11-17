@@ -165,5 +165,13 @@ def reset_role(db: Session, role: Role) -> None:
     db.flush()
 
 
+def hidden_permissions() -> set[str]:
+    """Permissions of modules this installation has not switched on (they exist in the database but grant nothing)."""
+    from app.core.config import get_settings
+    from app.core.permissions import OP_PERMISSIONS
+
+    return set() if get_settings().operations_module else set(OP_PERMISSIONS)
+
+
 def role_permissions(db: Session, role_id: uuid.UUID) -> set[str]:
     return set(db.execute(select(RolePermission.permission_code).where(RolePermission.role_id == role_id)).scalars())

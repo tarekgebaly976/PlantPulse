@@ -542,10 +542,13 @@ def oee(db: Session, s: Scope) -> KPIResult:
     rh = sum(float(r.run_hours or 0) for r in usable)
     tons = sum(float(r.tons_produced) for r in usable)
     good = sum(float(r.good_tons or 0) for r in usable)
-    ideal = sum(float(r.run_hours or 0) * float(r.ideal_rate_tph or 0) for r in usable)
+    # Days written by the Operations daily report carry the exact ideal tonnes (sum over grade runs) and net tonnes
+    # (saleable + reject, the base of the quality rate, so trim loss counts in performance only, as at the mill).
+    ideal = sum(float(r.ideal_tons) if r.ideal_tons is not None else float(r.run_hours or 0) * float(r.ideal_rate_tph or 0) for r in usable)
+    net = sum(float(r.net_tons) if r.net_tons is not None else float(r.tons_produced) for r in usable)
     a = rh / ph
     p = tons / ideal if ideal else 0
-    q = good / tons if tons else 0
+    q = good / net if net else 0
     return KPIResult(
         code="oee",
         value=a * p * q * 100,

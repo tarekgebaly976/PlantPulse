@@ -276,3 +276,22 @@ class RCAActionStatus(StrEnum):
     IN_PROGRESS = "in_progress"
     DONE = "done"
     CANCELLED = "cancelled"
+
+
+# ---- Operations (daily production reports) ----
+class OpReportStatus(StrEnum):
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    CONFIRMED = "confirmed"
+
+
+class OpEventType(StrEnum):
+    BREAKDOWN = "breakdown"  # equipment or process breakdown: a failure when a maintenance discipline is responsible
+    SHEET_BREAK = "sheet_break"
+    PLANNED = "planned"  # planned shutdown, wash-up, felt/wire change, cleaning
+    OTHER = "other"  # no orders, raw material, utilities outside the mill …
+
+
+class OpLossKind(StrEnum):
+    REJECT = "reject"
+    DOWNGRADE = "downgrade"

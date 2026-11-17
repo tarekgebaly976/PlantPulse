@@ -3,6 +3,7 @@
   python -m app.cli bootstrap --org-code ACME --org-name "Acme Paper" --plant-code PM1 --plant-name "Mill 1" \
         --admin-email admin@example.com           # password from CMMS_ADMIN_PASSWORD or interactive prompt
   python -m app.cli generalize-demo                 # turn an existing paper-mill DEMO into the general plant, in place
+  python -m app.cli demo-operations                 # add the operations sample plant (paper machine reports) to DEMO
   python -m app.cli seed-demo [--profile general]  # isolated DEMO organization (paper mill, or a general factory);
                                                    # password from CMMS_DEMO_PASSWORD
   python -m app.cli reset-password --email admin@example.com   # new password from CMMS_NEW_PASSWORD or prompt
@@ -147,6 +148,7 @@ def main() -> None:
     sd.add_argument("--profile", choices=["paper", "general"], default="paper", help="sample plant: paper mill or general factory")
     sub.add_parser("generalize-demo")
     sub.add_parser("demo-rca", help="add sample root cause analyses to the DEMO plant (once)")
+    sub.add_parser("demo-operations", help="add the operations sample plant (paper machine reports) to DEMO (once)")
     sub.add_parser("demo-kpi-targets", help="add sample KPI targets to the DEMO plant (keeps targets already set)")
     sub.add_parser("sync-rbac")
     r = sub.add_parser("run-scheduler")
@@ -174,6 +176,10 @@ def main() -> None:
         from app.services.kpi_targets import run_for_demo as kpi_targets_demo
 
         print(kpi_targets_demo())
+    elif a.cmd == "demo-operations":
+        from app.demo_operations import run_for_demo as operations_demo
+
+        print(operations_demo(_password("CMMS_DEMO_PASSWORD")))
     elif a.cmd == "demo-rca":
         from app.demo_rca import run_for_demo
 

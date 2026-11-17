@@ -135,3 +135,8 @@ class DowntimeEvent(Base, PlantScoped, Timestamped, Attributed):
     is_planned: Mapped[bool] = mapped_column(Boolean, default=False)
     production_loss_tons: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     reason: Mapped[str | None] = mapped_column(Text)
+    # Operations module: a stop or sheet break written in the daily production report (source "operations").
+    source: Mapped[str] = mapped_column(String(16), default="maintenance", server_default="maintenance")
+    event_type: Mapped[str | None] = mapped_column(String(20))  # app.models.enums.OpEventType
+    section_id: Mapped[uuid.UUID | None] = fk("op_sections.id", nullable=True, ondelete="SET NULL", index=False)
+    op_report_id: Mapped[uuid.UUID | None] = fk("op_daily_reports.id", nullable=True, ondelete="CASCADE")
