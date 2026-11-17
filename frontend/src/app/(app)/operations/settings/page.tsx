@@ -1,6 +1,7 @@
 "use client";
 
 import { ActionIcon, Alert, Autocomplete, Badge, Button, Checkbox, Group, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Table, Text, TextInput } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -272,6 +273,7 @@ function LogForms() {
   const [tid, setTid] = useState<string | null>(null);
   const [tf, setTf] = useState<TForm | null>(null);
   const [ff, setFf] = useState<FForm | null>(null);
+  const phone = useMediaQuery("(max-width: 48em)");
   const list = q.data ?? [];
   const tpl = list.find((x) => x.id === tid) ?? list[0];
   const editT = (x: LogTemplate): TForm => ({ id: x.id, code: x.code, name: x.name, department_id: x.department_id, frequency: x.frequency, day_start: x.day_start, shifts: x.shifts, issues: x.issues, sort: x.sort, is_active: x.is_active });
@@ -284,7 +286,8 @@ function LogForms() {
       <Text size="xs" c="dimmed" mb="xs">{t("logs.set.hint")}</Text>
       {tpl && <>
         <Group mb="sm" gap="xs">
-          <SegmentedControl value={tpl.id} onChange={setTid} data={list.map((x) => ({ value: x.id, label: x.name }))} />
+          <SegmentedControl value={tpl.id} onChange={setTid} data={list.map((x) => ({ value: x.id, label: x.name }))}
+            orientation={phone ? "vertical" : "horizontal"} fullWidth={phone} w={phone ? "100%" : undefined} />
           <Edit onClick={() => setTf(editT(tpl))} />
           <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={() => setFf({ section: last?.section ?? "", code: "", label: "", kind: "number", unit: "", decimals: 1, formula: "",
             low: "", high: "", meter_id: null, chart: false, per_ton: false, sort: (last?.sort ?? 0) + 10, is_active: true })}>{t("logs.set.addLine")}</Button>

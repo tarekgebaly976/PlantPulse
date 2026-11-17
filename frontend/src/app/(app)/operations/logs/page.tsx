@@ -1,6 +1,7 @@
 "use client";
 
 import { Alert, Badge, Button, Group, SegmentedControl, Select, Stack, Text, TextInput } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { IconNotebook, IconPlus } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -43,6 +44,7 @@ function List() {
   const [month, setMonth] = useState("");
   const q = useQ<LogList>(tpl ? "/operations/logs" : null, { template_id: tpl?.id, month: month || undefined });
   const [open, setOpen] = useState(false);
+  const phone = useMediaQuery("(max-width: 48em)"); // long form names: stacked buttons on a phone
   if (tq.isLoading) return <Loading />;
   const cols = q.data?.columns ?? [];
   return (
@@ -53,7 +55,8 @@ function List() {
       {open && tpl && <NewLog t={tpl} onClose={() => setOpen(false)} />}
       {templates.length === 0 ? <Alert color="blue" icon={<IconNotebook />}>{t("logs.none")}</Alert> : <>
         <Group mb="md" gap="sm" wrap="wrap">
-          <SegmentedControl value={tpl?.id ?? ""} onChange={(v) => { setTid(v); setMonth(""); }} data={templates.map((x) => ({ value: x.id, label: x.name }))} />
+          <SegmentedControl value={tpl?.id ?? ""} onChange={(v) => { setTid(v); setMonth(""); }} data={templates.map((x) => ({ value: x.id, label: x.name }))}
+            orientation={phone ? "vertical" : "horizontal"} fullWidth={phone} w={phone ? "100%" : undefined} />
           <TextInput type="month" w={170} value={month || q.data?.month || ""} onChange={(e) => setMonth(e.currentTarget.value)} aria-label={t("ops.month")} />
         </Group>
         <DataTable rows={q.data?.items} onRow={(r) => router.push(`/operations/logs/${r.id}`)} columns={[
