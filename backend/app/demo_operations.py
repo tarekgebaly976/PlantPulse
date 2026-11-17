@@ -182,7 +182,7 @@ def _setup(db: Session, org: Organization, password: str) -> tuple[Plant, OpMach
     )
     db.add(m)
     db.flush()
-    ref: dict = {"grades": {}, "disc": {}, "sec": {}, "defects": {}, "assets": assets}
+    ref: dict = {"grades": {}, "disc": {}, "sec": {}, "defects": {}, "assets": assets, "depts": depts}
     for gsm, speed in GRADES:
         g = OpGrade(
             plant_id=plant.id, machine_id=m.id, code=str(gsm), name=f"Coated board {gsm} gsm", gsm=gsm,
@@ -273,7 +273,9 @@ def _day(
         sec, disc = rnd.choice(BREAKS)
         place(rnd.choice([12, 15, 20, 25, 35, 45]), OpEventType.SHEET_BREAK, sec, [disc], f"Sheet break at {sec.lower()}")
     if rnd.random() < 0.04:
-        place(rnd.choice([120, 240]), OpEventType.BREAKDOWN, "Headbox & wire section", ["SUPPLY"], "No orders for the grade: machine stopped")
+        place(
+            rnd.choice([120, 240]), OpEventType.BREAKDOWN, "Headbox & wire section", ["SUPPLY"], "No orders for the grade: machine stopped"
+        )
     stops.sort()
     for a, b, kind, section, shares, text in stops:
         discs = [ref["disc"][c] for c, _ in shares]
@@ -414,7 +416,10 @@ def build(db: Session, password: str, now: datetime | None = None) -> str:
             db.flush()
             svc.write_production_record(db, r, plant, svc.compute(db, r, plant))
     db.flush()
-    return f"{PLANT_CODE}: operations sample plant with paper machine PM1 and {n} daily reports"
+    from app.demo_oplogs import build_logs
+
+    logs = build_logs(db, plant, ref, current, now)
+    return f"{PLANT_CODE}: operations sample plant with paper machine PM1, {n} daily reports and {logs} utility / stock preparation logs"
 
 
 def run_for_demo(password: str) -> str:

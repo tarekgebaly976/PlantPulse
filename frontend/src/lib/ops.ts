@@ -113,3 +113,43 @@ export function currentProductionDay(dayStart: string, tz?: string): string {
   d.setUTCDate(d.getUTCDate() - 1);
   return d.toISOString().slice(0, 10);
 }
+
+// ------------------------------------------------------------------ daily logs (utilities, stock preparation …)
+export type LogKind = "meter" | "counter" | "number" | "check" | "text" | "calc";
+export interface LogField {
+  id: string; section: string; code: string; label: string; kind: LogKind; unit: string | null; decimals: number; formula: string | null;
+  low: number | null; high: number | null; meter_id: string | null; chart: boolean; per_ton: boolean; sort: number; is_active: boolean;
+}
+export interface LogTemplate {
+  id: string; code: string; name: string; department_id: string; frequency: "day" | "shift"; day_start: string; shifts: OpShift[];
+  issues: boolean; sort: number; is_active: boolean; fields?: LogField[];
+}
+export interface LogValue { opening: number | null; closing: number | null; value: number | null; text: string | null; flag: "low" | "high" | null }
+export interface LogWarning { code: string; item: string }
+export interface LogDetail {
+  id: string; template: LogTemplate; log_date: string; shift: string; status: "draft" | "submitted" | "confirmed"; revision: number; notes: string | null;
+  can_edit: boolean; in_progress: boolean; window: { start: string; end: string }; created_by: string | null; submitted_by: string | null;
+  confirmed_by: string | null; submitted_at: string | null; confirmed_at: string | null; reopen_note: string | null;
+  prev: { id: string; date: string; shift: string } | null; next: { id: string; date: string; shift: string } | null;
+  fields: LogField[]; values: Record<string, LogValue>; warnings: LogWarning[];
+  issues: { requests: { id: string; number: string; title: string; asset: string; breakdown: boolean; created_at: string }[];
+    work_orders: { id: string; number: string; title: string; asset: string; status: string; priority: string; created_at: string }[] } | null;
+}
+export interface LogRow { id: string; log_date: string; shift: string; status: string; revision: number; values: Record<string, number | null>; warnings: number; in_progress: boolean }
+export interface LogList { items: LogRow[]; month: string; columns: LogField[]; template: LogTemplate }
+
+export interface DashDay {
+  date: string; status: string; in_progress: boolean; gross: number; net: number; a: number; reject: number; b: number; trim: number; run_hours: number;
+  oee: number | null; availability: number | null; performance: number | null; quality: number | null; breaks: number; breaks_hours: number; downtime_hours: number;
+}
+export interface DashField extends LogField { series: Record<string, number>; per_ton_series: Record<string, number> | null; total: number | null; per_ton_period: number | null }
+export interface Dashboard {
+  start: string; end: string; machines: { id: string; code: string; name: string }[]; machine_id: string | null; production: DashDay[];
+  period: Period | null; logs: { template: LogTemplate; fields: DashField[] }[];
+}
+
+/** Format a log value with the line's decimals. */
+export function fmtVal(v: number | null | undefined, decimals = 1): string {
+  if (v === null || v === undefined) return "—";
+  return v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: decimals });
+}

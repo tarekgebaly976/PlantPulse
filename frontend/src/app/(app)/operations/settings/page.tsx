@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionIcon, Alert, Badge, Button, Checkbox, Group, NumberInput, Select, SimpleGrid, Stack, Table, Text, TextInput } from "@mantine/core";
+import { ActionIcon, Alert, Autocomplete, Badge, Button, Checkbox, Group, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Table, Text, TextInput } from "@mantine/core";
 import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -10,7 +10,7 @@ import { Modal } from "@/components/Modal";
 import { AssetPicker, DeptSelect, Loading, PageHeader, Section } from "@/components/ui";
 import { post, put } from "@/lib/api";
 import { fmtNum, useMut, useQ } from "@/lib/hooks";
-import type { OpDefect, OpDiscipline, OpGrade, OpMachine, OpSection, OpSettings, OpShift } from "@/lib/ops";
+import type { LogField, LogKind, LogTemplate, OpDefect, OpDiscipline, OpGrade, OpMachine, OpSection, OpSettings, OpShift } from "@/lib/ops";
 
 type Num = number | string;
 const n = (v: Num | null | undefined) => (v === "" || v === null || v === undefined ? null : Number(v));
@@ -168,6 +168,147 @@ function DefectModal({ form, onClose }: { form: XForm | null; onClose: () => voi
   );
 }
 
+
+// ---------------- daily log forms
+interface TForm { id?: string; code: string; name: string; department_id: string | null; frequency: "day" | "shift"; day_start: string; shifts: OpShift[]; issues: boolean; sort: Num; is_active: boolean }
+interface FForm { id?: string; section: string; code: string; label: string; kind: LogKind; unit: string; decimals: Num; formula: string; low: Num; high: Num; meter_id: string | null; chart: boolean; per_ton: boolean; sort: Num; is_active: boolean }
+
+function TemplateModal({ form, onClose }: { form: TForm | null; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [f, setF] = useState<TForm | null>(form);
+  const save = useMut(() => {
+    if (!f) return Promise.resolve();
+    const body = { code: f.code, name: f.name, department_id: f.department_id, frequency: f.frequency, day_start: f.day_start, shifts: f.frequency === "shift" ? f.shifts : [], issues: f.issues, sort: n(f.sort) ?? 0, is_active: f.is_active };
+    return f.id ? put(`/operations/log-templates/${f.id}`, body) : post("/operations/log-templates", body);
+  }, { onDone: onClose });
+  if (!f) return null;
+  const set = (p: Partial<TForm>) => setF({ ...f, ...p });
+  return (
+    <Modal opened onClose={onClose} title={t("logs.set.form")} size="lg">
+      <Stack>
+        <SimpleGrid cols={2}>
+          <TextInput label={t("ops.set.code")} required value={f.code} onChange={(e) => set({ code: e.currentTarget.value })} />
+          <TextInput label={t("ops.set.name")} required value={f.name} onChange={(e) => set({ name: e.currentTarget.value })} />
+        </SimpleGrid>
+        <DeptSelect label={t("ops.set.dept")} value={f.department_id} onChange={(v) => set({ department_id: v })} />
+        <SimpleGrid cols={2}>
+          <Select label={t("logs.set.frequency")} value={f.frequency} onChange={(v) => set({ frequency: (v ?? "day") as TForm["frequency"] })}
+            data={[{ value: "day", label: t("logs.set.daily") }, { value: "shift", label: t("logs.set.perShift") }]} />
+          <TextInput type="time" label={t("ops.set.dayStart")} value={f.day_start} onChange={(e) => set({ day_start: e.currentTarget.value })} />
+        </SimpleGrid>
+        {f.frequency === "shift" && <>
+          {f.shifts.map((s, i) => (
+            <Group key={i} gap="xs" wrap="nowrap" align="flex-end">
+              <TextInput w={80} label={i === 0 ? t("ops.set.shiftCode") : undefined} value={s.code} onChange={(e) => set({ shifts: f.shifts.map((x, j) => (j === i ? { ...x, code: e.currentTarget.value } : x)) })} />
+              <TextInput style={{ flex: 1 }} label={i === 0 ? t("ops.set.shiftName") : undefined} value={s.name} onChange={(e) => set({ shifts: f.shifts.map((x, j) => (j === i ? { ...x, name: e.currentTarget.value } : x)) })} />
+              <TextInput w={120} type="time" label={i === 0 ? t("ops.set.shiftStart") : undefined} value={s.start} onChange={(e) => set({ shifts: f.shifts.map((x, j) => (j === i ? { ...x, start: e.currentTarget.value } : x)) })} />
+              <ActionIcon variant="subtle" color="red" aria-label={t("common.delete")} onClick={() => set({ shifts: f.shifts.filter((_, j) => j !== i) })}><IconTrash size={16} /></ActionIcon>
+            </Group>
+          ))}
+          {f.shifts.length < 4 && <Button size="xs" variant="subtle" leftSection={<IconPlus size={14} />} onClick={() => set({ shifts: [...f.shifts, { code: "", name: "", start: "" }] })}>{t("ops.set.addShift")}</Button>}
+        </>}
+        <Checkbox label={t("logs.set.issues")} checked={f.issues} onChange={(e) => set({ issues: e.currentTarget.checked })} />
+        <Checkbox label={t("ops.set.active")} checked={f.is_active} onChange={(e) => set({ is_active: e.currentTarget.checked })} />
+        <Button loading={save.isPending} disabled={!f.code || !f.name || !f.department_id || (f.frequency === "shift" && (!f.shifts.length || f.shifts.some((s) => !s.code || !s.name || !s.start)))} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
+      </Stack>
+    </Modal>
+  );
+}
+
+const KINDS: LogKind[] = ["meter", "counter", "number", "check", "text", "calc"];
+
+function FieldModal({ tpl, form, onClose }: { tpl: LogTemplate; form: FForm | null; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [f, setF] = useState<FForm | null>(form);
+  const meters = useQ<{ id: string; label: string }[]>(f?.kind === "counter" ? "/operations/meters" : null);
+  const save = useMut(() => {
+    if (!f) return Promise.resolve();
+    const body = { section: f.section, code: f.code, label: f.label, kind: f.kind, unit: f.unit || null, decimals: n(f.decimals) ?? 1, formula: f.kind === "calc" ? f.formula : null,
+      low: n(f.low), high: n(f.high), meter_id: f.kind === "counter" ? f.meter_id : null, chart: f.chart, per_ton: f.per_ton, sort: n(f.sort) ?? 0, is_active: f.is_active };
+    return f.id ? put(`/operations/log-fields/${f.id}`, body) : post(`/operations/log-templates/${tpl.id}/fields`, body);
+  }, { onDone: onClose });
+  if (!f) return null;
+  const set = (p: Partial<FForm>) => setF({ ...f, ...p });
+  const sections = [...new Set((tpl.fields ?? []).map((x) => x.section))];
+  return (
+    <Modal opened onClose={onClose} title={`${tpl.name} – ${t("logs.set.line")}`} size="lg">
+      <Stack>
+        <SimpleGrid cols={2}>
+          <Autocomplete label={t("logs.set.section")} required data={sections} value={f.section} onChange={(v) => set({ section: v })} />
+          <Select label={t("logs.set.kind")} value={f.kind} onChange={(v) => set({ kind: (v ?? "number") as LogKind })} data={KINDS.map((k) => ({ value: k, label: t(`logs.kinds.${k}`) }))} />
+        </SimpleGrid>
+        <Text size="xs" c="dimmed">{t(`logs.kindHint.${f.kind}`)}</Text>
+        <SimpleGrid cols={3}>
+          <TextInput label={t("ops.set.code")} description={t("logs.set.codeHint")} required value={f.code} onChange={(e) => set({ code: e.currentTarget.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_") })} />
+          <TextInput style={{ gridColumn: "span 2" }} label={t("logs.set.label")} required value={f.label} onChange={(e) => set({ label: e.currentTarget.value })} />
+        </SimpleGrid>
+        {f.kind === "calc" && <TextInput label={t("logs.set.formula")} description={t("logs.set.formulaHint", { codes: (tpl.fields ?? []).filter((x) => x.id !== f.id).map((x) => x.code).join(", ") })}
+          className="mono" value={f.formula} onChange={(e) => set({ formula: e.currentTarget.value })} />}
+        {f.kind === "counter" && <Select label={t("logs.set.meter")} description={t("logs.toMeter")} clearable searchable value={f.meter_id} onChange={(v) => set({ meter_id: v })}
+          data={(meters.data ?? []).map((m) => ({ value: m.id, label: m.label }))} />}
+        {f.kind !== "text" && <SimpleGrid cols={4}>
+          <TextInput label={t("logs.set.unit")} value={f.unit} onChange={(e) => set({ unit: e.currentTarget.value })} />
+          <NumberInput label={t("logs.set.decimals")} min={0} max={4} value={f.decimals} onChange={(v) => set({ decimals: v })} />
+          <NumberInput label={t("logs.set.low")} value={f.low} onChange={(v) => set({ low: v })} />
+          <NumberInput label={t("logs.set.high")} value={f.high} onChange={(v) => set({ high: v })} />
+        </SimpleGrid>}
+        {f.kind !== "text" && <Group>
+          <Checkbox label={t("logs.set.chart")} checked={f.chart} onChange={(e) => set({ chart: e.currentTarget.checked })} />
+          <Checkbox label={t("logs.set.perTon")} checked={f.per_ton} onChange={(e) => set({ per_ton: e.currentTarget.checked })} />
+        </Group>}
+        <SimpleGrid cols={2}>
+          <NumberInput label={t("ops.set.sort")} min={0} value={f.sort} onChange={(v) => set({ sort: v })} />
+          <Checkbox mt="lg" label={t("ops.set.active")} checked={f.is_active} onChange={(e) => set({ is_active: e.currentTarget.checked })} />
+        </SimpleGrid>
+        <Button loading={save.isPending} disabled={!f.section || !f.code || !f.label || (f.kind === "calc" && !f.formula)} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
+      </Stack>
+    </Modal>
+  );
+}
+
+function LogForms() {
+  const { t } = useTranslation();
+  const q = useQ<LogTemplate[]>("/operations/log-templates");
+  const [tid, setTid] = useState<string | null>(null);
+  const [tf, setTf] = useState<TForm | null>(null);
+  const [ff, setFf] = useState<FForm | null>(null);
+  const list = q.data ?? [];
+  const tpl = list.find((x) => x.id === tid) ?? list[0];
+  const editT = (x: LogTemplate): TForm => ({ id: x.id, code: x.code, name: x.name, department_id: x.department_id, frequency: x.frequency, day_start: x.day_start, shifts: x.shifts, issues: x.issues, sort: x.sort, is_active: x.is_active });
+  const editF = (x: LogField): FForm => ({ id: x.id, section: x.section, code: x.code, label: x.label, kind: x.kind, unit: x.unit ?? "", decimals: x.decimals, formula: x.formula ?? "",
+    low: x.low ?? "", high: x.high ?? "", meter_id: x.meter_id, chart: x.chart, per_ton: x.per_ton, sort: x.sort, is_active: x.is_active });
+  const last = (tpl?.fields ?? []).at(-1);
+  return (
+    <Section title={t("logs.set.title")} actions={<Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => setTf({ code: "", name: "", department_id: null, frequency: "day", day_start: "07:00",
+      shifts: [{ code: "D", name: "Day shift", start: "07:00" }, { code: "N", name: "Night shift", start: "19:00" }], issues: false, sort: list.length * 10 + 10, is_active: true })}>{t("logs.set.newForm")}</Button>}>
+      <Text size="xs" c="dimmed" mb="xs">{t("logs.set.hint")}</Text>
+      {tpl && <>
+        <Group mb="sm" gap="xs">
+          <SegmentedControl value={tpl.id} onChange={setTid} data={list.map((x) => ({ value: x.id, label: x.name }))} />
+          <Edit onClick={() => setTf(editT(tpl))} />
+          <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={() => setFf({ section: last?.section ?? "", code: "", label: "", kind: "number", unit: "", decimals: 1, formula: "",
+            low: "", high: "", meter_id: null, chart: false, per_ton: false, sort: (last?.sort ?? 0) + 10, is_active: true })}>{t("logs.set.addLine")}</Button>
+        </Group>
+        <Table.ScrollContainer minWidth={700}>
+          <Table striped>
+            <Table.Thead><Table.Tr><Table.Th>{t("logs.set.section")}</Table.Th><Table.Th>{t("ops.set.code")}</Table.Th><Table.Th>{t("logs.set.label")}</Table.Th>
+              <Table.Th>{t("logs.set.kind")}</Table.Th><Table.Th>{t("logs.set.unit")}</Table.Th><Table.Th>{t("logs.set.limits")}</Table.Th><Table.Th>{t("logs.set.dash")}</Table.Th><Table.Th /></Table.Tr></Table.Thead>
+            <Table.Tbody>
+              {(tpl.fields ?? []).map((x) => (
+                <Table.Tr key={x.id}><Table.Td>{x.section}</Table.Td><Table.Td className="mono">{x.code}</Table.Td><Table.Td>{x.label} <Off on={x.is_active} />{x.formula && <Text size="xs" c="dimmed" className="mono">= {x.formula}</Text>}</Table.Td>
+                  <Table.Td>{t(`logs.kinds.${x.kind}`)}{x.meter_id && " ⏱"}</Table.Td><Table.Td>{x.unit}</Table.Td><Table.Td>{x.low !== null || x.high !== null ? `${x.low ?? "…"}–${x.high ?? "…"}` : ""}</Table.Td>
+                  <Table.Td>{x.chart ? "📈" : ""}{x.per_ton ? " /t" : ""}</Table.Td><Table.Td><Edit onClick={() => setFf(editF(x))} /></Table.Td></Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+        <FieldModal key={`f-${ff?.id}-${!!ff}`} tpl={tpl} form={ff} onClose={() => setFf(null)} />
+      </>}
+      <TemplateModal key={`t-${tf?.id}-${!!tf}`} form={tf} onClose={() => setTf(null)} />
+    </Section>
+  );
+}
+
 const Edit = ({ onClick }: { onClick: () => void }) => <ActionIcon variant="subtle" aria-label="edit" onClick={onClick}><IconPencil size={16} /></ActionIcon>;
 const Off = ({ on }: { on: boolean }) => (on ? null : <Badge size="xs" color="gray" variant="light">off</Badge>);
 
@@ -250,6 +391,7 @@ function SettingsView() {
             </Table.Tbody></Table>
           </Section>
         </SimpleGrid>
+        <LogForms />
       </Stack>
       <MachineModal key={`m-${mf?.id}-${!!mf}`} form={mf} onClose={() => setMf(null)} />
       {m && <GradeModal key={`g-${gf?.id}-${!!gf}`} m={m} form={gf} onClose={() => setGf(null)} />}

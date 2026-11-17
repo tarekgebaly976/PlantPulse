@@ -4,7 +4,7 @@ import { ActionIcon, AppShell, Avatar, Badge, Box, useComputedColorScheme, useMa
 import { Modal } from "@/components/Modal";
 import { useDisclosure, useNetwork } from "@mantine/hooks";
 import {
-  IconAlertTriangle, IconBell, IconBox, IconBuildingFactory2, IconCalendarTime, IconChartBar, IconClipboardList, IconDashboard, IconDroplet, IconFishBone, IconHeartRateMonitor,
+  IconAlertTriangle, IconBell, IconBox, IconBuildingFactory2, IconChartLine, IconNotebook, IconCalendarTime, IconChartBar, IconClipboardList, IconDashboard, IconDroplet, IconFishBone, IconHeartRateMonitor,
   IconKey, IconLanguage, IconLogout, IconMoon, IconPlus, IconSun, IconQrcode, IconSettings, IconSitemap, IconTool, IconToolsKitchen, IconUserCheck, IconWifi, IconWifiOff, IconRoute,
 } from "@tabler/icons-react";
 import Link from "next/link";
@@ -30,7 +30,9 @@ const NAV_GROUPS: { key: string | null; items: NavItem[] }[] = [
     { href: "/work-orders", key: "nav.workOrders", icon: IconClipboardList, perm: "wo.view" },
   ] },
   { key: "navGroup.operations", items: [
+    { href: "/operations/dashboard", key: "nav.opsDashboard", icon: IconChartLine, perm: "op.view" },
     { href: "/operations", key: "nav.operations", icon: IconBuildingFactory2, perm: "op.view" },
+    { href: "/operations/logs", key: "nav.opsLogs", icon: IconNotebook, perm: "op.view" },
   ] },
   { key: "navGroup.maintenance", items: [
     { href: "/pm", key: "nav.pm", icon: IconCalendarTime, perm: "pm.view" },
@@ -77,6 +79,9 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const router = useRouter();
   const net = useNetwork();
   const notif = useQ<{ unread: number }>("/notifications", { limit: 1, unread: true }, { refetchInterval: 60_000 });
+  // The closest menu entry is highlighted (e.g. /operations/logs highlights Daily logs, not Production reports).
+  const activeHref = pathname === "/" ? "/" : NAV_GROUPS.flatMap((g) => g.items.map((x) => x.href))
+    .filter((h) => h !== "/" && (pathname === h || pathname.startsWith(`${h}/`))).sort((a, b) => b.length - a.length)[0];
   const counts = useQ<NavCounts>("/dashboard/summary", undefined, { refetchInterval: 60_000 });
   const { setColorScheme } = useMantineColorScheme();
   const dark = useComputedColorScheme("light", { getInitialValueInEffect: true }) === "dark";
@@ -158,7 +163,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
                   const c = navCount(n.href, counts.data);
                   return (
                     <NavLink key={n.href} component={Link} href={n.href} label={t(n.key)} leftSection={<n.icon size={19} stroke={1.7} />}
-                      className="tap-target pp-navlink" active={n.href === "/" ? pathname === "/" : pathname.startsWith(n.href)}
+                      className="tap-target pp-navlink" active={n.href === activeHref}
                       rightSection={c ? <Badge size="sm" circle={c.n < 10} color={c.color} variant="filled" aria-hidden>{c.n}</Badge> : undefined}
                       aria-label={t(n.key)} />
                   );

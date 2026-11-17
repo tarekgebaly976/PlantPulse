@@ -22,7 +22,17 @@ Branch: `claude/serene-davinci-0arq11` (migrations up to 0021)
 - Demo: second sample plant **DPM – Demo Paper Mill – Operations** with about 30 days of **invented** reports (no real
   mill data), rebuilt every night. Accounts `prod.sup@demo.example.com` (enters reports) and
   `prod.mgr@demo.example.com` (confirms, settings), demo password; other demo accounts also see plant DPM.
-- Not yet: Excel import of past daily sheets, winder/FSC, Q-factors, utilities and SP reports (phases 2–5).
+- **Daily logs (17 Nov, migration 0023):** configurable daily / per-shift log forms (Settings → Daily log forms):
+  lines of kind meter (opening/closing, opening = previous closing), running-hours counter (updates the equipment's
+  meter on confirming → meter-based PM), number, yes/no, text, calculated (formula over codes); low/high limits flagged.
+  Demo forms: **Utilities – daily generation & electricity** (water, RO recovery, effluent, steam, condensate, gas,
+  gas-engine generation and forced stoppage, consumption by area, balance, compressor/boiler running hours) and
+  **Stock preparation – shift report** (shift checks, grade/speed/broke, furnish bales per line, tank levels, fresh water,
+  forklifts, and the department's open work requests / work orders with "Raise work request", shutdown flag).
+- **Production dashboard:** production per day (A / B+S / reject), OEE and A×P×Q trends, breaks per day, downtime and
+  breaks by discipline, and every log line marked "Dashboard" as a trend, per tonne of paper where marked
+  (water, steam, gas, electricity, bales per t).
+- Not yet: Excel import of past daily sheets, winder/FSC, Q-factors (phase 2).
 
 To switch it on for the real installation later: add `CMMS_OPERATIONS_MODULE=true` to `deploy/.env` and restart.
 

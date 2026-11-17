@@ -24,6 +24,7 @@ from app.api.routers import (
     notifications,
     offline,
     operations,
+    oplogs,
     pdm,
     pm,
     rca,
@@ -190,6 +191,7 @@ def create_app() -> FastAPI:
         search.router,
         offline.router,
         operations.router,
+        oplogs.router,
     ):
         app.include_router(r, prefix=API)
 

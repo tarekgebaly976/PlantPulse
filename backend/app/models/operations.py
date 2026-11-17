@@ -164,3 +164,76 @@ class OpQualityLoss(Base):
     defect_text: Mapped[str | None] = mapped_column(String(200))
     qty_mt: Mapped[Decimal] = mapped_column(Numeric(10, 3))
     disposition: Mapped[str | None] = mapped_column(String(10))
+
+
+# ---------------------------------------------------------------- daily logs (utilities, stock preparation …)
+class OpLogTemplate(Base, PlantScoped, Timestamped):
+    """A daily or per-shift log form of a department (e.g. utilities daily generation report, stock preparation shift
+    report). Its fields are configured, so a new form needs no code."""
+
+    __tablename__ = "op_log_templates"
+    __table_args__ = (UniqueConstraint("plant_id", "code"),)
+    id: Mapped[uuid.UUID] = uuid_pk()
+    code: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(120))
+    department_id: Mapped[uuid.UUID] = fk("departments.id")
+    frequency: Mapped[str] = mapped_column(String(10), default="day")  # day | shift
+    day_start: Mapped[time] = mapped_column(Time, default=time(7, 0))
+    shifts: Mapped[list] = mapped_column(JSONB, default=list)  # [{"code": "D", "name": "Day shift", "start": "07:00"}]
+    issues: Mapped[bool] = mapped_column(Boolean, default=False)  # show the department's open work requests / orders
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class OpLogField(Base):
+    """One line of a log form. kind: meter (opening/closing reading, value = difference), counter (running hours,
+    same, and the closing reading goes to the equipment's meter when the log is confirmed), number, check, text,
+    calc (formula over other fields' codes, e.g. "(RO1 + RO2) / RO_FEED * 100")."""
+
+    __tablename__ = "op_log_fields"
+    __table_args__ = (UniqueConstraint("template_id", "code"),)
+    id: Mapped[uuid.UUID] = uuid_pk()
+    template_id: Mapped[uuid.UUID] = fk("op_log_templates.id", ondelete="CASCADE")
+    section: Mapped[str] = mapped_column(String(80))
+    code: Mapped[str] = mapped_column(String(40))
+    label: Mapped[str] = mapped_column(String(160))
+    kind: Mapped[str] = mapped_column(String(10))
+    unit: Mapped[str | None] = mapped_column(String(20))
+    decimals: Mapped[int] = mapped_column(Integer, default=1)
+    formula: Mapped[str | None] = mapped_column(String(400))
+    low: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))  # outside low–high: flagged
+    high: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    meter_id: Mapped[uuid.UUID | None] = fk("meters.id", nullable=True, ondelete="SET NULL", index=False)
+    chart: Mapped[bool] = mapped_column(Boolean, default=False)  # shown on the production dashboard
+    per_ton: Mapped[bool] = mapped_column(Boolean, default=False)  # dashboard also shows it per tonne of paper
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class OpLog(Base, PlantScoped, Timestamped, Attributed):
+    __tablename__ = "op_logs"
+    __table_args__ = (UniqueConstraint("template_id", "log_date", "shift"),)
+    id: Mapped[uuid.UUID] = uuid_pk()
+    template_id: Mapped[uuid.UUID] = fk("op_log_templates.id")
+    log_date: Mapped[date] = mapped_column(Date)
+    shift: Mapped[str] = mapped_column(String(8), default="-")  # "-" for a daily log
+    status: Mapped[OpReportStatus] = enum_col(OpReportStatus, ck_name="op_log_status", default=OpReportStatus.DRAFT)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    notes: Mapped[str | None] = mapped_column(Text)
+    submitted_by_id: Mapped[uuid.UUID | None] = fk("users.id", nullable=True, index=False)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confirmed_by_id: Mapped[uuid.UUID | None] = fk("users.id", nullable=True, index=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reopen_note: Mapped[str | None] = mapped_column(Text)
+
+
+class OpLogValue(Base):
+    __tablename__ = "op_log_values"
+    __table_args__ = (UniqueConstraint("log_id", "field_id"),)
+    id: Mapped[uuid.UUID] = uuid_pk()
+    log_id: Mapped[uuid.UUID] = fk("op_logs.id", ondelete="CASCADE")
+    field_id: Mapped[uuid.UUID] = fk("op_log_fields.id", ondelete="CASCADE", index=False)
+    opening: Mapped[Decimal | None] = mapped_column(Numeric(18, 3))
+    closing: Mapped[Decimal | None] = mapped_column(Numeric(18, 3))
+    value: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    text: Mapped[str | None] = mapped_column(Text)
