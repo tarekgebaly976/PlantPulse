@@ -1,6 +1,6 @@
 # PlantPulse Operations module: plan for the paper mill
 
-Status: draft for review, 17 Nov 2026
+Status: draft for review, 17 Nov 2026. Start planned after 22 Nov 2026 (after the Google Play production application).
 Branch: `claude/serene-davinci-0arq11` (migrations up to 0021)
 
 ## 1. Goal
