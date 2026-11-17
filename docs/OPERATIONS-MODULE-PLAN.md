@@ -125,6 +125,20 @@ feeds the maintenance side (work requests, downtime, meter-based PM, KPIs).
 
 Total: about 14–16 weeks. Each phase is usable on its own and goes live on the demo first.
 
+## 5a. Trial on the demo first
+
+Build each phase in the normal code, but **switched off by default**:
+- A setting `OPERATIONS_MODULE=true` turns the module on. It is set only in `deploy/.env.demo`.
+  The live app (app.plantpulse-cmms.com) and customer copies get the code, but menus and pages stay hidden.
+- The new database tables are added everywhere (additive only, no change to existing data), so
+  turning the module on later for the live app is just the setting plus a restart.
+- The DEMO organization gets a paper-mill part (a paper machine, SP, UT, Quality) with **sample data
+  modelled on the November forms but anonymised**: no real names, companies or customer codes.
+  The nightly reset rebuilds it, with the last 30 days of reports, reels, stops, meter readings and Q-factor checks.
+- Demo accounts to test with: production supervisor, SP operator, UT engineer, quality technician
+  (new @demo.example.com accounts, same shared password).
+- When the trial is approved: set `OPERATIONS_MODULE=true` in `deploy/.env` (and per customer) and restart.
+
 ## 6. Data model (outline)
 
 | Migration | Tables / changes |
