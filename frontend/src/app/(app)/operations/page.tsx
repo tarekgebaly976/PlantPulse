@@ -38,7 +38,8 @@ function NewReport({ opened, onClose, settings }: { opened: boolean; onClose: ()
 function List() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { can, plant } = useSession();
+  const { can, plant, me, setPlant } = useSession();
+  const others = (me?.plants ?? []).filter((p) => p.plant_id !== plant?.plant_id && p.permissions.includes("op.view"));
   const settings = useQ<OpSettings>("/operations/settings");
   const machines = settings.data?.machines ?? [];
   const [mid, setMid] = useState<string | null>(null);
@@ -58,7 +59,15 @@ function List() {
         <Text size="sm" c="dimmed">{t("ops.subtitle")}</Text>
       </PageHeader>
       {settings.data && <NewReport key={String(open)} opened={open} onClose={() => setOpen(false)} settings={settings.data} />}
-      {machines.length === 0 ? <Alert color="blue" icon={<IconFileReport />}>{t("ops.noMachine")}</Alert> : <>
+      {machines.length === 0 ? <Alert color="blue" icon={<IconFileReport />}>
+        <Stack gap="xs">
+          <Text size="sm">{t("ops.noMachine")}</Text>
+          {others.length > 0 && <>
+            <Text size="sm">{t("ops.otherPlants")}</Text>
+            <Group gap="xs">{others.map((p) => <Button key={p.plant_id} size="xs" variant="light" onClick={() => setPlant(p.plant_id)}>{p.plant_code} – {p.plant_name}</Button>)}</Group>
+          </>}
+        </Stack>
+      </Alert> : <>
         <Group mb="md" gap="sm">
           {machines.length > 1 && <Select w={240} data={machines.map((x) => ({ value: x.id, label: `${x.code} – ${x.name}` }))} value={machineId} onChange={setMid} />}
           <TextInput type="month" w={170} value={month || q.data?.month || ""} onChange={(e) => setMonth(e.currentTarget.value)} aria-label={t("ops.month")} />
