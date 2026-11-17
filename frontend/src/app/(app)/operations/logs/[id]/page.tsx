@@ -1,6 +1,7 @@
 "use client";
 
-import { ActionIcon, Alert, Badge, Button, Checkbox, Group, NumberInput, Paper, Stack, Table, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
+import { ActionIcon, Alert, Badge, Button, Checkbox, Group, NumberInput, Paper, Stack, Switch, Table, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import { IconAlertTriangle, IconArrowLeft, IconArrowRight, IconLock, IconPlus, IconPrinter, IconTrash } from "@tabler/icons-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -79,6 +80,42 @@ function FieldRow({ f, v, d, ed, set }: { f: LogField; v: LogValue | undefined; 
   return <Table.Tr bg={v?.flag ? "var(--mantine-color-red-light)" : undefined}><Table.Td>{label}</Table.Td>{cells}<Table.Td>{f.unit ?? ""}</Table.Td><Table.Td>{limits}</Table.Td></Table.Tr>;
 }
 
+/** Phone layout: one line per row, label on top and full-width inputs, so nothing hides off the right edge. */
+function FieldCard({ f, v, d, ed, set }: { f: LogField; v: LogValue | undefined; d: Draft[string]; ed: boolean; set: (p: Partial<Draft[string]>) => void }) {
+  const { t } = useTranslation();
+  const flagged = v?.flag ? <Badge size="sm" color="red" variant="light">{t(`logs.flag.${v.flag}`)}</Badge> : null;
+  const unit = f.unit ? <Text span size="sm" c="dimmed">{f.unit}</Text> : null;
+  const limits = f.kind !== "check" && (f.low !== null || f.high !== null) ? <Text size="xs" c="dimmed">{t("logs.set.limits")}: {f.low ?? "…"}–{f.high ?? "…"}</Text> : null;
+  const box = (key: "opening" | "closing" | "value", label: string) => ed ? (
+    <NumberInput size="md" hideControls decimalScale={3} inputMode="decimal" label={label} aria-label={`${f.label} ${label}`}
+      value={d[key] as number | string} onChange={(x) => set({ [key]: x })} rightSection={key === "value" ? unit : undefined} rightSectionWidth={f.unit ? 56 : undefined} />
+  ) : <Stack gap={0}><Text size="xs" c="dimmed">{label}</Text><Text>{fmtVal(n(d[key] as number | string), key === "value" ? f.decimals : 1)}</Text></Stack>;
+  // meters: the day value while typing (the server's figure after saving)
+  const o = n(d.opening as number | string), c = n(d.closing as number | string);
+  const diff = (f.kind === "meter" || f.kind === "counter") && o !== null && c !== null ? c - o : v?.value ?? null;
+  return (
+    <Stack gap={6} py="sm" px="xs" style={{ borderBottom: "1px solid var(--mantine-color-default-border)", background: v?.flag ? "var(--mantine-color-red-light)" : undefined, borderRadius: 4 }}>
+      <Group justify="space-between" wrap="nowrap" align="flex-start">
+        <Stack gap={0}>
+          <Text fw={500}>{f.label}</Text>
+          {f.kind === "calc" && <Text size="xs" c="dimmed" className="mono">= {f.formula}</Text>}
+          {f.kind === "counter" && f.meter_id && <Badge size="xs" variant="light" color="gray" w="fit-content">{t("logs.toMeterShort")}</Badge>}
+        </Stack>
+        {flagged}
+      </Group>
+      {(f.kind === "meter" || f.kind === "counter") && <>
+        <Group grow gap="xs" align="flex-end">{box("opening", t("logs.opening"))}{box("closing", t("logs.closing"))}</Group>
+        <Text size="sm">{t("logs.value")}: <b>{fmtVal(diff, f.decimals)}</b> {unit}</Text>
+      </>}
+      {f.kind === "number" && box("value", t("logs.value"))}
+      {f.kind === "check" && <Switch size="md" label={d.value ? t("common.yes") : t("common.no")} readOnly={!ed} checked={!!d.value} onChange={(e) => ed && set({ value: e.currentTarget.checked })} />}
+      {f.kind === "text" && (ed ? <Textarea autosize minRows={1} size="md" aria-label={f.label} value={d.text} onChange={(e) => set({ text: e.currentTarget.value })} /> : <Text>{d.text || "—"}</Text>)}
+      {f.kind === "calc" && <Text size="lg" fw={700}>{fmtVal(v?.value, f.decimals)} {unit}</Text>}
+      {limits}
+    </Stack>
+  );
+}
+
 function LogView() {
   const { id } = useParams<{ id: string }>();
   const { t } = useTranslation();
@@ -92,6 +129,7 @@ function LogView() {
   const [raise, setRaise] = useState(false);
   const [reopen, setReopen] = useState(false);
   const [note, setNote] = useState("");
+  const phone = useMediaQuery("(max-width: 48em)");
   if (q.data && q.data !== seen) { setSeen(q.data); setDraft(initial(q.data)); setNotes(q.data.notes ?? ""); }
   const save = useMut(() => {
     const d = q.data!;
@@ -152,8 +190,10 @@ function LogView() {
         {ed && <Text size="xs" c="dimmed">{t("logs.hint")}</Text>}
         <Stack>
           {sections.map(([name, fields]) => (
-            <Paper key={name} withBorder p="md" radius="md">
-              <Text fw={600} mb="xs">{name}</Text>
+            <Paper key={name} withBorder p={phone ? "xs" : "md"} radius="md">
+              <Text fw={600} mb="xs" px={phone ? "xs" : 0}>{name}</Text>
+              {phone ? fields.map((f) => <FieldCard key={f.id} f={f} v={d.values[f.id]} d={draft[f.id]!} ed={ed}
+                set={(p) => setDraft({ ...draft, [f.id]: { ...draft[f.id]!, ...p } })} />) :
               <Table.ScrollContainer minWidth={640}>
                 <Table verticalSpacing={4} layout="fixed">
                   {fields.some((f) => f.kind === "meter" || f.kind === "counter") && (
@@ -164,12 +204,13 @@ function LogView() {
                       set={(p) => setDraft({ ...draft, [f.id]: { ...draft[f.id]!, ...p } })} />)}
                   </Table.Tbody>
                 </Table>
-              </Table.ScrollContainer>
+              </Table.ScrollContainer>}
             </Paper>
           ))}
         </Stack>
         <Textarea label={t("ops.util.notes")} autosize minRows={2} disabled={!ed} value={notes ?? ""} onChange={(e) => setNotes(e.currentTarget.value)} />
-        {ed && <Group><Button loading={save.isPending} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button></Group>}
+        {ed && !phone && <Group><Button loading={save.isPending} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button></Group>}
+        {ed && phone && <Group gap="xs" className="pp-actions"><Button size="md" loading={save.isPending} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button></Group>}
         {d.issues && (
           <Paper withBorder p="md" radius="md">
             <Group justify="space-between" mb="xs">

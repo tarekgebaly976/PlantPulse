@@ -99,3 +99,4 @@ body { background: var(--mantine-color-body); -webkit-font-smoothing: antialiase
 .ops-sheet td, .ops-sheet th { padding: 2px 4px; }
 @page ops { size: A4 landscape; margin: 8mm; }
 @media print { .ops-sheet { page: ops; font-size: 9.5px; } }
+
