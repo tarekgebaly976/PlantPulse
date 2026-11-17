@@ -22,45 +22,68 @@ import { useSession } from "@/lib/session";
 
 const STALE_MS = 12 * 3600 * 1000;
 
-/** Camera QR reader (same labels as the app's Scan page: "cmms:asset:<token>"). */
+/** Camera QR reader (same labels as the app's Scan page: "cmms:asset:<token>"). The camera is started once per scan:
+ * the page refreshing its offline copy (every minute, after sending) must not restart it, because quickly stopping and
+ * restarting the camera leaves a black picture on many Android phones. */
 function Scanner({ onCode, onClose }: { onCode: (text: string) => void; onClose: () => void }) {
   const { t } = useTranslation();
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const codeRef = useRef(onCode);
+  useEffect(() => { codeRef.current = onCode; }, [onCode]);
   const [err, setErr] = useState<string | null>(null);
+  const [live, setLive] = useState(false);
+  const [slow, setSlow] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let stream: MediaStream | null = null, raf = 0, stopped = false;
-    (async () => {
+    const slowTimer = window.setTimeout(() => setSlow(true), 5000);
+    void (async () => {
+      await Promise.resolve();
+      if (!navigator.mediaDevices?.getUserMedia) { setErr(t("scan.notSupported")); return; }
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
         if (stopped) { stream.getTracks().forEach((x) => x.stop()); return; }
-        if (video.current) { video.current.srcObject = stream; await video.current.play(); }
+        const v = video.current;
+        if (!v) return;
+        v.srcObject = stream;
+        v.onloadeddata = () => setLive(true);
+        await v.play().catch(() => undefined); // autoplay refused: the muted, inline video still starts on most phones
         const tick = () => {
-          const v = video.current, c = canvas.current;
-          if (v && c && v.readyState === v.HAVE_ENOUGH_DATA) {
-            c.width = v.videoWidth; c.height = v.videoHeight;
+          const vv = video.current, c = canvas.current;
+          if (vv && c && vv.readyState >= vv.HAVE_CURRENT_DATA && vv.videoWidth > 0) {
+            setLive(true);
+            c.width = vv.videoWidth; c.height = vv.videoHeight;
             const ctx = c.getContext("2d", { willReadFrequently: true });
             if (ctx) {
-              ctx.drawImage(v, 0, 0);
+              ctx.drawImage(vv, 0, 0);
               const code = jsQR(ctx.getImageData(0, 0, c.width, c.height).data, c.width, c.height);
-              if (code?.data) { onCode(code.data); return; }
+              if (code?.data) { codeRef.current(code.data); return; }
             }
           }
           raf = requestAnimationFrame(tick);
         };
         raf = requestAnimationFrame(tick);
-      } catch {
-        setErr(t("scan.notSupported"));
+      } catch (e) {
+        const name = e instanceof DOMException ? e.name : "";
+        setErr(name === "NotAllowedError" ? t("scan.denied") : name === "NotReadableError" ? t("scan.busy") : t("scan.notSupported"));
       }
     })();
-    return () => { stopped = true; cancelAnimationFrame(raf); stream?.getTracks().forEach((x) => x.stop()); };
-  }, [onCode, t]);
+    return () => { stopped = true; window.clearTimeout(slowTimer); cancelAnimationFrame(raf); stream?.getTracks().forEach((x) => x.stop()); };
+  }, [t, attempt]);
   return (
     <Stack gap="xs">
-      <video ref={video} playsInline muted style={{ width: "100%", borderRadius: 8, background: "#000" }} />
+      <div style={{ position: "relative" }}>
+        <video ref={video} autoPlay playsInline muted style={{ width: "100%", minHeight: 200, borderRadius: 8, background: "#000", display: "block" }} />
+        {!live && !err && <Group justify="center" gap="xs" style={{ position: "absolute", inset: 0, color: "#fff" }}><Loader size="sm" color="white" /><Text size="sm" c="white">{t("scan.starting")}</Text></Group>}
+      </div>
       <canvas ref={canvas} style={{ display: "none" }} />
       {err && <Alert color="orange">{err}</Alert>}
-      <Button variant="default" onClick={onClose}>{t("scan.stop")}</Button>
+      {(err || (slow && !live)) && <Alert color="gray">{t("scan.blackHint")}</Alert>}
+      <Group grow>
+        {(err || (slow && !live)) && <Button variant="light" onClick={() => { setErr(null); setLive(false); setSlow(false); setAttempt((x) => x + 1); }}>{t("scan.retry")}</Button>}
+        <Button variant="default" onClick={onClose}>{t("scan.stop")}</Button>
+      </Group>
     </Stack>
   );
 }
