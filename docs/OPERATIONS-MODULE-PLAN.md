@@ -1,0 +1,168 @@
+# PlantPulse Operations module: plan for the paper mill
+
+Status: draft for review, 17 Nov 2026
+Branch: `claude/serene-davinci-0arq11` (migrations up to 0021)
+
+## 1. Goal
+
+Replace the mill's four daily Excel forms with one Operations module in
+PlantPulse. Operators enter each fact once; the module calculates everything
+the Excel sheets now calculate, prints the forms in their familiar layout, and
+feeds the maintenance side (work requests, downtime, meter-based PM, KPIs).
+
+| Form | Owner | Frequency | Excel today |
+|---|---|---|---|
+| OPI-F-217 Daily PM Production Report | PM | per day, 2 shifts | 1 sheet per day + Rate + summary |
+| OPI-F-805 SP Plant Maintenance Monitoring Report | SP | per shift (D/N) | 1 sheet per shift |
+| OPI-F-291 Daily Generation Report | Utilities | per day | 1 sheet per day |
+| OPI-F-915 Q-Factors Compliance Monitoring | Quality | 6 checks per day | 1 sheet per grade (31 days × 6 slots) + summary |
+
+## 2. What the reports contain
+
+### OPI-F-217 Daily PM Production Report
+- Per shift: supervisor, GSM, speed, run time, gross (QCS/Opti), net, A / B / S grade, reject, M/C trim loss, B-grade % and reject %.
+- Machine shutdown hours by responsible discipline: SCM, PM/CK, EAI, ME/WS, EMD, Power Plant/Boiler, SP, Planned SD (today and to date).
+- Sheet breaks: count and hours by discipline: PM, SP, EAI, ME, EMD, UT, SCM, Misc.
+- Event list: duration, begin, end, type (Break down / sheet break), trouble location (e.g. Calender section, Back coater section), details. One fault can be split across disciplines (5 Nov: calender fault, 1 h 45 Mechanical then 1 h 45 EAI).
+- Run and GSM-change segments: begin, end, GSM, speed, ideal MT/min (from the **Rate** sheet: GSM → target speed → ideal MT/min, /h, /day), ideal tons, reason for change, grade-change duration and rejects.
+- Gross by GSM; FSC claim (FSC Recycled / Non-FSC); broke tower level.
+- Winder: FSC claim, run, pattern, production plan, actual, winder input/output, pattern width (cm), trim loss MT/%, handling loss MT/%.
+- Quality rejection and downgrade details: defect, quantity, disposition (R/P = repulp, F/H = finishing house).
+- Reel list per shift: reel no., gross, net, trim, reject, B-grade.
+- Fresh water (PM / SP / UT), steam (MT and MT per MT of paper).
+- OEE: availability = run ÷ 24 h; performance = gross ÷ Σ ideal tons of the segments; quality = A-grade ÷ net. 5 Nov: 78.5% × 88.7% × 94.4% = **65.7%**.
+- Summary: day / month-to-date / year-to-date gross, net, saleable, A, B, reject, trim loss.
+
+### OPI-F-805 SP Plant Maintenance Monitoring Report
+- Operation notes (e.g. PM stock-off 4:48 PM, stock-on 6:13 PM), incident/accident Y/N, CIL done, 5S activities.
+- PM grade, PM speed, broke flow (LPM), SP fresh water (m³).
+- Raw material furnish per line, recipe % and bale counts: SOP line (Duplex), MW line (OCC), ONP line (Supermix), Tetra Pak line, BKP line (hardwood / softwood virgin pulp).
+- Stock levels %: SOP dump tank, MW dump tank #1, ONP dump tank, KP storage tanks #1 and #2, SOP bleaching tank #2.
+- Critical equipment issues and shutdown jobs: description, discipline (MECH, EIA, Workshop, Welding), needs shutdown Y/N, **WO # (empty on every line)**.
+- Downtime: equipment, from, to, hours, stop/bypass, details, WO #. Issues and root cause.
+- Daily forklift status (condition, placed, operating, remarks).
+
+### OPI-F-291 Daily Generation Report (Utilities)
+- Flow meters (opening / closing reading → per day): OIG effluent, treated water from bioclarifier, STP make-up, RO #1–3 product and reject, reject water to Tawzea / irrigation, fresh water make-up, fire-fighting line, combiblock water.
+- Calculated: total RO product, feed, **RO recovery %**, OPI fresh water procured and total, consumption by area (PM, SP, Utility/boiler, OIG), product water tank level, GLS level.
+- Steam generation, boiler make-up, condensate recovery and % (shows `#DIV/0!` when steam is 0), soft water, gas (Nm³), compressed air.
+- Gas engines (Jenbacher #1–6): running hours, generation, forced stoppage, remarks.
+- Power consumption (MWh) by area: paper machine, stock preparation, boiler house, power-plant auxiliaries, OPF, combiblock, admin, OTY, OFC, PP Seco, WTP, finishing house; OPI vs group consumption, gas use.
+- Running-hour counters (day opening / closing): RO plants #1–3, air compressors #1–4 (running and loaded hours), PM and SP air driers, boilers #1–3, EG boilers #1–3, effluent intake, fire fighting.
+
+### OPI-F-915 Q-Factors Compliance Monitoring (Quality)
+- One sheet per grade: 230, 250, 280, 300, 320, 350, 380, 400, 450 GSM, each with its target speed.
+- About 90 parameters in 5 sections, each with **LSL / LCL / Target / UCL / USL** for that grade:
+  - SP: storage-tank layer consistencies, LD cleaner DP per layer.
+  - Wet End: mixing-tank consistencies, jet/wire ratio per layer, LD cleaner DP, cationic starch per layer, spray starch solids, biocide dosing.
+  - Dry End: LPS steam header, dryer fluff cleaning (OK / NOT OK), pre / curtain / top / back coater IR rows and output %, air dryer temperatures, blade angle, tray viscosity and solids, coat weights.
+  - CK (coating kitchen): pH, viscosity, solids for pre-coat, curtain bottom (two recipes) and top coat.
+  - FH: sheeter 1–5 camera sensitivity and DRS vacuum pressures.
+- 6 checks a day: 7–8 AM, 11–12, 3–4 PM, 7–8 PM, 11–12 AM, 3–4 AM. Codes instead of values: CG, NR, stop, NF, Not run, ODB (and P/T/C codes to confirm).
+- Count of non-conformities (NC) per day; points outside control limits; points checked; % compliance.
+- Section Compliance summary per day and section: # recorded vs # required, % compliance, overall % against the **80% target**, then Issues → Actions → Status (E1–E5) and Escalation.
+- Example, 1–3 Nov: Dry End recorded 117 / 126 / 93 checks against 114 required, and its compliance was 62% / 52% / 48%. Overall compliance was 77–83%.
+
+## 3. Design principles
+
+1. **Enter once.** The grade running on the PM (from the PM report) selects the Q-factor limits. UT meter readings provide the water and steam figures on the PM report. Equipment running hours update meter-based PM. Stops are the same `downtime_events` that MTBF / availability use.
+2. **Calculate, never retype.** Totals, to-date figures, RO recovery, OEE, compliance %, specific consumption.
+3. **Same forms on paper.** PDF output keeps the form code, revision and layout (OPI-F-217, -805, -291, -915), so audits and ISO documents stay valid.
+4. **Lock after confirmation.** Shift supervisor submits, the department head confirms, then the report is locked (as shift handover works today). A correction creates a new revision.
+5. **Configurable, not hard-coded.** Sections, parameters, limits, meters, tanks, furnish lines, disciplines and codes are lists the admin can edit. The next customer's mill can use the same module.
+
+## 4. Building blocks (shared engine)
+
+| Block | Used by | Notes |
+|---|---|---|
+| Grade and rate table | PM, Quality, SP | GSM, target speed, ideal MT/min. Versioned with effective date. |
+| Disciplines and machine sections | PM, SP | SCM, PM/CK, EAI, ME/WS, EMD, Power Plant, SP, UT, Misc; wire, press, dryer, coaters, calender, reel, winder, etc. |
+| **Readings engine** | Quality, SP, UT | Parameter templates by section, time slots (6/day, per shift, daily), value or code, limits per grade, NC flags. |
+| **Meters** | UT, SP, PM | Counter readings (opening/closing, rollover check) for flow, energy and running hours. Running-hour meters linked to assets drive existing meter-based PM plans. |
+| Stops and breaks | PM, SP, UT | Extend `downtime_events`: discipline, section, event type (breakdown / sheet break / planned / grade change), source, stop-or-bypass, split across disciplines. |
+| Equipment issues | SP (later PM, UT) | Each issue = work request; "needs shutdown" puts it on the next shutdown's job list (existing shutdowns module). |
+| Daily report and to-date engine | all | Day / MTD / YTD totals, lock and revision, PDF in form layout. |
+
+## 5. Phases
+
+### Phase 1: Foundation + PM Daily Production Report (about 4 weeks)
+- Grade and rate table (import from the Rate sheet), disciplines, machine sections, defect list with dispositions.
+- PM shift entry: run segments (ideal tons calculated), reels, stops and breaks (split by discipline), rejects and downgrades, FSC claim, broke tower level, notes.
+- Calculations: all OPI-F-217 totals, discipline tables, OEE as the mill calculates it, day / MTD / YTD summary.
+- `production_records` gets **ideal tons**, so OEE in the KPI module equals the report's figure even when the GSM changes during the day.
+- Stops by ME / EAI / EMD → one tap raises a work request.
+- PDF in OPI-F-217 layout; import of the November sheets (01–06) so to-date figures start correct.
+
+### Phase 2: Readings engine + Q-Factors Compliance (about 3 weeks)
+- Import the 9 grade sheets: parameters with LSL / LCL / Target / UCL / USL.
+- Check rounds per slot (6 a day). The form shows only the current grade's limits, colours values in or out of limits, and offers the codes (CG, NR, stop, NF …).
+- Reminder when a slot is due or missed, which addresses the low "recorded vs required" figures in Dry End.
+- Section Compliance summary calculated automatically; issues, actions and escalation with owner and due date.
+- Out-of-limit on an equipment parameter (IR output, LD cleaner DP, vacuum, air dryer temperature) can raise a work request.
+- Trend and control charts using the existing Nelson-rules service (`services/nelson.py`).
+- This phase also starts the planned **Quality module**.
+
+### Phase 3: Utilities Daily Generation Report (about 2–3 weeks)
+- Meter list from OPI-F-291; daily reading entry with opening = yesterday's closing, rollover and "closing < opening" checks.
+- Calculations: per-day values, RO recovery %, fresh water by area, condensate recovery % (no `#DIV/0!`), power by area, gas, compressed air.
+- Gas engines: running hours, generation, forced stoppage → downtime events.
+- Running-hour counters (compressors, RO plants, driers, boilers) update **meter-based PM plans** automatically.
+- PM and SP water and steam figures flow into their reports. **Specific consumption per ton of paper:** water, steam, power, gas.
+- PDF in OPI-F-291 layout.
+
+### Phase 4: SP Shift Report (about 2–3 weeks)
+- Furnish lines with recipe % and bale counts → fibre consumption per ton.
+- Tank levels (readings engine), broke flow, fresh water (from UT meters), CIL and 5S checks, incident Y/N, stock-off / stock-on events.
+- Critical equipment issues → work requests (WO # fills itself); open issues carry forward to the next shift; "needs shutdown" → shutdown job list.
+- SP downtime (stop / bypass) linked to WOs; forklifts as assets with a daily status.
+- PDF in OPI-F-805 layout.
+
+### Phase 5: Winder / FH, dashboards, floor use (about 3 weeks)
+- Winder runs: pattern, plan vs actual, input / output, width, trim and handling loss, FSC balance.
+- Production dashboard: tons vs plan, OEE trend, downtime and breaks Pareto by discipline and section, grade-change losses, trim %, Q-factor compliance by section, consumption per ton.
+- Operations section in the management report; daily e-mail PDF to managers.
+- Offline entry in `/field` for rounds and shift entries (reuses offline sync).
+
+Total: about 14–16 weeks. Each phase is usable on its own and goes live on the demo first.
+
+## 6. Data model (outline)
+
+| Migration | Tables / changes |
+|---|---|
+| 0022 | `op_grades`, `op_grade_rates` (versioned), `op_disciplines`, `op_sections`, `op_defects` |
+| 0023 | `op_daily_reports` (form, department, date, status, revision, lock), `op_shift_entries`, `op_run_segments`, `op_reels`, `op_quality_losses`; `production_records.ideal_tons` |
+| 0024 | `downtime_events`: `discipline_id`, `section_id`, `event_type`, `source`, `is_bypass`, `parent_event_id` (split) |
+| 0025 | readings engine: `op_param_templates`, `op_params`, `op_param_limits` (per grade), `op_slots`, `op_readings`, `op_compliance_actions` |
+| 0026 | meters: `op_meters` (kind, unit, asset link, rollover), `op_meter_readings`; link to existing PM meter readings |
+| 0027 | SP: `op_furnish_lines`, `op_furnish_entries`, `op_equipment_issues` (→ work request, shutdown) |
+| 0028 | winder: `op_winder_runs` |
+
+Code: `models/operations.py`, `services/operations/*` (pm_report, readings, meters, sp_report, compliance), routers under `/operations`, importers for the four Excel forms, frontend pages under `/operations` (PM report, Q-factors, Utilities, SP).
+
+## 7. Roles
+
+| Role | Can do |
+|---|---|
+| PM shift supervisor | Enter and submit the PM shift report |
+| SP operator / SP shift in-charge | Enter and submit the SP shift report |
+| Utilities shift engineer | Enter meters and the generation report |
+| Quality technician | Enter Q-factor readings |
+| Department head (PM, SP, UT, Quality) | Confirm and lock; issues, actions and escalation |
+| Production manager / mill manager | Grades, rates, targets, all reports and dashboards |
+| Maintenance | Sees the raised work requests and shutdown jobs; running hours drive PM |
+
+## 8. Points noticed in the files
+- The same calender fault on 5 Nov appears as two events (Mechanical, then EAI). The split-by-discipline design keeps it as one stop with two responsibility parts.
+- Every WO # cell in the SP report is empty. Linking issues to work requests closes that gap.
+- Fresh-water figures differ between files. For 5 Nov the PM report shows PM 2245 / SP 2032 / UT 595 m³, and the UT report shows PM 3267 / SP 2143 / Utility 1337 m³. The PM report may refer to a different day or meters. One source of meter readings removes the difference.
+- `#DIV/0!` in condensate recovery when steam generation is 0.
+- Q-factor compliance counts missing readings; Dry End is often below the number required.
+
+## 9. Questions for the mill
+1. One paper machine only? Can gross production come from a QCS / Opti export later?
+2. Who fills each form today (supervisor or clerk)? Is the winder section filled by FH or by PM?
+3. Meaning of the Q-factor codes: CG, NR, stop, NF, Not run, ODB, and P1–P10 / T1–T10 / C1–C10.
+4. Is "% Compliance" = readings within control limits ÷ readings checked, with 80% as the target for every section?
+5. Does the PM report's water figure come from the same meters as the UT report?
+6. FSC tracking in the first version, or later?
+7. Priority order: the plan proposes PM → Q-factors → Utilities → SP. Change if another form hurts more.
