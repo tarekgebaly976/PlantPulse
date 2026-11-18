@@ -70,8 +70,9 @@ Branch: `claude/serene-davinci-0arq11` (migrations up to 0021)
     **SH1 – Sheeter & packing line** (packs, 3 invented products, output lines, stops by category, 3 sample actions).
   - New pages: Production KPIs, Production insights, Production setup. Default menu names are generic
     ("Production reports", "Daily logs"); the paper template names them "PM & SP daily report" / "Utilities daily report".
-- Not yet: Excel import of past daily sheets, winder/FSC, Q-factors (phase 2); a paper-report category picker
-  (paper stops get their loss category from the stop type); further industry templates.
+  - Paper stops: the stop type plus an optional loss category of that type (e.g. Planned › Wash-up); empty = the
+    type's default category.
+- Not yet: Excel import of past daily sheets, winder/FSC, Q-factors (phase 2); further industry templates.
 
 To switch it on for the real installation later: add `CMMS_OPERATIONS_MODULE=true` to `deploy/.env` and restart.
 
