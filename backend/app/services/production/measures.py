@@ -38,6 +38,8 @@ STANDARD: dict[str, str] = {
     "stops": "count",
     "failures": "count",
     "quality_loss": "qty",  # rejected + downgraded quantity explained by defect
+    "incidents": "count",  # safety incidents (register) of the lines' areas
+    "lost_time_incidents": "count",
 }
 
 
@@ -145,10 +147,20 @@ def log_daily(
 
 
 def collect(
-    db: Session, plant: Plant, lines: list[OpMachine], d0: date, d1: date
+    db: Session, plant: Plant, lines: list[OpMachine], d0: date, d1: date, plant_wide: bool = False
 ) -> tuple[dict[date, dict[str, float | None]], dict[str, str]]:
-    """Daily values of every measure and log code for the lines from d0 to d1, and the period rule of each code."""
+    """Daily values of every measure and log code for the lines from d0 to d1, and the period rule of each code.
+    Safety incidents: of the lines' areas (and the lines), or of the whole plant when `plant_wide`; every day counts
+    (a day without incidents is 0, not missing)."""
+    from app.services.production.incidents import daily_counts
+
     daily = line_daily(db, plant, lines, d0, d1)
+    inc = daily_counts(db, plant, d0, d1, None if plant_wide else {m.department_id for m in lines}, {m.id for m in lines})
+    for d in days_between(d0, d1):
+        day = daily.setdefault(d, {})
+        c = inc.get(d, {})
+        day["incidents"] = c.get("incidents", 0.0)
+        day["lost_time_incidents"] = c.get("lost_time_incidents", 0.0)
     logs, agg = log_daily(db, plant, lines, d0, d1)
     for d, vals in logs.items():
         day = daily.setdefault(d, {})

@@ -46,10 +46,15 @@ def _series(
     lines = ms.lines_in_scope(
         db, plant.id, rule.machine_id or (kpi.machine_id if kpi else None), rule.department_id or (kpi.department_id if kpi else None)
     )
-    qty = kpi is not None or ms.STANDARD.get(rule.source_code or "") == "qty"
+    qty = kp.uses_quantities(kpi.formula) if kpi is not None else ms.STANDARD.get(rule.source_code or "") == "qty"
     out = []
     for group in kp.unit_groups(lines) if qty else [lines]:
-        daily, agg = ms.collect(db, plant, group, days[0], days[-1])
+        whole = (
+            rule.machine_id is None
+            and rule.department_id is None
+            and (kpi is None or (kpi.machine_id is None and kpi.department_id is None))
+        )
+        daily, agg = ms.collect(db, plant, group, days[0], days[-1], plant_wide=whole and not qty)
         ser: list[tuple[date, float | None]] = []
         for d in days:
             env = ms.aggregate(daily, agg, [d])

@@ -192,6 +192,8 @@ class OpLogTemplate(Base, PlantScoped, Timestamped):
     day_start: Mapped[time] = mapped_column(Time, default=time(7, 0))
     shifts: Mapped[list] = mapped_column(JSONB, default=list)  # [{"code": "D", "name": "Day shift", "start": "07:00"}]
     issues: Mapped[bool] = mapped_column(Boolean, default=False)  # show the department's open work requests / orders
+    # show the department's safety incidents of the day / shift, with "Report incident"
+    incidents: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # the production line the form belongs to (None: the area / plant); its "per unit" lines divide by this line's output
     machine_id: Mapped[uuid.UUID | None] = fk("op_machines.id", nullable=True, ondelete="SET NULL", index=False)
     # shown inside the daily production report (e.g. the paper mill's stock preparation shift log)

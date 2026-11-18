@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.models.production import OpAlertRule, OpKpi, OpLossCategory, OpPlantConfig
 from app.services.production.kpis import LIBRARY_BY_CODE
 
-FEATURES = ("reports", "logs", "dashboard", "kpis", "alerts", "insights", "actions")
+FEATURES = ("reports", "logs", "dashboard", "kpis", "alerts", "insights", "actions", "incidents")
 
 # (code, name, affects, event_type, planned, failure, parent)
 GENERAL_LOSSES = [
@@ -40,6 +40,8 @@ GENERAL_KPIS = [
     ("SCRAP", 2, 3, 5, 2),
     ("DOWNTIME", None, None, None, 2),
     ("MAINT_LOSS", 2, 4, 8, 2),
+    ("INCIDENTS", 0, None, None, 0),
+    ("LTI", 0, None, None, 0),
 ]
 
 GENERAL_RULES = [
@@ -51,6 +53,8 @@ GENERAL_RULES = [
      "lookback_days": 7, "severity": "warning", "notify_role": "production_supervisor"},
     {"code": "FAILURE_TIME", "name": "Equipment failure time high", "source_kind": "measure", "source_code": "failure_hours", "condition": "total_above",
      "threshold": 8, "lookback_days": 7, "severity": "critical", "notify_role": "maintenance_manager"},
+    {"code": "LTI_REPORTED", "name": "Lost-time incident reported", "source_kind": "measure", "source_code": "lost_time_incidents", "condition": "total_above",
+     "threshold": 0, "lookback_days": 2, "severity": "critical", "notify_role": "production_manager", "escalate_after_days": 1, "escalate_role": "management_viewer"},
     {"code": "ACTIONS_LATE", "name": "Production actions overdue", "source_kind": "none", "source_code": None, "condition": "action_overdue",
      "threshold": 0, "severity": "warning", "notify_role": "production_manager"},
 ]  # fmt: skip

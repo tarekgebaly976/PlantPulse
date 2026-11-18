@@ -34,7 +34,7 @@ def _yesterday() -> str:
 def setup_line(world: World) -> dict:
     mgr = world.api("manager")
     added = mgr.ok("post", "/operations/templates/general/apply")
-    assert added["loss_categories"] == 10 and added["kpis"] == 8 and added["alert_rules"] == 5
+    assert added["loss_categories"] == 10 and added["kpis"] == 10 and added["alert_rules"] == 6
     assert mgr.ok("post", "/operations/templates/general/apply") == {"loss_categories": 0, "kpis": 0, "alert_rules": 0}  # only what is missing
     line = mk_asset(mgr, world, "AL1")
     m = mgr.ok("post", "/operations/machines", {
@@ -189,3 +189,45 @@ def test_config_and_form_fields(world: World):
     got = mgr.ok("get", f"/operations/logs/{lg['id']}")["values"]
     assert got[st_id]["text"] == "Hold" and got[ck_id]["text"] == '["Guards", "Seals"]'
     mgr.ok("post", f"/operations/logs/{lg['id']}/submit")
+
+
+def test_incident_register(world: World):
+    s = setup_line(world)
+    mgr, sup = s["mgr"], world.api("production")
+    day = _yesterday()
+    pm = str(world.depts["PM"].id)
+    # a shift log of the area with "show incidents"
+    t = mgr.ok("post", "/operations/log-templates", {"code": "SHIFT", "name": "Area shift log", "department_id": pm, "frequency": "shift", "incidents": True,
+                                                     "shifts": [{"code": "D", "name": "Day", "start": "07:00"}, {"code": "N", "name": "Night", "start": "19:00"}]}, status=201)  # fmt: skip
+    assert t["incidents"] is True
+    lg = sup.ok("post", "/operations/logs", {"template_id": t["id"], "log_date": day, "shift": "D"}, status=201)
+    body = {"occurred_at": f"{day}T10:30:00", "department_id": pm, "machine_id": s["m"]["id"], "shift": "D", "kind": "near_miss", "title": "Guard left open",
+            "log_id": lg["id"]}  # fmt: skip
+    a = sup.ok("post", "/operations/incidents", body, status=201)
+    assert a["number"].startswith("INC-")
+    b = sup.ok("post", "/operations/incidents", {**body, "kind": "lost_time", "severity": "high", "title": "Slip, ankle sprain", "injured": 1, "lost_days": 2,
+                                                 "occurred_at": f"{day}T11:00:00"}, status=201)  # fmt: skip
+    sup.ok("post", "/operations/incidents", {**body, "occurred_at": "2099-01-01T10:00:00"}, status=422)
+    world.api("viewer").ok("post", "/operations/incidents", body, status=403)
+    # two incidents in the same shift: both on the log and on the line's daily report of that day
+    on_log = mgr.ok("get", "/operations/incidents", params={"log_id": lg["id"]})["items"]
+    assert {x["number"] for x in on_log} == {a["number"], b["number"]}
+    rid = fill(sup, s, day)
+    assert len(mgr.ok("get", "/operations/incidents", params={"report_id": rid})["items"]) == 2
+    reg = mgr.ok("get", "/operations/incidents")
+    assert reg["stats"]["open"] == 2 and reg["stats"]["days_since_lost_time"] is not None and reg["can_close"] is True
+    # managers are told; a lost-time incident counts in the KPIs and fires the template's rule
+    items = mgr.ok("get", "/notifications")
+    items = items["items"] if isinstance(items, dict) else items
+    assert any(b["number"] in n["title"] for n in items)
+    res = {k["code"]: k for k in mgr.ok("get", "/operations/kpi-results")}
+    assert res["INCIDENTS"]["values"]["day"]["value"] == 2 and res["LTI"]["values"]["day"]["value"] == 1
+    mgr.ok("post", "/operations/alerts/evaluate")
+    assert any(x["rule"]["code"] == "LTI_REPORTED" for x in mgr.ok("get", "/operations/alerts"))
+    # only a manager closes; an action can follow the incident
+    full = {**body, "kind": "lost_time", "severity": "high", "title": "Slip, ankle sprain", "injured": 1, "lost_days": 2, "occurred_at": f"{day}T11:00:00"}
+    sup.ok("put", f"/operations/incidents/{b['id']}", {**full, "status": "closed"}, status=403)
+    sup.ok("post", "/operations/actions", {"title": "Anti-slip mats", "incident_id": b["id"], "source": "incident"}, status=201)
+    mgr.ok("put", f"/operations/incidents/{b['id']}", {**full, "status": "closed", "root_cause": "Wet floor, no drainage"})
+    assert mgr.ok("get", "/operations/incidents", params={"status": "active"})["stats"]["open"] == 1
+    assert any(x["incident_id"] == b["id"] for x in mgr.ok("get", "/operations/actions")["items"])

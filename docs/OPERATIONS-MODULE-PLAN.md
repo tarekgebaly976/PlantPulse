@@ -72,6 +72,15 @@ Branch: `claude/serene-davinci-0arq11` (migrations up to 0021)
     ("Production reports", "Daily logs"); the paper template names them "PM & SP daily report" / "Utilities daily report".
   - Paper stops: the stop type plus an optional loss category of that type (e.g. Planned › Wash-up); empty = the
     type's default category.
+- **Safety incident register (18 Nov, migration 0026).** One HSE register per plant (`op_incidents`, numbers
+  INC-<plant>-000001): type (near miss, first aid, medical, lost time, property, environment, other), severity,
+  date / time, area, line, place, people, injured, lost days, immediate action, root cause, status (open /
+  investigating / closed — closed by a production manager). Reported from the register page, from any shift log
+  whose form has "Show the area's safety incidents" (the SP and utilities forms in the demo) or from a line's daily
+  report; managers of the area are notified (serious ones by e-mail). Actions can follow an incident. Standard
+  measures `incidents` / `lost_time_incidents` (KPIs INCIDENTS, LTI; alert rule LTI_REPORTED), insight for
+  incidents open more than a week, "days without a lost-time incident". The demo SP form no longer has the single
+  incident tick box; 6 invented sample incidents.
 - Not yet: Excel import of past daily sheets, winder/FSC, Q-factors (phase 2); further industry templates.
 
 To switch it on for the real installation later: add `CMMS_OPERATIONS_MODULE=true` to `deploy/.env` and restart.

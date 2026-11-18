@@ -179,10 +179,43 @@ class OpAction(Base, PlantScoped, Timestamped):
     status: Mapped[str] = mapped_column(String(12), default="open")  # open | in_progress | done | cancelled
     owner_id: Mapped[uuid.UUID | None] = fk("users.id", nullable=True, index=False)
     due_date: Mapped[date | None] = mapped_column(Date)
-    source: Mapped[str] = mapped_column(String(10), default="manual")  # manual | alert | insight | report
+    source: Mapped[str] = mapped_column(String(10), default="manual")  # manual | alert | insight | report | incident
     alert_id: Mapped[uuid.UUID | None] = fk("op_alerts.id", nullable=True, ondelete="SET NULL", index=False)
+    incident_id: Mapped[uuid.UUID | None] = fk("op_incidents.id", nullable=True, ondelete="SET NULL", index=False)
     report_id: Mapped[uuid.UUID | None] = fk("op_daily_reports.id", nullable=True, ondelete="SET NULL", index=False)
     machine_id: Mapped[uuid.UUID | None] = fk("op_machines.id", nullable=True, ondelete="SET NULL", index=False)
     created_by_id: Mapped[uuid.UUID | None] = fk("users.id", nullable=True, index=False)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     result: Mapped[str | None] = mapped_column(Text)
+
+
+class OpIncident(Base, PlantScoped, Timestamped):
+    """Safety, health and environment incident register of the plant (one place for every area and industry).
+    Reported from anywhere — the incident page, a department's shift log, a line's daily report — and followed up
+    with actions and work requests. kind: near_miss, first_aid, medical, lost_time, property, environment, other."""
+
+    __tablename__ = "op_incidents"
+    __table_args__ = (UniqueConstraint("plant_id", "number"),)
+    id: Mapped[uuid.UUID] = uuid_pk()
+    number: Mapped[str] = mapped_column(String(40))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    department_id: Mapped[uuid.UUID] = fk("departments.id")
+    machine_id: Mapped[uuid.UUID | None] = fk("op_machines.id", nullable=True, ondelete="SET NULL", index=False)
+    asset_id: Mapped[uuid.UUID | None] = fk("assets.id", nullable=True, ondelete="SET NULL", index=False)
+    shift: Mapped[str | None] = mapped_column(String(8))
+    kind: Mapped[str] = mapped_column(String(14))
+    severity: Mapped[str] = mapped_column(String(10), default="low")  # low | medium | high | critical
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text)
+    location: Mapped[str | None] = mapped_column(String(160))
+    people: Mapped[str | None] = mapped_column(String(400))  # names / roles involved (free text)
+    injured: Mapped[int] = mapped_column(Integer, default=0)
+    lost_days: Mapped[int | None] = mapped_column(Integer)
+    immediate_action: Mapped[str | None] = mapped_column(Text)
+    root_cause: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(14), default="open")  # open | investigating | closed
+    log_id: Mapped[uuid.UUID | None] = fk("op_logs.id", nullable=True, ondelete="SET NULL", index=False)
+    report_id: Mapped[uuid.UUID | None] = fk("op_daily_reports.id", nullable=True, ondelete="SET NULL", index=False)
+    reported_by_id: Mapped[uuid.UUID | None] = fk("users.id", nullable=True, index=False)
+    closed_by_id: Mapped[uuid.UUID | None] = fk("users.id", nullable=True, index=False)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

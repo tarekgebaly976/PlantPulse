@@ -31,7 +31,7 @@ from app.models.operations import (
     OpSection,
     OpStopPart,
 )
-from app.models.production import OpAction, OpOutput, OpPlantConfig, OpProduct
+from app.models.production import OpAction, OpIncident, OpOutput, OpPlantConfig, OpProduct
 from app.models.tenancy import Department, Organization, Plant
 from app.services.assets import compute_path, new_qr_token
 from app.services.common import utcnow
@@ -447,6 +447,7 @@ def build(db: Session, password: str, now: datetime | None = None) -> str:
 
     logs = build_logs(db, plant, ref, current, now)
     k = _converting_line(db, plant, ref, current, now)
+    _incidents(db, plant, ref, current)
     _actions(db, plant, ref, current)
     db.flush()
     alert_svc.evaluate(db, plant)
@@ -566,3 +567,37 @@ def run_for_demo(password: str) -> str:
 
     with SessionLocal() as db, db.begin():
         return build(db, password)
+
+
+# ---------------------------------------------------------------- safety incident register (invented)
+SAMPLE_INCIDENTS = [  # days ago, hour, dept, line, kind, severity, title, status, injured, lost days
+    (26, 10, "PM", "PM1", "near_miss", "low", "Steam hose came loose near the dryer section walkway (sample)", "closed", 0, None),
+    (19, 22, "SP", None, "first_aid", "medium", "Hand cut while cutting bale wire at the pulper (sample)", "closed", 1, None),
+    (12, 15, "FH", "SH1", "property", "medium", "Forklift touched a pallet rack in the finishing house (sample)", "closed", 0, None),
+    (8, 3, "PM", "PM1", "lost_time", "high", "Slip on a wet floor during a felt change, ankle sprain (sample)", "investigating", 1, 3),
+    (4, 14, "UTIL", None, "environment", "medium", "Small oil spill at the compressor house, contained (sample)", "closed", 0, None),
+    (1, 20, "SP", None, "near_miss", "low", "Guard missing on a conveyor after maintenance (sample)", "open", 0, None),
+]
+
+
+def _incidents(db: Session, plant: Plant, ref: dict, current: date) -> None:
+    from app.services.common import next_number
+
+    tz = ZoneInfo(plant.timezone)
+    users = ref["users"]
+    lines = {m.code: m for m in db.execute(select(OpMachine).where(OpMachine.plant_id == plant.id)).scalars()}
+    for ago, hour, dept, line, kind, sev, title, status, injured, lost in SAMPLE_INCIDENTS:
+        d = current - timedelta(days=ago)
+        at = datetime.combine(d if hour >= 7 else d + timedelta(days=1), time(hour, 15), tzinfo=tz)
+        i = OpIncident(plant_id=plant.id, number=next_number(db, plant, "INC"), occurred_at=at, department_id=ref["depts"][dept].id,
+                       machine_id=lines[line].id if line else None, shift="D" if 7 <= hour < 19 else "N", kind=kind, severity=sev, title=title,
+                       description="Invented sample incident for the demo.", injured=injured, lost_days=lost, status=status,
+                       immediate_action="Area made safe, supervisor informed.", reported_by_id=users["prod.sup"].id,
+                       closed_by_id=users["prod.mgr"].id if status == "closed" else None,
+                       closed_at=at + timedelta(days=2) if status == "closed" else None)  # fmt: skip
+        db.add(i)
+        db.flush()
+        if kind == "lost_time":
+            db.add(OpAction(plant_id=plant.id, title="Anti-slip mats and drainage check at the felt-change area (sample)", status="open",
+                            due_date=current + timedelta(days=4), owner_id=users["prod.mgr"].id, source="incident", incident_id=i.id,
+                            machine_id=i.machine_id, created_by_id=users["prod.mgr"].id))  # fmt: skip

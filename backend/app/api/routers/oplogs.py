@@ -63,6 +63,7 @@ class TemplateIn(In):
     day_start: time = time(7, 0)
     shifts: list[ShiftIn] = Field(default_factory=list, max_length=4)
     issues: bool = False
+    incidents: bool = False
     machine_id: uuid.UUID | None = None  # the production line the form belongs to
     in_pm_report: bool = False
     sort: int = Field(0, ge=0, le=999)
@@ -100,7 +101,7 @@ class FieldIn(In):
 def template_out(t: OpLogTemplate, fields: list[OpLogField] | None = None) -> dict:
     out = {
         "id": str(t.id), "code": t.code, "name": t.name, "department_id": str(t.department_id), "frequency": t.frequency,
-        "day_start": t.day_start.strftime("%H:%M"), "shifts": t.shifts, "issues": t.issues, "machine_id": str(t.machine_id) if t.machine_id else None, "in_pm_report": t.in_pm_report, "sort": t.sort, "is_active": t.is_active,
+        "day_start": t.day_start.strftime("%H:%M"), "shifts": t.shifts, "issues": t.issues, "incidents": t.incidents, "machine_id": str(t.machine_id) if t.machine_id else None, "in_pm_report": t.in_pm_report, "sort": t.sort, "is_active": t.is_active,
     }  # fmt: skip
     if fields is not None:
         out["fields"] = [field_out(x) for x in fields]

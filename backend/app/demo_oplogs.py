@@ -95,7 +95,6 @@ UT_FIELDS = [
     ("GAS_BLR", "Natural gas", "Natural gas – to boilers", "calc", "Nm³", 0, "GAS - GAS_GE", None, None, True, False, None),
 ]
 SP_FIELDS = [
-    ("INCIDENT", "Shift", "Incident / accident", "check", None, 0, None, None, 0, False, False, None),
     ("CIL", "Shift", "CIL (clean, inspect, lubricate) done", "check", None, 0, None, 1, None, False, False, None),
     ("S5", "Shift", "5S activity", "text", None, 0, None, None, None, False, False, None),
     ("OPNOTE", "Shift", "Operation notes (stock off / on)", "text", None, 0, None, None, None, False, False, None),
@@ -135,7 +134,7 @@ def _template(
     db: Session, plant: Plant, code: str, name: str, dept_id, freq: str, issues: bool, sort: int, rows: list, meters: dict, line_id=None
 ) -> tuple:
     t = OpLogTemplate(
-        plant_id=plant.id, code=code, name=name, department_id=dept_id, frequency=freq, day_start=time(7, 0), issues=issues, sort=sort,
+        plant_id=plant.id, code=code, name=name, department_id=dept_id, frequency=freq, day_start=time(7, 0), issues=issues, sort=sort, incidents=True,
         machine_id=line_id,  # both forms belong to PM1: "per tonne" is per tonne of PM1's paper
         shifts=[{"code": "D", "name": "Day shift", "start": "07:00"}, {"code": "N", "name": "Night shift", "start": "19:00"}] if freq == "shift" else [],
     )  # fmt: skip
@@ -288,7 +287,7 @@ def build_logs(db: Session, plant: Plant, ref: dict, current: date, now: datetim
             db.add(lg)
             db.flush()
             half = net / 2
-            vals = {"INCIDENT": 0 if rnd.random() > 0.02 else 1, "CIL": 1 if rnd.random() > 0.1 else 0, "S5": rnd.choice(TEXTS_5S),
+            vals = {"CIL": 1 if rnd.random() > 0.1 else 0, "S5": rnd.choice(TEXTS_5S),
                     "OPNOTE": rnd.choice(["", "", "", "Stock off 30 min for screen basket change"]),
                     "BROKE": rnd.uniform(2500, 4800), "B_OCC": round(half * rnd.uniform(0.28, 0.34)),
                     "B_MW": round(half * rnd.uniform(0.06, 0.1)), "B_ONP": round(half * rnd.uniform(0.02, 0.05)), "B_HW": round(half * rnd.uniform(0.04, 0.07)),

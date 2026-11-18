@@ -3,7 +3,7 @@ features, menu names), products, loss categories, KPIs (library, variables, resu
 actions, Production Insights. Present only when CMMS_OPERATIONS_MODULE is on (op.* permissions)."""
 
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,16 +15,19 @@ from sqlalchemy.orm import Session
 from app.api.deps import Ctx, require
 from app.core.db import get_db
 from app.models.identity import Membership, Role, User
-from app.models.operations import OpDefect, OpDiscipline, OpLogTemplate, OpMachine
-from app.models.production import OpAction, OpAlert, OpAlertRule, OpKpi, OpLossCategory, OpProduct
+from app.models.operations import OpDailyReport, OpDefect, OpDiscipline, OpLog, OpLogTemplate, OpMachine
+from app.models.production import OpAction, OpAlert, OpAlertRule, OpIncident, OpKpi, OpLossCategory, OpProduct
 from app.models.tenancy import Department
 from app.schemas.common import In
-from app.services.common import audit, plant_today, utcnow
+from app.services import oplogs as oplog_svc
+from app.services.common import audit, next_number, plant_today, utcnow
 from app.services.production import alerts as alert_svc
+from app.services.production import incidents as inc_svc
 from app.services.production import insights as insight_svc
 from app.services.production import kpis as kp
 from app.services.production import measures as ms
 from app.services.production import templates as tpl
+from app.services.production.periods import day_window
 
 router = APIRouter(prefix="/operations", tags=["production"])
 DB = Depends(get_db, scope="function")
@@ -478,8 +481,9 @@ class ActionIn(In):
     status: Literal["open", "in_progress", "done", "cancelled"] = "open"
     owner_id: uuid.UUID | None = None
     due_date: date | None = None
-    source: Literal["manual", "alert", "insight", "report"] = "manual"
+    source: Literal["manual", "alert", "insight", "report", "incident"] = "manual"
     alert_id: uuid.UUID | None = None
+    incident_id: uuid.UUID | None = None
     report_id: uuid.UUID | None = None
     machine_id: uuid.UUID | None = None
     result: str | None = Field(None, max_length=4000)
@@ -493,7 +497,8 @@ def _names(db: Session, ids: set) -> dict:
 def action_out(a: OpAction, names: dict, lines: dict, today: date) -> dict:
     return {"id": str(a.id), "title": a.title, "description": a.description, "status": a.status, "owner_id": str(a.owner_id) if a.owner_id else None,
             "owner": names.get(a.owner_id), "due_date": a.due_date.isoformat() if a.due_date else None, "source": a.source,
-            "alert_id": str(a.alert_id) if a.alert_id else None, "report_id": str(a.report_id) if a.report_id else None,
+            "alert_id": str(a.alert_id) if a.alert_id else None,
+            "incident_id": str(a.incident_id) if a.incident_id else None, "report_id": str(a.report_id) if a.report_id else None,
             "machine_id": str(a.machine_id) if a.machine_id else None, "line": lines.get(a.machine_id), "result": a.result,
             "overdue": bool(a.due_date and a.due_date < today and a.status in ("open", "in_progress")),
             "created_at": a.created_at.isoformat() if a.created_at else None, "closed_at": a.closed_at.isoformat() if a.closed_at else None}  # fmt: skip
@@ -527,6 +532,8 @@ def _action_body(db: Session, ctx: Ctx, body: ActionIn) -> dict:
         raise HTTPException(422, "The owner is not a member of this plant")
     if body.alert_id:
         _alert(db, ctx, body.alert_id)
+    if body.incident_id:
+        _incident(db, ctx, body.incident_id)
     _line(db, ctx, body.machine_id)
     return body.model_dump()
 
@@ -534,6 +541,9 @@ def _action_body(db: Session, ctx: Ctx, body: ActionIn) -> dict:
 @router.post("/actions", status_code=201)
 def create_action(body: ActionIn, ctx: Ctx = Depends(require("op.enter")), db: Session = DB) -> dict:
     a = OpAction(plant_id=ctx.plant_id, created_by_id=ctx.user.id, **_action_body(db, ctx, body))
+    if a.incident_id and a.machine_id is None:
+        inc = db.get(OpIncident, a.incident_id)
+        a.machine_id = inc.machine_id if inc else None
     if a.alert_id and a.machine_id is None:
         al = db.get(OpAlert, a.alert_id)
         a.machine_id = al.machine_id if al else None
@@ -569,3 +579,160 @@ def update_action(aid: uuid.UUID, body: ActionIn, ctx: Ctx = Depends(require("op
 @router.get("/insights")
 def insights(ctx: Ctx = Depends(require("op.view")), db: Session = DB) -> dict:
     return insight_svc.generate(db, ctx.plant, plant_today(ctx.plant), ctx.dept_ok)
+
+
+# ================================================================ safety incidents
+class IncidentIn(In):
+    occurred_at: datetime
+    department_id: uuid.UUID
+    machine_id: uuid.UUID | None = None
+    asset_id: uuid.UUID | None = None
+    shift: str | None = Field(None, max_length=8)
+    kind: Literal["near_miss", "first_aid", "medical", "lost_time", "property", "environment", "other"]
+    severity: Literal["low", "medium", "high", "critical"] = "low"
+    title: str = Field(min_length=3, max_length=200)
+    description: str | None = Field(None, max_length=4000)
+    location: str | None = Field(None, max_length=160)
+    people: str | None = Field(None, max_length=400)
+    injured: int = Field(0, ge=0, le=500)
+    lost_days: int | None = Field(None, ge=0, le=3650)
+    immediate_action: str | None = Field(None, max_length=4000)
+    root_cause: str | None = Field(None, max_length=4000)
+    status: Literal["open", "investigating", "closed"] = "open"
+    log_id: uuid.UUID | None = None
+    report_id: uuid.UUID | None = None
+
+
+def incident_out(i: OpIncident, names: dict, depts: dict, lines: dict) -> dict:
+    return {"id": str(i.id), "number": i.number, "occurred_at": i.occurred_at.isoformat(), "department_id": str(i.department_id),
+            "department": depts.get(i.department_id), "machine_id": str(i.machine_id) if i.machine_id else None, "line": lines.get(i.machine_id),
+            "asset_id": str(i.asset_id) if i.asset_id else None, "shift": i.shift, "kind": i.kind, "severity": i.severity, "title": i.title,
+            "description": i.description, "location": i.location, "people": i.people, "injured": i.injured, "lost_days": i.lost_days,
+            "immediate_action": i.immediate_action, "root_cause": i.root_cause, "status": i.status, "log_id": str(i.log_id) if i.log_id else None,
+            "report_id": str(i.report_id) if i.report_id else None, "reported_by": names.get(i.reported_by_id), "closed_by": names.get(i.closed_by_id),
+            "closed_at": i.closed_at.isoformat() if i.closed_at else None, "created_at": i.created_at.isoformat() if i.created_at else None}  # fmt: skip
+
+
+def _incident(db: Session, ctx: Ctx, iid: uuid.UUID) -> OpIncident:
+    i = db.get(OpIncident, iid)
+    if i is None or i.plant_id != ctx.plant_id or not ctx.dept_ok(i.department_id):
+        raise HTTPException(404, "Incident not found")
+    return i
+
+
+def _can_report(ctx: Ctx) -> None:
+    """Anyone who enters production reports or raises work requests may report an incident (safety first)."""
+    if not (ctx.has("op.enter") or ctx.has("request.create") or ctx.has("op.confirm")):
+        raise HTTPException(403, "Missing permission: op.enter")
+
+
+def _incident_body(db: Session, ctx: Ctx, body: IncidentIn) -> dict:
+    from zoneinfo import ZoneInfo
+
+    from app.models.assets import Asset
+
+    _dept(db, ctx, body.department_id)
+    _line(db, ctx, body.machine_id)
+    if body.asset_id:
+        a = db.get(Asset, body.asset_id)
+        if a is None or a.plant_id != ctx.plant_id:
+            raise HTTPException(422, "Unknown asset")
+    if body.log_id:
+        lg = db.get(OpLog, body.log_id)
+        if lg is None or lg.plant_id != ctx.plant_id:
+            raise HTTPException(422, "Unknown log")
+    if body.report_id:
+        r = db.get(OpDailyReport, body.report_id)
+        if r is None or r.plant_id != ctx.plant_id:
+            raise HTTPException(422, "Unknown report")
+    data = body.model_dump()
+    tz = ZoneInfo(ctx.plant.timezone)
+    data["occurred_at"] = body.occurred_at.replace(tzinfo=tz) if body.occurred_at.tzinfo is None else body.occurred_at
+    if data["occurred_at"] > utcnow() + timedelta(minutes=10):
+        raise HTTPException(422, "The incident cannot be in the future")
+    if body.kind != "lost_time":
+        data["lost_days"] = None
+    return data
+
+
+@router.get("/incidents")
+def list_incidents(
+    status: Literal["active", "all"] = "all",
+    days: int = Query(90, ge=1, le=3650),
+    department_id: uuid.UUID | None = None,
+    log_id: uuid.UUID | None = None,
+    report_id: uuid.UUID | None = None,
+    ctx: Ctx = Depends(require("op.view")),
+    db: Session = DB,
+) -> dict:
+    """The register (newest first), or the incidents of one shift log / daily report (its area and time window)."""
+    q = select(OpIncident).where(OpIncident.plant_id == ctx.plant_id)
+    if log_id:
+        lg = db.get(OpLog, log_id)
+        if lg is None or lg.plant_id != ctx.plant_id:
+            raise HTTPException(404, "Log not found")
+        t = db.get(OpLogTemplate, lg.template_id)
+        assert t is not None
+        a, b = oplog_svc.window_of(t, ctx.plant, lg.log_date, lg.shift)
+        q = q.where(
+            OpIncident.department_id == t.department_id,
+            ((OpIncident.occurred_at >= a) & (OpIncident.occurred_at < b)) | (OpIncident.log_id == lg.id),
+        )
+    elif report_id:
+        r = db.get(OpDailyReport, report_id)
+        if r is None or r.plant_id != ctx.plant_id:
+            raise HTTPException(404, "Report not found")
+        m = db.get(OpMachine, r.machine_id)
+        assert m is not None
+        a, b = day_window(m, ctx.plant, r.report_date)
+        q = q.where((OpIncident.department_id == m.department_id) | (OpIncident.machine_id == m.id),
+                    ((OpIncident.occurred_at >= a) & (OpIncident.occurred_at < b)) | (OpIncident.report_id == r.id))  # fmt: skip
+    else:
+        q = q.where(OpIncident.occurred_at >= utcnow() - timedelta(days=days))
+        if department_id:
+            q = q.where(OpIncident.department_id == department_id)
+    if status == "active":
+        q = q.where(OpIncident.status != "closed")
+    rows = [i for i in db.execute(q.order_by(OpIncident.occurred_at.desc()).limit(500)).scalars() if ctx.dept_ok(i.department_id)]
+    names = _names(db, {i.reported_by_id for i in rows} | {i.closed_by_id for i in rows})
+    depts = {d.id: d.name for d in db.execute(select(Department).where(Department.plant_id == ctx.plant_id)).scalars()}
+    lines = {m.id: m.code for m in db.execute(select(OpMachine).where(OpMachine.plant_id == ctx.plant_id)).scalars()}
+    return {"items": [incident_out(i, names, depts, lines) for i in rows], "stats": inc_svc.stats(db, ctx.plant, plant_today(ctx.plant)),
+            "can_report": ctx.has("op.enter") or ctx.has("request.create") or ctx.has("op.confirm"), "can_close": ctx.has("op.confirm")}  # fmt: skip
+
+
+@router.post("/incidents", status_code=201)
+def create_incident(body: IncidentIn, ctx: Ctx = Depends(require("op.view")), db: Session = DB) -> dict:
+    _can_report(ctx)
+    data = _incident_body(db, ctx, body)
+    if data["status"] == "closed" and not ctx.has("op.confirm"):
+        data["status"] = "open"
+    i = OpIncident(plant_id=ctx.plant_id, number=next_number(db, ctx.plant, "INC"), reported_by_id=ctx.user.id, **data)
+    if i.status == "closed":
+        i.closed_by_id, i.closed_at = ctx.user.id, utcnow()
+    db.add(i)
+    db.flush()
+    inc_svc.announce(db, ctx.plant, i)
+    audit(db, "op.incident.create", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="op_incident", entity_id=i.id,
+          data={"number": i.number, "kind": i.kind, "severity": i.severity})  # fmt: skip
+    return {"id": str(i.id), "number": i.number}
+
+
+@router.put("/incidents/{iid}")
+def update_incident(iid: uuid.UUID, body: IncidentIn, ctx: Ctx = Depends(require("op.view")), db: Session = DB) -> dict:
+    i = _incident(db, ctx, iid)
+    manager = ctx.has("op.confirm")
+    if not manager and not (i.reported_by_id == ctx.user.id and i.status == "open"):
+        raise HTTPException(403, "Only the reporter (while open) or a production manager can change this incident")
+    if body.status != i.status and not manager:
+        raise HTTPException(403, "Only a production manager can change the status")
+    was = i.status
+    for k, v in _incident_body(db, ctx, body).items():
+        setattr(i, k, v)
+    if i.status == "closed" and was != "closed":
+        i.closed_by_id, i.closed_at = ctx.user.id, utcnow()
+    elif i.status != "closed":
+        i.closed_by_id = i.closed_at = None
+    audit(db, "op.incident.update", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="op_incident", entity_id=i.id,
+          data={"number": i.number, "status": i.status})  # fmt: skip
+    return {"id": str(i.id), "status": i.status}

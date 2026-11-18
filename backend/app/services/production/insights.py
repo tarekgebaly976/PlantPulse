@@ -6,7 +6,7 @@ or alerts. Each insight carries the figures it is based on and a recommendation 
 product, the process or the units — an insight that needs data a plant does not record is simply not made."""
 
 import statistics
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -167,6 +167,14 @@ def generate(db: Session, plant: Plant, today: date, dept_ok=lambda _d: True) ->
         out.append(
             {"kind": "overdue_actions", "severity": "warning", "line": None, "params": {"n": overdue}, "recommendation": "rec_actions"}
         )
+    from app.models.production import OpIncident
+
+    stale = db.execute(
+        select(func.count()).select_from(OpIncident).where(OpIncident.plant_id == plant.id, OpIncident.status != "closed",
+                                                           OpIncident.created_at < datetime.combine(today - timedelta(days=7), time(0), tzinfo=UTC))
+    ).scalar_one()  # fmt: skip
+    if stale:
+        out.append({"kind": "open_incidents", "severity": "warning", "line": None, "params": {"n": stale}, "recommendation": "rec_incidents"})
     open_alerts = db.execute(
         select(func.count()).select_from(OpAlert).where(OpAlert.plant_id == plant.id, OpAlert.status == "open")
     ).scalar_one()

@@ -89,7 +89,7 @@ export interface OpConfig {
   industry: string | null; template: string | null; features: Record<string, boolean>; labels: Record<string, string>; setup_done: boolean;
   templates: { key: string; name: string }[];
 }
-export const FEATURES = ["reports", "logs", "dashboard", "kpis", "alerts", "insights", "actions"] as const;
+export const FEATURES = ["reports", "logs", "dashboard", "kpis", "alerts", "insights", "actions", "incidents"] as const;
 export interface Product {
   id: string; code: string; name: string; category: string | null; machine_id: string | null; unit: string | null; ideal_rate_per_h: number | null;
   ideal_cycle_s: number | null; attributes: Record<string, string>; is_active: boolean;
@@ -124,7 +124,7 @@ export interface OpAlert {
 }
 export interface OpAction {
   id: string; title: string; description: string | null; status: "open" | "in_progress" | "done" | "cancelled"; owner_id: string | null; owner: string | null;
-  due_date: string | null; source: "manual" | "alert" | "insight" | "report"; alert_id: string | null; report_id: string | null; machine_id: string | null;
+  due_date: string | null; source: "manual" | "alert" | "insight" | "report" | "incident"; alert_id: string | null; incident_id?: string | null; report_id: string | null; machine_id: string | null;
   line: string | null; result: string | null; overdue: boolean; created_at: string | null; closed_at: string | null;
 }
 export interface Insight { id: string; kind: string; severity: "critical" | "warning" | "info"; line: string | null; params: Record<string, unknown>; recommendation: string }
@@ -204,7 +204,7 @@ export interface LogField {
 }
 export interface LogTemplate {
   id: string; code: string; name: string; department_id: string; frequency: "day" | "shift"; day_start: string; shifts: OpShift[];
-  issues: boolean; machine_id: string | null; in_pm_report: boolean; sort: number; is_active: boolean; fields?: LogField[];
+  issues: boolean; incidents: boolean; machine_id: string | null; in_pm_report: boolean; sort: number; is_active: boolean; fields?: LogField[];
 }
 export interface LogValue { opening: number | null; closing: number | null; value: number | null; text: string | null; flag: "low" | "high" | null }
 export interface LogWarning { code: string; item: string }
@@ -259,3 +259,16 @@ export interface DayUtilities {
 }
 /** Where a log form's pages live: stock preparation (shown in the PM report) under /operations/sp, the others under /operations/logs. */
 export const logBase = (inPm: boolean | undefined) => (inPm ? "/operations/sp" : "/operations/logs");
+
+// ------------------------------------------------------------------ safety incident register
+export const INCIDENT_KINDS = ["near_miss", "first_aid", "medical", "lost_time", "property", "environment", "other"] as const;
+export interface Incident {
+  id: string; number: string; occurred_at: string; department_id: string; department: string | null; machine_id: string | null; line: string | null; asset_id: string | null;
+  shift: string | null; kind: (typeof INCIDENT_KINDS)[number]; severity: "low" | "medium" | "high" | "critical"; title: string; description: string | null; location: string | null;
+  people: string | null; injured: number; lost_days: number | null; immediate_action: string | null; root_cause: string | null; status: "open" | "investigating" | "closed";
+  log_id: string | null; report_id: string | null; reported_by: string | null; closed_by: string | null; closed_at: string | null; created_at: string | null;
+}
+export interface IncidentList {
+  items: Incident[]; can_report: boolean; can_close: boolean;
+  stats: { open: number; month_by_kind: Record<string, number>; month_total: number; days_since_lost_time: number | null; total: number };
+}

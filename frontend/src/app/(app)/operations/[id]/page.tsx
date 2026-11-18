@@ -13,6 +13,7 @@ import { Guard } from "@/components/AppFrame";
 import { Modal } from "@/components/Modal";
 import { BackLink, oeeColor, PeriodTiles, ShiftLogs, Tile } from "@/components/Ops";
 import { GenericReport } from "@/components/OpsGeneric";
+import { IncidentsSection, nowLocal, toLocal } from "@/components/OpsIncidents";
 import { ConfirmButton, Loading, PageHeader, Section, StatusBadge } from "@/components/ui";
 import { del, patch, post, put } from "@/lib/api";
 import { fmtNum, useMut, useQ } from "@/lib/hooks";
@@ -372,6 +373,7 @@ function ReportView() {
       </PageHeader>
       {!isPaper(r.machine) ? <GenericReport r={r} s={s} extras={<>
         {r.shift_logs.map((sec) => <Section key={sec.template.id} title={sec.template.name}><ShiftLogs sec={sec} date={r.report_date} canStart={can("op.enter")} /></Section>)}
+        <IncidentsSection reportId={r.id} defaults={{ department_id: r.machine.department_id, machine_id: r.machine.id, occurred_at: c.in_progress ? nowLocal() : toLocal(c.window.start, tz) }} />
         <DayUtilities r={r} />
       </>} /> : <Stack>
         {r.status === "submitted" && <Alert color="blue" icon={<IconLock />}>{t("ops.report.readOnlySubmitted")}</Alert>}
@@ -545,6 +547,7 @@ function ReportView() {
           </Section></div>
         ))}
 
+        <IncidentsSection reportId={r.id} defaults={{ department_id: r.machine.department_id, machine_id: r.machine.id, occurred_at: c.in_progress ? nowLocal() : toLocal(c.window.start, tz) }} />
         <DayUtilities r={r} />
         <Utilities key={`${r.id}-${r.status}`} r={r} />
 

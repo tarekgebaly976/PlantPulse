@@ -47,6 +47,8 @@ LIBRARY: list[dict] = [
      "description": "Share of the time lost to equipment failures (maintenance-related loss)"},
     {"code": "CYCLE_TIME", "name": "Average cycle time", "formula": "run_hours * 3600 / produced", "unit": "s", "direction": "lower",
      "description": "Run seconds per unit produced"},
+    {"code": "INCIDENTS", "name": "Safety incidents", "formula": "incidents", "unit": "", "direction": "lower", "description": "Incidents in the register"},
+    {"code": "LTI", "name": "Lost-time incidents", "formula": "lost_time_incidents", "unit": "", "direction": "lower", "description": "Incidents with lost working time"},
     {"code": "BATCH_DONE", "name": "Batch completion rate", "formula": "batches_completed / batches * 100", "unit": "%", "direction": "higher",
      "description": "Completed ÷ started batches / orders"},
 ]  # fmt: skip
@@ -133,6 +135,12 @@ def kpi_series(k: OpKpi, daily: dict, agg: dict[str, str], days: list[date]) -> 
     return out
 
 
+def uses_quantities(formula: str) -> bool:
+    """Does the formula use a quantity in the line's unit (produced, good, …)? Counts, hours and log codes do not."""
+    qty = {c for c, kind in ms.STANDARD.items() if kind == "qty"} | {c for c, kind in ms._profile_extras().items() if kind == "qty"}
+    return bool(names_in(formula) & qty)
+
+
 def unit_groups(lines: list[OpMachine]) -> list[list[OpMachine]]:
     """Lines whose output is counted in the same unit. Quantities of different units (tonnes and pieces) are never
     added up: a KPI over a scope with several units is worked out for each unit group."""
@@ -143,7 +151,13 @@ def unit_groups(lines: list[OpMachine]) -> list[list[OpMachine]]:
 
 
 def evaluate(
-    db: Session, plant: Plant, kpis: list[OpKpi], today: date, days: int = 30, line_id: uuid.UUID | None = None, range_days: int | None = None
+    db: Session,
+    plant: Plant,
+    kpis: list[OpKpi],
+    today: date,
+    days: int = 30,
+    line_id: uuid.UUID | None = None,
+    range_days: int | None = None,
 ) -> list[dict]:
     """Each KPI: last complete day, last 7 days, month to date, daily series of `days`, trend, status, missing codes.
     `line_id`: plant-wide KPIs are worked out for this line only (a line's dashboard). A scope whose lines count
@@ -163,12 +177,16 @@ def evaluate(
     cache: dict[tuple, list] = {}
     out = []
     for k in kpis:
-        key = (k.machine_id, k.department_id)
+        scope = (k.machine_id, k.department_id)
         if line_id is not None and k.machine_id is None and k.department_id is None:
-            key = (line_id, None)
+            scope = (line_id, None)
+        qty = uses_quantities(k.formula)
+        key = (*scope, qty)
         if key not in cache:
-            groups = unit_groups(ms.lines_in_scope(db, plant.id, key[0], key[1]))
-            cache[key] = [(g, *ms.collect(db, plant, g, d0, today)) for g in groups]
+            lines = ms.lines_in_scope(db, plant.id, scope[0], scope[1])
+            groups = unit_groups(lines) if qty else [lines]  # counts and hours add up over any lines; tonnes and pieces do not
+            whole = scope == (None, None) and len(groups) == 1
+            cache[key] = [(g, *ms.collect(db, plant, g, d0, today, plant_wide=whole)) for g in groups]
         entries = cache[key]
         for lines, daily, agg in entries:
             needed = names_in(k.formula)

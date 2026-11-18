@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
 import { BackLink } from "@/components/Ops";
+import { IncidentsSection, nowLocal, toLocal } from "@/components/OpsIncidents";
 import { Modal } from "@/components/Modal";
 import { AssetPicker, ConfirmButton, Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { del, post, put } from "@/lib/api";
@@ -262,6 +263,8 @@ function LogView() {
             </Table></Table.ScrollContainer>
           </Paper>
         )}
+        {d.template.incidents && <IncidentsSection logId={d.id} defaults={{ department_id: d.template.department_id, machine_id: d.template.machine_id,
+          shift: d.shift === "-" ? null : d.shift, occurred_at: d.in_progress ? nowLocal() : toLocal(d.window.start, plant?.timezone) }} />}
       </Stack>
       {raise && <RaiseRequest onClose={() => setRaise(false)} />}
       <Modal opened={reopen} onClose={() => setReopen(false)} title={t("ops.report.reopen")}>
