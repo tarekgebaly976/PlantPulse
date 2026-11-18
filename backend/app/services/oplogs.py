@@ -187,9 +187,11 @@ def values_of(db: Session, log_ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[uui
 
 def averaged(fl: OpLogField) -> bool:
     """Is the line's day figure the average of the shifts (else their sum)? Set per line (day_agg); automatically:
-    numbers and % lines are averaged, meters, counters and other calculated lines are added up."""
+    numbers and % lines are averaged, meters, counters, other calculated lines and "per unit" consumptions are added up."""
     if fl.day_agg in ("sum", "avg"):
         return fl.day_agg == "avg"
+    if fl.per_ton:  # a consumption counted per unit of output (water, steam, energy …) adds up
+        return False
     return fl.kind == "number" or (fl.kind == "calc" and (fl.unit or "").strip() == "%")
 
 

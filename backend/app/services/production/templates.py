@@ -63,7 +63,7 @@ PAPER_LOSSES = [
 PAPER_KPIS_EXTRA = [
     {"code": "BREAKS", "name": "Sheet breaks", "formula": "breaks", "unit": "", "direction": "lower", "target": 6, "warn": 10, "critical": 15, "decimals": 0,
      "description": "Number of sheet breaks"},
-    {"code": "STEAM_T", "name": "Steam per tonne", "formula": "steam / net", "unit": "t/t", "direction": "lower", "decimals": 2,
+    {"code": "STEAM_T", "name": "Steam per tonne", "formula": "STEAM / net", "unit": "t/t", "direction": "lower", "decimals": 2,
      "description": "Steam consumption per tonne of net paper"},
     {"code": "TRIM", "name": "Trim loss", "formula": "trim / produced * 100", "unit": "%", "direction": "lower", "target": 3, "warn": 4, "critical": 6, "decimals": 2,
      "description": "Machine trim ÷ gross production"},

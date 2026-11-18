@@ -132,10 +132,11 @@ TEXTS_5S = ["Floor cleaning around pulper", "Cleaning of screen room", "Tidying 
 
 
 def _template(
-    db: Session, plant: Plant, code: str, name: str, dept_id, freq: str, issues: bool, sort: int, rows: list, meters: dict
+    db: Session, plant: Plant, code: str, name: str, dept_id, freq: str, issues: bool, sort: int, rows: list, meters: dict, line_id=None
 ) -> tuple:
     t = OpLogTemplate(
         plant_id=plant.id, code=code, name=name, department_id=dept_id, frequency=freq, day_start=time(7, 0), issues=issues, sort=sort,
+        machine_id=line_id,  # both forms belong to PM1: "per tonne" is per tonne of PM1's paper
         shifts=[{"code": "D", "name": "Day shift", "start": "07:00"}, {"code": "N", "name": "Night shift", "start": "19:00"}] if freq == "shift" else [],
     )  # fmt: skip
     db.add(t)
@@ -207,8 +208,22 @@ def build_logs(db: Session, plant: Plant, ref: dict, current: date, now: datetim
     for acode, title, bd in SP_ISSUES:
         db.add(WorkRequest(plant_id=plant.id, number=next_number(db, plant, "WR"), asset_id=assets[acode].id, title=title,
                            description="Raised from the stock preparation shift log (sample).", is_breakdown=bd, created_by_id=users["prod.sup"].id))  # fmt: skip
-    ut, utf = _template(db, plant, "UT-DAILY", "Utilities daily report", depts["UTIL"].id, "day", False, 10, UT_FIELDS, meters)
-    sp, spf = _template(db, plant, "SP-SHIFT", "Stock preparation – shift report", depts["SP"].id, "shift", True, 20, SP_FIELDS, meters)
+    ut, utf = _template(
+        db, plant, "UT-DAILY", "Utilities daily report", depts["UTIL"].id, "day", False, 10, UT_FIELDS, meters, ref.get("machine_id")
+    )
+    sp, spf = _template(
+        db,
+        plant,
+        "SP-SHIFT",
+        "Stock preparation – shift report",
+        depts["SP"].id,
+        "shift",
+        True,
+        20,
+        SP_FIELDS,
+        meters,
+        ref.get("machine_id"),
+    )
     sp.in_pm_report = True  # shown inside the PM & SP daily report
 
     net_by_day: dict[date, float] = {}

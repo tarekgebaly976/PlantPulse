@@ -40,20 +40,22 @@ def role_users(db: Session, plant_id: uuid.UUID, role_code: str | None) -> list[
 
 def _series(
     db: Session, plant: Plant, rule: OpAlertRule, kpi: OpKpi | None, days: list[date]
-) -> tuple[list[tuple[date, float | None]], list]:
+) -> list[tuple[list[tuple[date, float | None]], list]]:
+    """Daily values of the rule's source, one series per unit group of the scope's lines (tonnes and pieces are never
+    added up); a measure or log line without quantities (hours, counts, log values) is one series over all lines."""
     lines = ms.lines_in_scope(
         db, plant.id, rule.machine_id or (kpi.machine_id if kpi else None), rule.department_id or (kpi.department_id if kpi else None)
     )
-    daily, agg = ms.collect(db, plant, lines, days[0], days[-1])
-    out: list[tuple[date, float | None]] = []
-    for d in days:
-        env = ms.aggregate(daily, agg, [d])
-        if kpi is not None:
-            v, _ = kp.value(kpi.formula, env)
-        else:
-            v = env.get(rule.source_code or "")
-        out.append((d, v))
-    return out, lines
+    qty = kpi is not None or ms.STANDARD.get(rule.source_code or "") == "qty"
+    out = []
+    for group in kp.unit_groups(lines) if qty else [lines]:
+        daily, agg = ms.collect(db, plant, group, days[0], days[-1])
+        ser: list[tuple[date, float | None]] = []
+        for d in days:
+            env = ms.aggregate(daily, agg, [d])
+            ser.append((d, kp.value(kpi.formula, env)[0] if kpi is not None else env.get(rule.source_code or "")))
+        out.append((ser, group))
+    return out
 
 
 def check_rule(db: Session, plant: Plant, rule: OpAlertRule, today: date) -> dict | None:
@@ -74,7 +76,17 @@ def check_rule(db: Session, plant: Plant, rule: OpAlertRule, today: date) -> dic
     n = max(rule.periods or 1, 1)
     span = max(n, rule.lookback_days or 7) if rule.condition in ("total_above", "trend_down", "trend_up") else n
     days = ms.days_between(last - timedelta(days=span - 1), last)
-    series, _ = _series(db, plant, rule, kpi, days)
+    best = None
+    for series, group in _series(db, plant, rule, kpi, days):
+        hit = _check(rule, kpi, series, n, span)
+        if hit is not None:
+            hit["detail"]["lines"] = [m.code for m in group]
+            if best is None or SEV_RANK.get(hit["severity"], 1) > SEV_RANK.get(best["severity"], 1):
+                best = hit
+    return best
+
+
+def _check(rule: OpAlertRule, kpi: OpKpi | None, series: list[tuple[date, float | None]], n: int, span: int) -> dict | None:
     th = float(rule.threshold) if rule.threshold is not None else None
     hi = float(rule.threshold_high) if rule.threshold_high is not None else None
     vals = [v for _, v in series]

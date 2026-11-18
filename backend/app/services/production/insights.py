@@ -108,12 +108,12 @@ def generate(db: Session, plant: Plant, today: date, dept_ok=lambda _d: True) ->
     for res in kp.evaluate(db, plant, kp.plant_kpis(db, plant.id), today, days=RECENT + BASE):
         wk = res["values"]["week"]
         if wk["status"] in ("warning", "critical"):
-            out.append({"kind": "kpi_deviation", "severity": wk["status"], "line": ",".join(res["lines"]) if res["machine_id"] else None,
+            out.append({"kind": "kpi_deviation", "severity": wk["status"], "line": ",".join(res["lines"]) or None,
                         "params": {"kpi": res["name"], "code": res["code"], "value": wk["value"], "target": res["target"], "unit": res["unit"]},
                         "recommendation": "rec_kpi"})  # fmt: skip
         tr = res["trend_pct"]
         if tr is not None and ((res["direction"] == "higher" and tr <= -10) or (res["direction"] == "lower" and tr >= 10)):
-            out.append({"kind": "negative_trend", "severity": "warning", "line": None,
+            out.append({"kind": "negative_trend", "severity": "warning", "line": ",".join(res["lines"]) or None,
                         "params": {"kpi": res["name"], "code": res["code"], "change_pct": tr, "unit": res["unit"]}, "recommendation": "rec_trend"})  # fmt: skip
 
     # log lines: consumption per unit and operating parameters

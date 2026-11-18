@@ -122,41 +122,56 @@ def kpi_series(k: OpKpi, daily: dict, agg: dict[str, str], days: list[date]) -> 
     return out
 
 
+def unit_groups(lines: list[OpMachine]) -> list[list[OpMachine]]:
+    """Lines whose output is counted in the same unit. Quantities of different units (tonnes and pieces) are never
+    added up: a KPI over a scope with several units is worked out for each unit group."""
+    groups: dict[str, list[OpMachine]] = {}
+    for m in lines:
+        groups.setdefault(m.output_unit or "", []).append(m)
+    return list(groups.values()) or [[]]
+
+
 def evaluate(db: Session, plant: Plant, kpis: list[OpKpi], today: date, days: int = 30, line_id: uuid.UUID | None = None) -> list[dict]:
     """Each KPI: last complete day, last 7 days, month to date, daily series of `days`, trend, status, missing codes.
-    `line_id`: plant-wide KPIs are worked out for this line only (a line's dashboard)."""
+    `line_id`: plant-wide KPIs are worked out for this line only (a line's dashboard). A scope whose lines count
+    output in different units gives one result per unit group; a group that never records what the KPI needs (e.g.
+    a profile-specific measure) is left out."""
     last = today - timedelta(days=1)
     d0 = min(last - timedelta(days=days - 1), last.replace(day=1))
-    cache: dict[tuple, tuple] = {}
+    win = ms.days_between(last - timedelta(days=days - 1), last)
+    periods = {
+        "day": [last],
+        "week": ms.days_between(last - timedelta(days=6), last),
+        "month": ms.days_between(last.replace(day=1), last),
+        "today": [today],
+    }
+    cache: dict[tuple, list] = {}
     out = []
     for k in kpis:
         key = (k.machine_id, k.department_id)
         if line_id is not None and k.machine_id is None and k.department_id is None:
             key = (line_id, None)
         if key not in cache:
-            lines = ms.lines_in_scope(db, plant.id, key[0], key[1])
-            cache[key] = (lines, *ms.collect(db, plant, lines, d0, today))
-        lines, daily, agg = cache[key]
-        win = ms.days_between(last - timedelta(days=days - 1), last)
-        periods = {
-            "day": [last],
-            "week": ms.days_between(last - timedelta(days=6), last),
-            "month": ms.days_between(last.replace(day=1), last),
-            "today": [today],
-        }
-        res: dict[str, dict] = {}
-        for name, ds in periods.items():
-            v, missing = value(k.formula, ms.aggregate(daily, agg, ds))
-            res[name] = {"value": None if v is None else round(v, 4), "status": status(k, v), "missing": missing}
-        series = kpi_series(k, daily, agg, win)
-        out.append({
-            "id": str(k.id), "code": k.code, "name": k.name, "description": k.description, "formula": k.formula, "unit": unit_of(k, lines),
-            "decimals": k.decimals, "direction": k.direction, "target": _f(k.target), "warn": _f(k.warn), "critical": _f(k.critical),
-            "period": k.period, "machine_id": str(k.machine_id) if k.machine_id else None,
-            "department_id": str(k.department_id) if k.department_id else None, "standard": k.standard, "dashboard": k.dashboard,
-            "lines": [m.code for m in lines], "values": res, "series": [{"date": d.isoformat(), "value": round(v, 4)} for d, v in series],
-            "trend_pct": trend(series[-14:]),
-        })  # fmt: skip
+            groups = unit_groups(ms.lines_in_scope(db, plant.id, key[0], key[1]))
+            cache[key] = [(g, *ms.collect(db, plant, g, d0, today)) for g in groups]
+        entries = cache[key]
+        for lines, daily, agg in entries:
+            needed = names_in(k.formula)
+            if len(entries) > 1 and not all(any(daily.get(d, {}).get(c) is not None for d in daily) for c in needed):
+                continue  # this unit group never records something the KPI needs (e.g. a measure of another profile)
+            res: dict[str, dict] = {}
+            for name, ds in periods.items():
+                v, missing = value(k.formula, ms.aggregate(daily, agg, ds))
+                res[name] = {"value": None if v is None else round(v, 4), "status": status(k, v), "missing": missing}
+            series = kpi_series(k, daily, agg, win)
+            out.append({
+                "id": str(k.id), "code": k.code, "name": k.name, "description": k.description, "formula": k.formula, "unit": unit_of(k, lines),
+                "decimals": k.decimals, "direction": k.direction, "target": _f(k.target), "warn": _f(k.warn), "critical": _f(k.critical),
+                "period": k.period, "machine_id": str(k.machine_id) if k.machine_id else None,
+                "department_id": str(k.department_id) if k.department_id else None, "standard": k.standard, "dashboard": k.dashboard,
+                "lines": [m.code for m in lines], "values": res, "series": [{"date": d.isoformat(), "value": round(v, 4)} for d, v in series],
+                "trend_pct": trend(series[-14:]),
+            })  # fmt: skip
     return out
 
 

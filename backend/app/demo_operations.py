@@ -192,7 +192,7 @@ def _setup(db: Session, org: Organization, password: str) -> tuple[Plant, OpMach
     )
     db.add(m)
     db.flush()
-    ref: dict = {"grades": {}, "disc": {}, "sec": {}, "defects": {}, "assets": assets, "depts": depts}
+    ref: dict = {"grades": {}, "disc": {}, "sec": {}, "defects": {}, "assets": assets, "depts": depts, "machine_id": m.id}
     for gsm, speed in GRADES:
         g = OpGrade(
             plant_id=plant.id, machine_id=m.id, code=str(gsm), name=f"Coated board {gsm} gsm", gsm=gsm,
