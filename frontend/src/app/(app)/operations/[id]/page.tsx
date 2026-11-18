@@ -17,7 +17,7 @@ import { ConfirmButton, Loading, PageHeader, Section, StatusBadge } from "@/comp
 import { del, patch, post, put } from "@/lib/api";
 import { fmtNum, useMut, useQ } from "@/lib/hooks";
 import {
-  atTime, EVENT_TYPES, hhmm, hm, isPaper, nextDay, pct, t3, type Loss, type OpSettings, type Reel, type Report, type Segment, type Stop,
+  atTime, EVENT_TYPES, hhmm, hm, isPaper, nextDay, pct, t3, type Loss, type LossCategory, type OpSettings, type Reel, type Report, type Segment, type Stop,
 } from "@/lib/ops";
 import { useSession } from "@/lib/session";
 
@@ -141,9 +141,9 @@ function ReelModal({ r, form, onClose }: { r: Report; form: ReelForm | null; onC
 }
 
 // ------------------------------------------------------------------ stops
-interface StopForm { id?: string; type: Stop["event_type"]; start: string; end: string; section_id: string | null; reason: string; parts: { discipline_id: string | null; hours: Num }[] }
+interface StopForm { id?: string; type: Stop["event_type"]; cat: string | null; start: string; end: string; section_id: string | null; reason: string; parts: { discipline_id: string | null; hours: Num }[] }
 
-function StopModal({ r, s, form, onClose }: { r: Report; s: OpSettings; form: StopForm | null; onClose: () => void }) {
+function StopModal({ r, s, cats, form, onClose }: { r: Report; s: OpSettings; cats: LossCategory[]; form: StopForm | null; onClose: () => void }) {
   const { t } = useTranslation();
   const [f, setF] = useState<StopForm | null>(form);
   const sections = (s.machines.find((m) => m.id === r.machine.id)?.sections ?? []).filter((x) => x.is_active || x.id === f?.section_id);
@@ -152,7 +152,7 @@ function StopModal({ r, s, form, onClose }: { r: Report; s: OpSettings; form: St
     if (!f) return Promise.resolve();
     const parts = f.parts.filter((p) => p.discipline_id).map((p) => ({ discipline_id: p.discipline_id, hours: f.parts.length > 1 ? num(p.hours) : null }));
     const body = {
-      event_type: f.type, started_at: atTime(r.report_date, r.machine.day_start, f.start),
+      event_type: f.type, loss_category_id: f.cat, started_at: atTime(r.report_date, r.machine.day_start, f.start),
       ended_at: f.end ? atTime(r.report_date, r.machine.day_start, f.end) : null, section_id: f.section_id, reason: f.reason || null, parts,
     };
     return f.id ? put(`/operations/stops/${f.id}`, body) : post(`/operations/reports/${r.id}/stops`, body);
@@ -170,7 +170,14 @@ function StopModal({ r, s, form, onClose }: { r: Report; s: OpSettings; form: St
   return (
     <Modal opened onClose={onClose} title={t("ops.stops.title")} size="lg">
       <Stack>
-        <SegmentedControl value={f.type} onChange={(v) => set({ type: v as Stop["event_type"] })} data={EVENT_TYPES.map((x) => ({ value: x, label: t(`ops.stops.types.${x}`) }))} />
+        <SegmentedControl value={f.type} onChange={(v) => set({ type: v as Stop["event_type"], cat: null })} data={EVENT_TYPES.map((x) => ({ value: x, label: t(`ops.stops.types.${x}`) }))} />
+        {(() => {
+          // the plant's loss categories recorded as this stop type (sub-categories too): e.g. Planned › Wash-up
+          const parentOf = (c: LossCategory) => cats.find((x) => x.id === c.parent_id);
+          const opts = cats.filter((c) => (c.is_active || c.id === f.cat) && (c.event_type === f.type || (parentOf(c)?.event_type === f.type && c.event_type === parentOf(c)?.event_type)))
+            .map((c) => ({ value: c.id, label: parentOf(c) ? `${parentOf(c)!.name} › ${c.name}` : c.name }));
+          return opts.length > 0 ? <Select label={t("gen.stop.category")} description={t("gen.stop.paperHint")} clearable searchable value={f.cat} onChange={(v) => set({ cat: v })} data={opts} /> : null;
+        })()}
         <SimpleGrid cols={3}>
           <TextInput type="time" label={t("ops.stops.start")} required value={f.start} onChange={(e) => set({ start: e.currentTarget.value })} />
           <TextInput type="time" label={t("ops.stops.end")} value={f.end} onChange={(e) => set({ end: e.currentTarget.value })} />
@@ -291,6 +298,7 @@ function ReportView() {
   const tz = plant?.timezone;
   const q = useQ<Report>(`/operations/reports/${id}`);
   const st = useQ<OpSettings>("/operations/settings");
+  const cats = useQ<LossCategory[]>("/operations/loss-categories").data ?? [];
   const [run, setRun] = useState<RunForm | null>(null);
   const [reel, setReel] = useState<ReelForm | null>(null);
   const [stop, setStop] = useState<StopForm | null>(null);
@@ -310,6 +318,7 @@ function ReportView() {
   if (!r || !s) return <Loading />;
   const c = r.calc;
   const ed = r.can_edit;
+  const catName = (id: string | null) => cats.find((c) => c.id === id)?.name ?? null;
   const discName = (did: string) => s.disciplines.find((d) => d.id === did)?.code ?? (did === "none" ? t("ops.tables.none") : "?");
   const secName = (sid: string | null) => s.machines.find((m) => m.id === r.machine.id)?.sections?.find((x) => x.id === sid)?.name ?? "—";
   const machineGrades = s.machines.find((m) => m.id === r.machine.id)?.grades ?? [];
@@ -333,7 +342,7 @@ function ReportView() {
     id: x.id, shift: x.shift, reel_no: x.reel_no, gsm: x.gsm ?? "", gross: x.gross_mt, net: x.net_mt, reject: x.reject_mt || "", b: x.b_grade_mt || "", s: x.s_grade_mt || "", note: x.note ?? "",
   });
   const editStop = (x: Stop): StopForm => ({
-    id: x.id, type: x.event_type, start: hm(x.started_at, tz), end: x.ended_at ? hm(x.ended_at, tz) : "", section_id: x.section_id, reason: x.reason ?? "",
+    id: x.id, type: x.event_type, cat: x.loss_category_id, start: hm(x.started_at, tz), end: x.ended_at ? hm(x.ended_at, tz) : "", section_id: x.section_id, reason: x.reason ?? "",
     parts: x.parts.length ? x.parts.map((p) => ({ discipline_id: p.discipline_id, hours: p.hours })) : [{ discipline_id: null, hours: "" }],
   });
   const editLoss = (x: Loss): LossForm => ({
@@ -446,7 +455,7 @@ function ReportView() {
 
         <div id="sec-stops" style={{ scrollMarginTop: 72 }} />
         <Section title={t("ops.stops.title")} actions={ed ? <Button size="xs" leftSection={<IconPlus size={14} />}
-          onClick={() => setStop({ type: "breakdown", start: "", end: "", section_id: null, reason: "", parts: [{ discipline_id: null, hours: "" }] })}>{t("ops.stops.add")}</Button> : undefined}>
+          onClick={() => setStop({ type: "breakdown", cat: null, start: "", end: "", section_id: null, reason: "", parts: [{ discipline_id: null, hours: "" }] })}>{t("ops.stops.add")}</Button> : undefined}>
           <Table.ScrollContainer minWidth={760}>
             <Table striped>
               <Table.Thead><Table.Tr>
@@ -457,6 +466,7 @@ function ReportView() {
                 {r.stops.map((x) => (
                   <Table.Tr key={x.id}>
                     <Table.Td><Group gap={4} wrap="nowrap"><Badge variant="light" color={x.event_type === "sheet_break" ? "grape" : x.event_type === "planned" ? "gray" : x.event_type === "breakdown" ? "red" : "yellow"}>{t(`ops.stops.types.${x.event_type}`)}</Badge>
+                      {catName(x.loss_category_id) && <Text size="xs" c="dimmed" className="nowrap">{catName(x.loss_category_id)}</Text>}
                       {x.is_failure && <IconTool size={14} title={t("ops.stops.failure")} />}</Group></Table.Td>
                     <Table.Td><Time iso={x.started_at} date={r.report_date} tz={tz} /></Table.Td>
                     <Table.Td>{x.ended_at ? <Time iso={x.ended_at} date={r.report_date} tz={tz} /> : <Text size="sm" c="red">{t("ops.stops.noEnd")}</Text>}</Table.Td>
@@ -542,7 +552,7 @@ function ReportView() {
       </Stack>}
       <RunModal key={`run-${run?.id ?? "new"}-${String(!!run)}`} r={r} s={s} form={run} onClose={() => setRun(null)} />
       <ReelModal key={`reel-${reel?.id ?? "new"}-${String(!!reel)}`} r={r} form={reel} onClose={() => setReel(null)} />
-      <StopModal key={`stop-${stop?.id ?? "new"}-${String(!!stop)}`} r={r} s={s} form={stop} onClose={() => setStop(null)} />
+      <StopModal key={`stop-${stop?.id ?? "new"}-${String(!!stop)}`} r={r} s={s} cats={cats} form={stop} onClose={() => setStop(null)} />
       <LossModal key={`loss-${loss?.id ?? "new"}-${String(!!loss)}`} r={r} s={s} form={loss} onClose={() => setLoss(null)} />
       <Modal opened={reopen} onClose={() => setReopen(false)} title={t("ops.report.reopenTitle")}>
         <Stack>
