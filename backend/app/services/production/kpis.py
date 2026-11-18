@@ -60,6 +60,17 @@ def names_in(formula: str) -> set[str]:
         return set()
 
 
+PERIOD_DAYS = {"day": 1, "week": 7, "month": 30}
+
+
+def additive(formula: str) -> bool:
+    """A formula without a division adds up over days (a quantity, a count, hours); a ratio does not."""
+    try:
+        return not any(isinstance(n, ast.BinOp) and isinstance(n.op, ast.Div) for n in ast.walk(ast.parse(formula, mode="eval")))
+    except SyntaxError:
+        return False
+
+
 def check(formula: str, codes: set[str]) -> None:
     oplogs.check_formula(formula, codes)
 
@@ -164,9 +175,17 @@ def evaluate(
             if len(entries) > 1 and not all(any(daily.get(d, {}).get(c) is not None for d in daily) for c in needed):
                 continue  # this unit group never records something the KPI needs (e.g. a measure of another profile)
             res: dict[str, dict] = {}
+            add = additive(k.formula)
             for name, ds in periods.items():
                 v, missing = value(k.formula, ms.aggregate(daily, agg, ds))
-                res[name] = {"value": None if v is None else round(v, 4), "status": status(k, v), "missing": missing}
+                row = {"value": None if v is None else round(v, 4), "status": status(k, v), "missing": missing}
+                n_days = len([d for d in ds if d in daily]) or len(ds)
+                if add and v is not None and n_days > 1:
+                    # a total (production, stops, breaks, hours) over several days is judged by its rate per the KPI's
+                    # period: 47 breaks in 30 days against a target of 6 a day is 1.6 a day, not 47
+                    per = v / n_days * PERIOD_DAYS.get(k.period, 1)
+                    row.update({"per_period": round(per, 4), "status": status(k, per)})
+                res[name] = row
             series = kpi_series(k, daily, agg, win)
             out.append({
                 "id": str(k.id), "code": k.code, "name": k.name, "description": k.description, "formula": k.formula, "unit": unit_of(k, lines),

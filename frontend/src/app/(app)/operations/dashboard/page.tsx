@@ -18,13 +18,15 @@ function ChartCard({ title, sub, children }: { title: string; sub?: string; chil
   return (
     <Paper withBorder p="md" radius="md">
       <Text fw={600} size="sm">{title}</Text>
-      {sub && <Text size="xs" c="dimmed" mb={6}>{sub}</Text>}
+      {sub ? <Text size="xs" c="dimmed" mb={6}>{sub}</Text> : <div style={{ height: 14 }} />}
       {children}
     </Paper>
   );
 }
 
 const short = (d: string) => d.slice(5); // MM-DD on the axis
+/** Decimals for a ratio: 0.554 → 3, 2.04 → 2, 14.3 → 1, 215.8 → 0. */
+const sig = (v: number | null | undefined) => (v === null || v === undefined ? 0 : Math.abs(v) < 1 ? 3 : Math.abs(v) < 10 ? 2 : Math.abs(v) < 100 ? 1 : 0);
 /** Axis ticks: compact numbers, no unit (the chart title carries it). */
 const tick = (v: number) => (Math.abs(v) >= 10000 ? `${fmtNum(v / 1000, 0)}k` : fmtNum(v, Math.abs(v) < 10 ? 2 : 0));
 
@@ -39,7 +41,7 @@ function FieldChart({ f, perTon, color, out }: { f: DashField; perTon: boolean; 
       sub={perTon && f.per_ton_period !== null ? t("opsDash.periodPerTon", { v: fmtVal(f.per_ton_period, 3), u: unit }) : f.total !== null && f.kind !== "number" && f.unit !== "%" ? t("opsDash.periodTotal", { v: fmtVal(f.total, 0), u: f.unit ?? "" }) : undefined}>
       {data.length === 0 ? <Text size="sm" c="dimmed">{t("common.noData")}</Text> :
         <LineChart h={150} data={data} dataKey="day" series={[{ name: "v", label: f.label, color }]} curveType="linear" strokeWidth={2} dotProps={{ r: 0 }}
-          activeDotProps={{ r: 4 }} withLegend={false} gridAxis="y" valueFormatter={(x) => `${fmtVal(x, digits)} ${unit}`} yAxisProps={{ tickFormatter: tick, width: 44 }}
+          activeDotProps={{ r: 4 }} withLegend={false} gridAxis="y" valueFormatter={(x) => `${fmtVal(x, digits)} ${unit}`} yAxisProps={{ tickFormatter: tick, width: 48, tickCount: 5, interval: 0, domain: [0, "auto"] }}
           referenceLines={[...(f.low !== null && !perTon ? [{ y: f.low, label: `${f.low}`, color: "gray.5" }] : []), ...(f.high !== null && !perTon ? [{ y: f.high, label: `${f.high}`, color: "gray.5" }] : [])]} />}
     </ChartCard>
   );
@@ -59,6 +61,7 @@ function View() {
   const sm = p?.summary;
   const u = d.unit ?? "";
   const paper = d.profile === "paper_machine";
+  const oeeTarget = d.kpis.find((k) => k.code === "OEE")?.target ?? null;
   const done = d.production.filter((x) => !x.in_progress);
   const prodData = done.map((x) => ({ day: short(x.date), a: x.a, down: Math.round(x.b * 1000) / 1000, reject: x.reject }));
   const oeeData = done.map((x) => ({ day: short(x.date), oee: x.oee !== null ? x.oee * 100 : null }));
@@ -79,7 +82,7 @@ function View() {
         <Stack>
           {d.kpis.length > 0 && (
             <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }}>
-              {d.kpis.map((k) => <KpiCard key={`${k.id}-${k.lines.join()}`} k={k} period="range" />)}
+              {d.kpis.map((k) => <KpiCard key={`${k.id}-${k.lines.join()}`} k={k} period="range" showLine={false} />)}
             </SimpleGrid>
           )}
           {sm && (
@@ -93,8 +96,8 @@ function View() {
                 : <Tile label={t("gen.tiles.stops")} value={String(sm.stops ?? 0)} sub={`${t("gen.tiles.failures")} ${hhmm(sm.failure_hours ?? 0)}`} />}
               {paper && <Tile label={t("ops.tiles.trim")} value={pct(sm.produced ? (sm.trim ?? 0) / sm.produced : null)} sub={`${fmtNum(sm.trim ?? 0, 0)} ${u}`} />}
               {perTonTiles.map((f) => perTon
-                ? <Tile key={f.id} label={`${f.label} / ${u}`} value={`${fmtVal(f.per_ton_period, 3)} ${f.unit ?? ""}/${u}`} sub={`${t("gen.dash.total")} ${fmtVal(f.total, 0)} ${f.unit ?? ""}`} />
-                : <Tile key={f.id} label={f.label} value={`${fmtVal(f.total, 0)} ${f.unit ?? ""}`} sub={`${fmtVal(f.per_ton_period, 3)} ${f.unit ?? ""}/${u}`} />)}
+                ? <Tile key={f.id} label={`${f.label} / ${u}`} value={fmtVal(f.per_ton_period, sig(f.per_ton_period))} unit={`${f.unit ?? ""}/${u}`} sub={`${t("gen.dash.total")} ${fmtVal(f.total, 0)} ${f.unit ?? ""}`} />
+                : <Tile key={f.id} label={f.label} value={fmtVal(f.total, 0)} unit={f.unit ?? ""} sub={`${fmtVal(f.per_ton_period, sig(f.per_ton_period))} ${f.unit ?? ""}/${u}`} />)}
             </SimpleGrid>
           )}
           {p && (
@@ -103,10 +106,10 @@ function View() {
                 <BarChart h={240} data={prodData} dataKey="day" type="stacked" withLegend legendProps={{ verticalAlign: "bottom" }} gridAxis="y" barProps={{ radius: 2 }}
                   valueFormatter={(x) => `${fmtNum(x, 1)} ${u}`} yAxisProps={{ tickFormatter: tick }} series={[{ name: "a", label: t("gen.tiles.good"), color: c[0]! }, { name: "down", label: t("gen.tiles.downgrade"), color: c[1]! }, { name: "reject", label: t("ops.tiles.reject"), color: c[2]! }]} />
               </ChartCard>
-              <ChartCard title={t("ops.tiles.oee")} sub={t("ops.report.oeeFormula")}>
+              <ChartCard title={t("ops.tiles.oee")} sub={paper ? t("ops.report.oeeFormula") : t("gen.dash.oeeFormula")}>
                 <LineChart h={240} data={oeeData} dataKey="day" series={[{ name: "oee", label: "OEE", color: c[0]! }]} curveType="linear" strokeWidth={2}
                   dotProps={{ r: 0 }} activeDotProps={{ r: 4 }} gridAxis="y" yAxisProps={{ domain: [0, 100], tickFormatter: (v: number) => `${v}%` }} valueFormatter={(x) => `${fmtNum(x, 1)}%`}
-                  referenceLines={[{ y: 75, label: "75%", color: "gray.5" }]} />
+                  referenceLines={oeeTarget !== null ? [{ y: oeeTarget, label: `${t("kpi2.target")} ${oeeTarget}%`, color: "gray.5" }] : []} />
               </ChartCard>
               <ChartCard title={t("opsDash.apq")}>
                 <LineChart h={200} data={apq} dataKey="day" curveType="linear" strokeWidth={2} dotProps={{ r: 0 }} activeDotProps={{ r: 4 }} gridAxis="y" withLegend
@@ -126,7 +129,7 @@ function View() {
               )}
               <ChartCard title={t("gen.dash.lossCat")} sub={t("opsDash.hours")}>
                 <BarChart h={Math.max(160, 28 * Object.keys(p.loss_by_category).length + 40)} data={pareto(p.loss_by_category)} dataKey="k" orientation="vertical"
-                  gridAxis="x" barProps={{ radius: 2 }} valueFormatter={(x) => hhmm(x)} xAxisProps={{ tickFormatter: (v: number) => `${v} h` }} series={[{ name: "v", label: t("opsDash.hours"), color: c[1]! }]} />
+                  gridAxis="x" barProps={{ radius: 2 }} valueFormatter={(x) => hhmm(x)} yAxisProps={{ width: 150 }} xAxisProps={{ tickFormatter: (v: number) => `${v} h` }} series={[{ name: "v", label: t("opsDash.hours"), color: c[1]! }]} />
               </ChartCard>
               <ChartCard title={t("opsDash.downtimeDisc")} sub={t("opsDash.hours")}>
                 <BarChart h={Math.max(160, 28 * Object.keys(p.stops.downtime_by_discipline).length + 40)} data={pareto(p.stops.downtime_by_discipline)} dataKey="k" orientation="vertical"

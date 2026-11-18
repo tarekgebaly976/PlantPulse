@@ -109,7 +109,8 @@ def generate(db: Session, plant: Plant, today: date, dept_ok=lambda _d: True) ->
         wk = res["values"]["week"]
         if wk["status"] in ("warning", "critical"):
             out.append({"kind": "kpi_deviation", "severity": wk["status"], "line": ",".join(res["lines"]) or None,
-                        "params": {"kpi": res["name"], "code": res["code"], "value": wk["value"], "target": res["target"], "unit": res["unit"]},
+                        "params": {"kpi": res["name"], "code": res["code"], "value": wk.get("per_period", wk["value"]), "target": res["target"],
+                                   "unit": f"{res['unit']} / {res['period']}".strip() if "per_period" in wk else res["unit"]},
                         "recommendation": "rec_kpi"})  # fmt: skip
         tr = res["trend_pct"]
         if tr is not None and ((res["direction"] == "higher" and tr <= -10) or (res["direction"] == "lower" and tr >= 10)):

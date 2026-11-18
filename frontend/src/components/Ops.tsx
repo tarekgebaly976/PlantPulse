@@ -10,11 +10,11 @@ import { fmtNum, useMut } from "@/lib/hooks";
 import { fmtVal, hhmm, pct, type Period, type ShiftLogSection } from "@/lib/ops";
 import { StatusBadge } from "./ui";
 
-export function Tile({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+export function Tile({ label, value, sub, color, unit }: { label: string; value: string; sub?: string; color?: string; unit?: string }) {
   return (
     <Paper withBorder p="sm" radius="md">
       <Text size="xs" c="dimmed">{label}</Text>
-      <Text fw={700} size="xl" c={color}>{value}</Text>
+      <Text fw={700} size="xl" c={color} className="nowrap">{value}{unit && <Text span size="sm" fw={500} c="dimmed"> {unit}</Text>}</Text>
       {sub && <Text size="xs" c="dimmed">{sub}</Text>}
     </Paper>
   );

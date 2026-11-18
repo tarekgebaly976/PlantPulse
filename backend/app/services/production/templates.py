@@ -61,7 +61,7 @@ PAPER_LOSSES = [
     ("WASHUP", "Wash-up / felt or wire change", "availability", "planned", True, False, "PLANNED"),
 ]
 PAPER_KPIS_EXTRA = [
-    {"code": "BREAKS", "name": "Sheet breaks", "formula": "breaks", "unit": "", "direction": "lower", "target": 6, "warn": 10, "critical": 15, "decimals": 0,
+    {"code": "BREAKS", "name": "Sheet breaks", "formula": "breaks", "unit": "", "direction": "lower", "target": 1, "warn": 2, "critical": 3, "decimals": 0,
      "description": "Number of sheet breaks"},
     {"code": "STEAM_T", "name": "Steam per tonne", "formula": "STEAM / net", "unit": "t/t", "direction": "lower", "decimals": 2,
      "description": "Steam consumption per tonne of net paper"},
