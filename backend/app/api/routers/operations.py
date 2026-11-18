@@ -1,6 +1,7 @@
-"""Operations module API: settings (machines, grades and ideal rates, disciplines, sections, defects) and the paper
-machine's daily production report (runs, reels, stops and sheet breaks, quality losses, submit / confirm / reopen).
-Calculations live in app.services.operations. The whole module is present only when the installation switches it on
+"""Production module API: production lines and their settings (disciplines, sections, defects; paper profile: grades
+and ideal rates) and the daily production report of any line (generic profile: output lines; paper profile: runs and
+reels), stops classified by loss category, quality losses, submit / confirm / reopen.
+Calculations live in app.services.production (reports dispatches to the line's report profile). The whole module is present only when the installation switches it on
 (CMMS_OPERATIONS_MODULE): otherwise nobody holds an op.* permission and every route answers 403."""
 
 import uuid
@@ -33,11 +34,15 @@ from app.models.operations import (
     OpSection,
     OpStopPart,
 )
+from app.models.production import OpLossCategory, OpOutput, OpProduct
 from app.models.tenancy import Department
 from app.schemas.common import In
-from app.services import operations as svc
 from app.services import oplogs as oplog_svc
 from app.services.common import audit, plant_today, utcnow
+from app.services.production import generic, paper
+from app.services.production import reports as svc
+from app.services.production.periods import hours as _hours
+from app.services.production.stops import default_category
 
 router = APIRouter(prefix="/operations", tags=["operations"])
 
@@ -68,6 +73,9 @@ class MachineIn(In):
     name: str = Field(min_length=1, max_length=120)
     department_id: uuid.UUID
     asset_id: uuid.UUID
+    production_model: Literal["continuous", "batch", "discrete"] = "continuous"
+    output_unit: str = Field("t", min_length=1, max_length=12)
+    report_profile: Literal["generic", "paper_machine"] = "generic"
     trim_width_m: float | None = Field(None, gt=0, le=20)
     day_start: time = time(7, 0)
     shifts: list[ShiftIn] = Field(min_length=1, max_length=4)
@@ -118,6 +126,9 @@ def machine_out(m: OpMachine) -> dict:
         "name": m.name,
         "department_id": str(m.department_id),
         "asset_id": str(m.asset_id),
+        "production_model": m.production_model,
+        "output_unit": m.output_unit,
+        "report_profile": m.report_profile,
         "trim_width_m": _num(m.trim_width_m),
         "day_start": m.day_start.strftime("%H:%M"),
         "shifts": m.shifts,
@@ -373,21 +384,25 @@ def _names(db: Session, ids: set) -> dict:
 
 
 def _summary(db: Session, ctx: Ctx, r: OpDailyReport, m: OpMachine) -> dict:
-    c = svc.compute(db, r, ctx.plant)
+    """List row in the standard measures (any profile): gross = produced, a = good."""
+    c = svc.compute(db, r, ctx.plant, to_date=False)
+    ms = c["measures"]
     return {
         "id": str(r.id),
         "machine_id": str(m.id),
         "machine": m.code,
+        "profile": m.report_profile,
+        "unit": m.output_unit,
         "report_date": r.report_date.isoformat(),
         "status": r.status.value,
         "revision": r.revision,
-        "gross": c["day"]["gross"],
-        "net": c["day"]["net"],
-        "a": c["day"]["a"],
-        "reject_pct": c["day"]["reject_pct"],
-        "run_hours": c["run_hours"],
+        "gross": ms["produced"],
+        "net": ms["net"],
+        "a": ms["good"],
+        "reject_pct": round(ms["reject"] / ms["net"], 4) if ms["net"] else None,
+        "run_hours": ms["run_hours"],
         "oee": c["oee"]["oee"],
-        "breaks": c["stops"]["breaks_count"],
+        "breaks": ms.get("breaks"),
         "downtime_hours": c["stops"]["downtime_hours"],
         "warnings": len(c["warnings"]),
     }
@@ -421,7 +436,8 @@ def list_reports(
         m = machines.get(machine_id)
         if m is not None:
             last = date.fromisoformat(rows[0]["report_date"])
-            mtd = svc._period_totals(db, m, d0, last)
+            mtd = (paper._period_totals(db, m, d0, last) if m.report_profile == "paper_machine"
+                   else generic.period_totals(db, m, ctx.plant, d0, last))  # fmt: skip
     return {"items": rows, "month": f"{y:04d}-{mo:02d}", "today": today.isoformat(), "mtd": mtd}
 
 
@@ -456,7 +472,8 @@ def get_report(rid: uuid.UUID, ctx: Ctx = Depends(require("op.view")), db: Sessi
     parts = svc.parts_of(db, [e.id for e in events])
     names = _names(db, {r.created_by_id, r.submitted_by_id, r.confirmed_by_id})
     calc = svc.compute(db, r, ctx.plant)
-    seg_calc = {s["id"]: s for s in calc["segments"]}
+    seg_calc = {s["id"]: s for s in calc.get("segments", [])}
+    outputs = generic.outputs_of(db, [r.id]) if m.report_profile != "paper_machine" else []
     prev = db.execute(
         select(OpDailyReport.id, OpDailyReport.report_date)
         .where(OpDailyReport.machine_id == m.id, OpDailyReport.report_date < r.report_date)
@@ -534,8 +551,9 @@ def get_report(rid: uuid.UUID, ctx: Ctx = Depends(require("op.view")), db: Sessi
                 "id": str(e.id),
                 "started_at": e.started_at.isoformat(),
                 "ended_at": e.ended_at.isoformat() if e.ended_at else None,
-                "hours": round(svc._hours(e.started_at, e.ended_at), 3) if e.ended_at else None,
+                "hours": round(_hours(e.started_at, e.ended_at), 3) if e.ended_at else None,
                 "event_type": e.event_type,
+                "loss_category_id": str(e.loss_category_id) if e.loss_category_id else None,
                 "section_id": str(e.section_id) if e.section_id else None,
                 "asset_id": str(e.asset_id),
                 "reason": e.reason,
@@ -557,9 +575,10 @@ def get_report(rid: uuid.UUID, ctx: Ctx = Depends(require("op.view")), db: Sessi
             }
             for x in losses
         ],
+        "outputs": [output_out(o) for o in outputs],
         "calc": calc,
-        "shift_logs": oplog_svc.report_sections(db, ctx.plant, r.report_date, ctx.dept_ok),
-        "utilities": oplog_svc.report_utilities(db, ctx.plant, r.report_date, calc["day"]["net"], ctx.dept_ok),
+        "shift_logs": oplog_svc.report_sections(db, ctx.plant, r.report_date, ctx.dept_ok, m.id),
+        "utilities": oplog_svc.report_utilities(db, ctx.plant, r.report_date, calc["measures"]["net"] or 0.0, ctx.dept_ok, m.id),
     }
 
 
@@ -589,7 +608,13 @@ class SegmentIn(In):
     grade_change_reject_mt: float | None = Field(None, ge=0, le=1000)
 
 
+def _paper_only(m: OpMachine) -> None:
+    if m.report_profile != "paper_machine":
+        raise HTTPException(422, "Runs and reels belong to the paper machine report profile; this line records output lines")
+
+
 def _seg_values(db: Session, ctx: Ctx, m: OpMachine, body: SegmentIn) -> dict:
+    _paper_only(m)
     tz = ZoneInfo(ctx.plant.timezone)
     data = body.model_dump()
     data["started_at"], data["ended_at"] = _aware(body.started_at, tz), _aware(body.ended_at, tz)
@@ -653,11 +678,12 @@ class ReelIn(In):
 
 
 def _reel_check(m: OpMachine, body: ReelIn) -> None:
+    _paper_only(m)
     if body.shift not in {s["code"] for s in m.shifts or []}:
         raise HTTPException(422, "Unknown shift")
-    if body.net_mt + body.reject_mt > body.gross_mt + svc.TOL_MT:
+    if body.net_mt + body.reject_mt > body.gross_mt + paper.TOL_MT:
         raise HTTPException(422, "Net + reject cannot be more than the gross weight")
-    if body.b_grade_mt + body.s_grade_mt > body.net_mt + svc.TOL_MT:
+    if body.b_grade_mt + body.s_grade_mt > body.net_mt + paper.TOL_MT:
         raise HTTPException(422, "B + S grade cannot be more than the net weight")
 
 
@@ -693,6 +719,91 @@ def delete_reel(xid: uuid.UUID, ctx: Ctx = Depends(require("op.view")), db: Sess
     db.delete(x)
 
 
+# ---------------- output lines (generic profile)
+class OutputIn(In):
+    shift: str | None = Field(None, max_length=8)
+    product_id: uuid.UUID | None = None
+    order_ref: str | None = Field(None, max_length=60)
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    run_hours: float | None = Field(None, ge=0, le=24)
+    planned_qty: float | None = Field(None, ge=0, le=1e9)
+    input_qty: float | None = Field(None, ge=0, le=1e9)
+    produced_qty: float = Field(ge=0, le=1e9)
+    reject_qty: float = Field(0, ge=0, le=1e9)
+    downgrade_qty: float = Field(0, ge=0, le=1e9)
+    completed: bool = True
+    note: str | None = Field(None, max_length=300)
+
+
+def output_out(o: OpOutput) -> dict:
+    rh = generic.output_hours(o)
+    return {
+        "id": str(o.id), "shift": o.shift, "product_id": str(o.product_id) if o.product_id else None, "order_ref": o.order_ref,
+        "started_at": o.started_at.isoformat() if o.started_at else None, "ended_at": o.ended_at.isoformat() if o.ended_at else None,
+        "run_hours": _num(o.run_hours), "hours": None if rh is None else round(rh, 3), "planned_qty": _num(o.planned_qty), "input_qty": _num(o.input_qty),
+        "produced_qty": _num(o.produced_qty), "reject_qty": _num(o.reject_qty), "downgrade_qty": _num(o.downgrade_qty),
+        "good_qty": round(float(o.produced_qty - o.reject_qty - o.downgrade_qty), 3), "ideal_rate_per_h": _num(o.ideal_rate_per_h),
+        "ideal_qty": round(rh * float(o.ideal_rate_per_h), 3) if rh is not None and o.ideal_rate_per_h is not None else None,
+        "completed": o.completed, "note": o.note,
+    }  # fmt: skip
+
+
+def _output_values(db: Session, ctx: Ctx, m: OpMachine, body: OutputIn, current: OpOutput | None = None) -> dict:
+    if m.report_profile == "paper_machine":
+        raise HTTPException(422, "A paper machine records runs and reels")
+    tz = ZoneInfo(ctx.plant.timezone)
+    data = body.model_dump()
+    data["started_at"] = _aware(body.started_at, tz) if body.started_at else None
+    data["ended_at"] = _aware(body.ended_at, tz) if body.ended_at else None
+    if data["started_at"] and data["ended_at"] and data["ended_at"] <= data["started_at"]:
+        raise HTTPException(422, "The end must be after the start")
+    if body.shift and body.shift not in {s["code"] for s in m.shifts or []}:
+        raise HTTPException(422, "Unknown shift")
+    if body.reject_qty + body.downgrade_qty > body.produced_qty + generic.TOL_Q:
+        raise HTTPException(422, "Reject and downgrade cannot be more than the quantity produced")
+    rate = None
+    if body.product_id:
+        p = db.get(OpProduct, body.product_id)
+        if p is None or p.plant_id != ctx.plant_id or (p.machine_id and p.machine_id != m.id):
+            raise HTTPException(422, "Unknown product for this line")
+        rate = _num(p.ideal_rate_per_h) or (3600 / float(p.ideal_cycle_s) if p.ideal_cycle_s else None)
+    if current is not None and current.product_id == body.product_id and current.ideal_rate_per_h is not None:
+        rate = _num(current.ideal_rate_per_h)  # the rate copied when the line was entered stays
+    data["ideal_rate_per_h"] = rate
+    return data
+
+
+@router.post("/reports/{rid}/outputs", status_code=201)
+def add_output(rid: uuid.UUID, body: OutputIn, ctx: Ctx = Depends(require("op.view")), db: Session = DB) -> dict:
+    r, m = _edit(db, ctx, rid)
+    o = OpOutput(report_id=r.id, **_output_values(db, ctx, m, body))
+    db.add(o)
+    db.flush()
+    return output_out(o)
+
+
+@router.put("/outputs/{oid}")
+def update_output(oid: uuid.UUID, body: OutputIn, ctx: Ctx = Depends(require("op.view")), db: Session = DB) -> dict:
+    o = db.get(OpOutput, oid)
+    if o is None:
+        raise HTTPException(404, "Line not found")
+    _, m = _edit(db, ctx, o.report_id)
+    for k, v in _output_values(db, ctx, m, body, o).items():
+        setattr(o, k, v)
+    db.flush()
+    return output_out(o)
+
+
+@router.delete("/outputs/{oid}", status_code=204)
+def delete_output(oid: uuid.UUID, ctx: Ctx = Depends(require("op.view")), db: Session = DB) -> None:
+    o = db.get(OpOutput, oid)
+    if o is None:
+        raise HTTPException(404, "Line not found")
+    _edit(db, ctx, o.report_id)
+    db.delete(o)
+
+
 # ---------------- stops and sheet breaks
 class PartIn(BaseModel):
     discipline_id: uuid.UUID
@@ -702,7 +813,9 @@ class PartIn(BaseModel):
 class StopIn(In):
     started_at: datetime
     ended_at: datetime | None = None
-    event_type: Literal["breakdown", "sheet_break", "planned", "other"]
+    # the loss category decides how the stop is recorded; event_type is kept for profiles that record it directly
+    event_type: Literal["breakdown", "sheet_break", "planned", "other"] | None = None
+    loss_category_id: uuid.UUID | None = None
     section_id: uuid.UUID | None = None
     reason: str | None = Field(None, max_length=2000)
     production_loss_tons: float | None = Field(None, ge=0, le=10000)
@@ -723,7 +836,17 @@ def _stop_values(db: Session, ctx: Ctx, m: OpMachine, body: StopIn) -> tuple[dic
         if sec is None or sec.machine_id != m.id:
             raise HTTPException(422, "Unknown section for this machine")
         asset_id = sec.asset_id or m.asset_id
-    dur = svc._hours(start, end) if end else None
+    cat = None
+    if body.loss_category_id:
+        cat = db.get(OpLossCategory, body.loss_category_id)
+        if cat is None or cat.plant_id != ctx.plant_id or not cat.is_active:
+            raise HTTPException(422, "Unknown loss category")
+    event_type = body.event_type or (cat.event_type if cat else "other")
+    if cat is None and body.event_type:
+        cat = default_category(db, ctx.plant_id, body.event_type)
+    if cat is None and m.report_profile != "paper_machine":
+        raise HTTPException(422, "Choose the loss category of the stop")
+    dur = _hours(start, end) if end else None
     parts: list[tuple[OpDiscipline, float]] = []
     if len({p.discipline_id for p in body.parts}) != len(body.parts):
         raise HTTPException(422, "A discipline is listed twice")
@@ -739,14 +862,20 @@ def _stop_values(db: Session, ctx: Ctx, m: OpMachine, body: StopIn) -> tuple[dic
         parts.append((d, h))
     if dur is not None and parts and abs(sum(h for _, h in parts) - dur) > svc.TOL_H:
         raise HTTPException(422, f"The disciplines' hours ({sum(h for _, h in parts):.2f}) must add up to the stop ({dur:.2f} h)")
-    if body.event_type in ("breakdown", "sheet_break") and not parts:
-        raise HTTPException(422, "Choose who is responsible (discipline)")
-    failure, planned = svc.classify(body.event_type, [d for d, _ in parts])
+    if (event_type in ("breakdown", "sheet_break") or (cat and cat.failure)) and not parts:
+        if cat and cat.discipline_id and dur is not None:  # the category names who is responsible
+            d = db.get(OpDiscipline, cat.discipline_id)
+            if d is not None:
+                parts.append((d, dur))
+        if not parts:
+            raise HTTPException(422, "Choose who is responsible (discipline)")
+    failure, planned = svc.classify(event_type, [d for d, _ in parts], cat)
     vals = {
         "asset_id": asset_id,
         "started_at": start,
         "ended_at": end,
-        "event_type": body.event_type,
+        "event_type": event_type,
+        "loss_category_id": cat.id if cat else None,
         "section_id": body.section_id,
         "reason": body.reason,
         "production_loss_tons": body.production_loss_tons,
@@ -866,10 +995,10 @@ def _day_over(db: Session, ctx: Ctx, r: OpDailyReport) -> None:
 
 
 def _need_content(db: Session, r: OpDailyReport) -> None:
-    has_runs = db.execute(select(func.count()).select_from(OpRunSegment).where(OpRunSegment.report_id == r.id)).scalar_one()
-    has_stops = db.execute(select(func.count()).select_from(DowntimeEvent).where(DowntimeEvent.op_report_id == r.id)).scalar_one()
-    if not has_runs and not has_stops:
-        raise DomainError("Enter the machine's runs (or the stops of a day without production) first", "empty", 422)
+    m = db.get(OpMachine, r.machine_id)
+    assert m is not None
+    if not svc.has_content(db, r, m):
+        raise DomainError("Enter the line's production (or the stops of a day without production) first", "empty", 422)
 
 
 @router.post("/reports/{rid}/submit")
@@ -906,7 +1035,7 @@ def confirm(rid: uuid.UUID, ctx: Ctx = Depends(require("op.confirm")), db: Sessi
     svc.write_production_record(db, r, ctx.plant, calc)
     audit(
         db, "op.report.confirm", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="op_report", entity_id=r.id,
-        data={"machine": m.code, "date": r.report_date.isoformat(), "revision": r.revision, "gross": calc["day"]["gross"],
+        data={"machine": m.code, "date": r.report_date.isoformat(), "revision": r.revision, "produced": calc["measures"]["produced"],
               "oee": calc["oee"]["oee"]},
     )  # fmt: skip
     return {"status": r.status.value}

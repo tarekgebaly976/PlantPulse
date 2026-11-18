@@ -1,10 +1,12 @@
-"""Operations daily logs: utilities daily generation and electricity report, stock preparation shift report, and any
-other configured daily / per-shift form.
+"""Daily log forms (the configurable data collection of the production module): any daily or per-shift form of an
+area or line — utilities, process parameters, checklists, quality measurements, consumption …
 
 Values: a meter or counter line is entered as opening and closing reading (the opening is taken from the previous
-log's closing) and its value is the difference; number, check and text lines are entered; calc lines are worked out
-from a formula over other lines' codes. Out-of-range values are flagged. Daily totals feed the production dashboard
-(also per tonne of paper, using the paper machine's net production of the same day)."""
+log's closing) and its value is the difference; number, check (yes / no) and text lines are entered; select / multi
+lines pick from the line's options (status, checklist); datetime, product and ref (batch / order reference) lines are
+stored as text; calc lines are worked out from a formula over other lines' codes. Out-of-range values are flagged,
+required lines must be filled to submit. Daily figures feed KPIs, alert rules, insights and the production dashboard
+(also per unit of the line's output, e.g. per tonne or per piece)."""
 
 import ast
 import operator
@@ -19,7 +21,8 @@ from sqlalchemy.orm import Session
 from app.models.operations import OpLog, OpLogField, OpLogTemplate, OpLogValue
 from app.models.tenancy import Plant
 
-KINDS = ("meter", "counter", "number", "check", "text", "calc")
+KINDS = ("meter", "counter", "number", "check", "text", "calc", "select", "multi", "datetime", "product", "ref")
+TEXT_KINDS = ("text", "select", "multi", "datetime", "product", "ref")
 READING_KINDS = ("meter", "counter")
 NUMERIC_KINDS = ("meter", "counter", "number", "check", "calc")
 
@@ -169,6 +172,8 @@ def compute(fields: list[OpLogField], values: dict[uuid.UUID, OpLogValue]) -> tu
         out[str(fl.id)]["flag"] = flag
         if flag:
             warnings.append({"code": f"value_{flag}", "item": fl.label})
+        if fl.target is not None and val is not None:
+            out[str(fl.id)]["target"] = float(fl.target)
     return out, warnings
 
 
@@ -199,7 +204,7 @@ def daily_series(db: Session, t: OpLogTemplate, d0: date, d1: date) -> dict[str,
         calc, _ = compute(fields, vals[lg.id])
         for fl in fields:
             v = calc[str(fl.id)]["value"]
-            if v is None or fl.kind == "text":
+            if v is None or fl.kind in TEXT_KINDS:
                 continue
             acc.setdefault(str(fl.id), {}).setdefault(lg.log_date.isoformat(), []).append(v)
     out: dict[str, dict[str, float]] = {}
@@ -210,16 +215,38 @@ def daily_series(db: Session, t: OpLogTemplate, d0: date, d1: date) -> dict[str,
     return out
 
 
-def report_sections(db: Session, plant: Plant, d: date, dept_ok) -> list[dict]:
-    """Log forms shown inside the paper machine's daily report (in_pm_report), for production day d: each shift's
-    log (id, status) and, per line, the shifts' values and the day figure (sum; numbers and % averaged)."""
+def missing_required(fields: list[OpLogField], values: dict[uuid.UUID, OpLogValue]) -> list[str]:
+    """Labels of required lines with nothing entered (calc lines are never required)."""
+    out = []
+    for fl in fields:
+        if not fl.required or not fl.is_active or fl.kind == "calc":
+            continue
+        v = values.get(fl.id)
+        filled = v is not None and (
+            (fl.kind in READING_KINDS and v.closing is not None)
+            or (fl.kind in ("number", "check") and v.value is not None)
+            or (fl.kind in TEXT_KINDS and bool((v.text or "").strip()))
+        )
+        if not filled:
+            out.append(fl.label)
+    return out
+
+
+def _for_line(t: OpLogTemplate, machine_id: uuid.UUID | None) -> bool:
+    return machine_id is None or t.machine_id is None or t.machine_id == machine_id
+
+
+def report_sections(db: Session, plant: Plant, d: date, dept_ok, machine_id: uuid.UUID | None = None) -> list[dict]:
+    """Log forms shown inside a line's daily production report (in_pm_report; forms of other lines left out), for
+    production day d: each shift's log (id, status) and, per line, the shifts' values and the day figure (sum;
+    numbers and % averaged)."""
     out = []
     templates = db.execute(
         select(OpLogTemplate).where(OpLogTemplate.plant_id == plant.id, OpLogTemplate.in_pm_report.is_(True), OpLogTemplate.is_active.is_(True))
         .order_by(OpLogTemplate.sort)
     ).scalars()  # fmt: skip
     for t in templates:
-        if not dept_ok(t.department_id):
+        if not dept_ok(t.department_id) or not _for_line(t, machine_id):
             continue
         fields = [x for x in fields_of(db, t.id, active_only=True)]
         logs = {lg.shift: lg for lg in db.execute(select(OpLog).where(OpLog.template_id == t.id, OpLog.log_date == d)).scalars()}
@@ -233,11 +260,11 @@ def report_sections(db: Session, plant: Plant, d: date, dept_ok) -> list[dict]:
             warn_n[sh] = len(warns)
         lines = []
         for fl in fields:
-            by_shift = {sh: (per[sh][str(fl.id)]["value"] if fl.kind != "text" else per[sh][str(fl.id)]["text"]) for sh in per}
+            by_shift = {sh: (per[sh][str(fl.id)]["value"] if fl.kind not in TEXT_KINDS else per[sh][str(fl.id)]["text"]) for sh in per}
             flags = {sh: per[sh][str(fl.id)]["flag"] for sh in per}
             nums = [v for v in by_shift.values() if isinstance(v, (int, float))]
             day = None
-            if nums and fl.kind not in ("text", "check"):
+            if nums and fl.kind not in (*TEXT_KINDS, "check"):
                 avg = averaged(fl)
                 day = round(sum(nums) / len(nums) if avg else sum(nums), 4)
             lines.append({"id": str(fl.id), "section": fl.section, "label": fl.label, "kind": fl.kind, "unit": fl.unit, "decimals": fl.decimals,
@@ -251,15 +278,15 @@ def report_sections(db: Session, plant: Plant, d: date, dept_ok) -> list[dict]:
     return out
 
 
-def report_utilities(db: Session, plant: Plant, d: date, net_t: float, dept_ok) -> list[dict]:
-    """The day's figures of the daily log forms that are not part of the PM report (e.g. the utilities daily report)
-    shown read-only in the PM & SP daily report: their "per tonne" lines, with the value per tonne of net paper."""
+def report_utilities(db: Session, plant: Plant, d: date, net_t: float, dept_ok, machine_id: uuid.UUID | None = None) -> list[dict]:
+    """The day's figures of the daily log forms that are not part of the production report (e.g. utilities) shown
+    read-only in a line's daily report: their "per unit" lines, with the value per unit of the line's net output."""
     out = []
     for t in db.execute(
         select(OpLogTemplate).where(OpLogTemplate.plant_id == plant.id, OpLogTemplate.in_pm_report.is_(False), OpLogTemplate.is_active.is_(True))
         .order_by(OpLogTemplate.sort)
     ).scalars():  # fmt: skip
-        if not dept_ok(t.department_id):
+        if not dept_ok(t.department_id) or not _for_line(t, machine_id):
             continue
         all_fields = fields_of(db, t.id)
         fields = [x for x in all_fields if x.per_ton and x.is_active]

@@ -91,6 +91,16 @@ def job_kpi_snapshot(db: Session, plant: Plant) -> dict:
     return {"current": snapshot_month(db, plant, today.year, today.month), "previous": snapshot_month(db, plant, last.year, last.month)}
 
 
+def job_production_alerts(db: Session, plant: Plant) -> dict:
+    """Production module: check the plant's alert rules on the last complete production day (and escalate)."""
+    from app.core.config import get_settings
+    from app.services.production import alerts
+
+    if not get_settings().operations_module:
+        return {"skipped": "module off"}
+    return alerts.evaluate(db, plant)
+
+
 def job_housekeeping(db: Session, _: Plant) -> dict:
     now = utcnow()
     s = db.execute(delete(UserSession).where(UserSession.expires_at < now - timedelta(days=30)))
@@ -112,6 +122,8 @@ def main() -> None:
     sched.add_job(run_job, "cron", hour=0, minute=17, args=["kpi_snapshot", job_kpi_snapshot], id="kpi_snapshot")
     # RCA reminders (overdue analyses / actions) and effectiveness checks: early morning in the Gulf (UTC+3/+4).
     sched.add_job(run_job, "cron", hour=3, minute=41, args=["rca", job_rca], id="rca")
+    # Production alert rules: every 3 hours (each check looks at the last complete production day; escalations follow time)
+    sched.add_job(run_job, "interval", hours=3, args=["production_alerts", job_production_alerts], id="production_alerts")
     sched.add_job(run_job, "cron", hour=1, minute=7, args=["housekeeping", job_housekeeping, False], id="housekeeping")
     signal.signal(signal.SIGTERM, lambda *_: sched.shutdown(wait=False))
     log.info("worker started")

@@ -1,10 +1,16 @@
-"""Operations module: the paper machine's daily production report (as on a typical paper-mill daily form).
+"""Production (operations) module: production lines and their daily production reports, daily log forms.
 
-Settings: machines (each one a production-line asset), grades with their ideal production rate, responsible
-disciplines, machine sections and quality defects. A daily report (production day, e.g. 07:00 to 07:00) holds the
-run segments (grade, speed, ideal tonnes), the reels, the stops and sheet breaks (rows of downtime_events with source
-"operations", so maintenance KPIs use the same facts) split by responsible discipline, and the quality losses.
-Totals, OEE and to-date figures are calculated (app.services.operations), never typed."""
+Industry-independent core: a production line (table op_machines, each one a production-line asset) has a production
+model (continuous, batch, discrete), an output unit and a report profile. Responsible disciplines, line sections,
+quality defects, stops (rows of downtime_events with source "operations", so maintenance KPIs use the same facts) and
+quality losses are shared by every profile; loss categories, products, KPIs, alert rules and actions are in
+app.models.production.
+
+Report profiles:
+* "generic": output lines (product, batch / order reference, produced, reject, downgrade quantities, run time);
+* "paper_machine": the paper mill configuration (grades with GSM and ideal rate, run segments, jumbo reels, sheet
+  breaks) — paper-specific tables below are used by this profile only (app.services.production.paper).
+Totals and KPIs are calculated (app.services.production), never typed."""
 
 import uuid
 from datetime import date, datetime, time
@@ -26,14 +32,18 @@ class OpMachine(Base, PlantScoped, Timestamped):
     name: Mapped[str] = mapped_column(String(120))
     department_id: Mapped[uuid.UUID] = fk("departments.id")
     asset_id: Mapped[uuid.UUID] = fk("assets.id", index=False)  # the production line: stops are downtime of this asset
-    trim_width_m: Mapped[Decimal | None] = mapped_column(Numeric(6, 3))  # helps work out ideal rates (gsm × speed × width)
+    # continuous | batch | discrete: how the line's output is counted (informational, shapes the generic report form)
+    production_model: Mapped[str] = mapped_column(String(12), default="continuous", server_default="continuous")
+    output_unit: Mapped[str] = mapped_column(String(12), default="t", server_default="t")  # t, kg, m³, pcs, batch …
+    report_profile: Mapped[str] = mapped_column(String(20), default="generic", server_default="generic")  # generic | paper_machine
+    trim_width_m: Mapped[Decimal | None] = mapped_column(Numeric(6, 3))  # paper profile: ideal rates (gsm × speed × width)
     day_start: Mapped[time] = mapped_column(Time, default=time(7, 0))  # production day starts (and ends next day) here
     shifts: Mapped[list] = mapped_column(JSONB, default=list)  # [{"code": "D", "name": "Day shift", "start": "07:00"}, ...]
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class OpGrade(Base, PlantScoped, Timestamped):
-    """A product grade of a machine with its target speed and ideal production rate (the mill's "Rate" table).
+    """Paper profile only. A product grade of a machine with its target speed and ideal production rate (the mill's "Rate" table).
     Run segments copy the rate, so changing it later never changes old reports."""
 
     __tablename__ = "op_grades"
@@ -94,6 +104,7 @@ class OpDailyReport(Base, PlantScoped, Timestamped, Attributed):
     revision: Mapped[int] = mapped_column(Integer, default=1)
     supervisors: Mapped[dict] = mapped_column(JSONB, default=dict)  # {"D": "name", "N": "name"}
     notes: Mapped[str | None] = mapped_column(Text)
+    # paper profile only (the generic profile records consumption in daily log forms)
     steam_mt: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     water_pm_m3: Mapped[Decimal | None] = mapped_column(Numeric(10, 1))
     water_sp_m3: Mapped[Decimal | None] = mapped_column(Numeric(10, 1))
@@ -107,7 +118,7 @@ class OpDailyReport(Base, PlantScoped, Timestamped, Attributed):
 
 
 class OpRunSegment(Base):
-    """A period the machine ran on one grade at one speed. Ideal tonnes = minutes × ideal MT/min (copied from the grade)."""
+    """Paper profile only. A period the machine ran on one grade at one speed. Ideal tonnes = minutes × ideal MT/min (copied from the grade)."""
 
     __tablename__ = "op_run_segments"
     __table_args__ = (CheckConstraint("ended_at > started_at", name="end_after_start"),)
@@ -125,7 +136,7 @@ class OpRunSegment(Base):
 
 
 class OpReel(Base):
-    """A jumbo reel. A-grade = net − B − S; trim = gross − net − reject."""
+    """Paper profile only. A jumbo reel. A-grade = net − B − S; trim = gross − net − reject."""
 
     __tablename__ = "op_reels"
     __table_args__ = (UniqueConstraint("report_id", "reel_no"),)
@@ -153,7 +164,7 @@ class OpStopPart(Base):
 
 
 class OpQualityLoss(Base):
-    """Why paper was rejected or downgraded (defect, quantity, where it went)."""
+    """Why output was rejected or downgraded (defect, quantity in the line's output unit, where it went)."""
 
     __tablename__ = "op_quality_losses"
     id: Mapped[uuid.UUID] = uuid_pk()
@@ -181,7 +192,9 @@ class OpLogTemplate(Base, PlantScoped, Timestamped):
     day_start: Mapped[time] = mapped_column(Time, default=time(7, 0))
     shifts: Mapped[list] = mapped_column(JSONB, default=list)  # [{"code": "D", "name": "Day shift", "start": "07:00"}]
     issues: Mapped[bool] = mapped_column(Boolean, default=False)  # show the department's open work requests / orders
-    # shown inside the paper machine's daily report (e.g. the stock preparation shift log): "PM & SP daily report"
+    # the production line the form belongs to (None: the area / plant); its "per unit" lines divide by this line's output
+    machine_id: Mapped[uuid.UUID | None] = fk("op_machines.id", nullable=True, ondelete="SET NULL", index=False)
+    # shown inside the daily production report (e.g. the paper mill's stock preparation shift log)
     in_pm_report: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     sort: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -189,8 +202,10 @@ class OpLogTemplate(Base, PlantScoped, Timestamped):
 
 class OpLogField(Base):
     """One line of a log form. kind: meter (opening/closing reading, value = difference), counter (running hours,
-    same, and the closing reading goes to the equipment's meter when the log is confirmed), number, check, text,
-    calc (formula over other fields' codes, e.g. "(RO1 + RO2) / RO_FEED * 100")."""
+    same, and the closing reading goes to the equipment's meter when the log is confirmed), number, check (yes / no),
+    text, calc (formula over other fields' codes, e.g. "(RO1 + RO2) / RO_FEED * 100"), select (one of `options`,
+    e.g. a status), multi (several of `options`, e.g. a checklist), datetime, product (one of the plant's products),
+    ref (batch, lot or production order reference). Number lines may have a target and low / high limits."""
 
     __tablename__ = "op_log_fields"
     __table_args__ = (UniqueConstraint("template_id", "code"),)
@@ -205,9 +220,12 @@ class OpLogField(Base):
     formula: Mapped[str | None] = mapped_column(String(400))
     low: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))  # outside low–high: flagged
     high: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    target: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    required: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")  # must be filled to submit
+    options: Mapped[list | None] = mapped_column(JSONB)  # choices of a select / multi line
     meter_id: Mapped[uuid.UUID | None] = fk("meters.id", nullable=True, ondelete="SET NULL", index=False)
     chart: Mapped[bool] = mapped_column(Boolean, default=False)  # shown on the production dashboard
-    per_ton: Mapped[bool] = mapped_column(Boolean, default=False)  # dashboard also shows it per tonne of paper
+    per_ton: Mapped[bool] = mapped_column(Boolean, default=False)  # also shown per unit of output (t, pcs …) of the line(s)
     # day figure of a per-shift log (and dashboard): "sum" (bales, tonnes), "avg" (levels, flows); None = automatic
     day_agg: Mapped[str | None] = mapped_column(String(8))
     sort: Mapped[int] = mapped_column(Integer, default=0)

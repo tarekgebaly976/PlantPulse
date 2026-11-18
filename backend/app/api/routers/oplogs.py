@@ -1,6 +1,7 @@
-"""Operations daily logs (utilities daily generation and electricity, stock preparation shift report …) and the
-production dashboard. Part of the Operations module: present only when CMMS_OPERATIONS_MODULE is on."""
-
+"""Daily log forms (configurable data collection of any area or line: utilities, process parameters, checklists,
+quality measurements …) and the production dashboard. Part of the production module: present only when
+CMMS_OPERATIONS_MODULE is on."""
+import json
 import uuid
 from datetime import date, time, timedelta
 from decimal import Decimal
@@ -19,13 +20,17 @@ from app.models.assets import Asset, Meter
 from app.models.enums import OPEN_WO_STATUSES, OpReportStatus, RequestStatus
 from app.models.identity import User
 from app.models.operations import OpDailyReport, OpDiscipline, OpLog, OpLogField, OpLogTemplate, OpLogValue, OpMachine
+from app.models.production import OpLossCategory, OpProduct
 from app.models.tenancy import Department
 from app.models.workorders import WorkOrder, WorkRequest
 from app.schemas.common import In
-from app.services import operations as ops
 from app.services import oplogs as svc
 from app.services.common import audit, plant_today, utcnow
 from app.services.pm import record_meter_reading
+from app.services.production import kpis as kp
+from app.services.production import reports as ops
+from app.services.production.measures import STANDARD
+from app.services.production.stops import discipline_hours, parts_of, stops_of
 
 router = APIRouter(prefix="/operations", tags=["operations"])
 DB = Depends(get_db, scope="function")
@@ -58,6 +63,7 @@ class TemplateIn(In):
     day_start: time = time(7, 0)
     shifts: list[ShiftIn] = Field(default_factory=list, max_length=4)
     issues: bool = False
+    machine_id: uuid.UUID | None = None  # the production line the form belongs to
     in_pm_report: bool = False
     sort: int = Field(0, ge=0, le=999)
     is_active: bool = True
@@ -74,12 +80,15 @@ class FieldIn(In):
     section: str = Field(min_length=1, max_length=80)
     code: str = Field(min_length=1, max_length=40, pattern=CODE)
     label: str = Field(min_length=1, max_length=160)
-    kind: Literal["meter", "counter", "number", "check", "text", "calc"]
+    kind: Literal["meter", "counter", "number", "check", "text", "calc", "select", "multi", "datetime", "product", "ref"]
     unit: str | None = Field(None, max_length=20)
     decimals: int = Field(1, ge=0, le=4)
     formula: str | None = Field(None, max_length=400)
     low: float | None = None
     high: float | None = None
+    target: float | None = None
+    required: bool = False
+    options: list[str] | None = Field(None, max_length=60)
     meter_id: uuid.UUID | None = None
     chart: bool = False
     per_ton: bool = False
@@ -91,7 +100,7 @@ class FieldIn(In):
 def template_out(t: OpLogTemplate, fields: list[OpLogField] | None = None) -> dict:
     out = {
         "id": str(t.id), "code": t.code, "name": t.name, "department_id": str(t.department_id), "frequency": t.frequency,
-        "day_start": t.day_start.strftime("%H:%M"), "shifts": t.shifts, "issues": t.issues, "in_pm_report": t.in_pm_report, "sort": t.sort, "is_active": t.is_active,
+        "day_start": t.day_start.strftime("%H:%M"), "shifts": t.shifts, "issues": t.issues, "machine_id": str(t.machine_id) if t.machine_id else None, "in_pm_report": t.in_pm_report, "sort": t.sort, "is_active": t.is_active,
     }  # fmt: skip
     if fields is not None:
         out["fields"] = [field_out(x) for x in fields]
@@ -101,7 +110,7 @@ def template_out(t: OpLogTemplate, fields: list[OpLogField] | None = None) -> di
 def field_out(x: OpLogField) -> dict:
     return {
         "id": str(x.id), "section": x.section, "code": x.code, "label": x.label, "kind": x.kind, "unit": x.unit, "decimals": x.decimals,
-        "formula": x.formula, "low": _num(x.low), "high": _num(x.high), "meter_id": str(x.meter_id) if x.meter_id else None,
+        "formula": x.formula, "low": _num(x.low), "high": _num(x.high), "target": _num(x.target), "required": x.required, "options": x.options, "meter_id": str(x.meter_id) if x.meter_id else None,
         "chart": x.chart, "per_ton": x.per_ton, "day_agg": x.day_agg, "sort": x.sort, "is_active": x.is_active,
     }  # fmt: skip
 
@@ -119,6 +128,10 @@ def _check_template(db: Session, ctx: Ctx, body: TemplateIn) -> None:
         raise HTTPException(422, "Unknown department")
     if body.frequency == "shift" and not body.shifts:
         raise HTTPException(422, "A per-shift log needs its shifts")
+    if body.machine_id:
+        m = db.get(OpMachine, body.machine_id)
+        if m is None or m.plant_id != ctx.plant_id:
+            raise HTTPException(422, "Unknown production line")
 
 
 @router.get("/log-templates")
@@ -150,6 +163,15 @@ def update_template(tid: uuid.UUID, body: TemplateIn, ctx: Ctx = Depends(require
 
 
 def _check_field(db: Session, ctx: Ctx, t: OpLogTemplate, body: FieldIn, own: uuid.UUID | None) -> None:
+    if body.code in STANDARD:
+        raise HTTPException(422, f"{body.code} is a standard production measure; choose another code")
+    if body.kind in ("select", "multi"):
+        opts = [o.strip() for o in body.options or [] if o and o.strip()]
+        if len(opts) < 2 or len(set(opts)) != len(opts):
+            raise HTTPException(422, "Give at least two different options")
+        body.options = [o[:80] for o in opts]
+    else:
+        body.options = None
     if body.kind == "calc":
         if not body.formula:
             raise HTTPException(422, "A calculated line needs a formula")
@@ -400,7 +422,18 @@ def save_values(lid: uuid.UUID, body: ValuesIn, ctx: Ctx = Depends(require("op.v
         if fl.kind in svc.READING_KINDS:
             row.opening = Decimal(str(v.opening)) if v.opening is not None else None
             row.closing = Decimal(str(v.closing)) if v.closing is not None else None
-        elif fl.kind == "text":
+        elif fl.kind in ("select", "multi"):
+            txt = (v.text or "").strip()
+            picked = [x for x in (json.loads(txt) if fl.kind == "multi" and txt.startswith("[") else [txt]) if x] if txt else []
+            if any(x not in (fl.options or []) for x in picked):
+                raise HTTPException(422, f"{fl.label}: not one of the options")
+            row.text = (json.dumps(picked) if fl.kind == "multi" else picked[0]) if picked else None
+        elif fl.kind == "product" and (v.text or "").strip():
+            p = db.execute(select(OpProduct).where(OpProduct.plant_id == ctx.plant_id, OpProduct.code == v.text.strip())).scalar_one_or_none()
+            if p is None:
+                raise HTTPException(422, f"{fl.label}: unknown product")
+            row.text = p.code
+        elif fl.kind in svc.TEXT_KINDS:
             row.text = (v.text or "").strip() or None
         elif fl.kind == "check":
             row.value = Decimal(1 if v.value else 0) if v.value is not None else None
@@ -416,6 +449,12 @@ class NoteIn(In):
     note: str = Field(min_length=3, max_length=1000)
 
 
+def _required(db: Session, t: OpLogTemplate, lg: OpLog) -> None:
+    missing = svc.missing_required(svc.fields_of(db, t.id), svc.values_of(db, [lg.id])[lg.id])
+    if missing:
+        raise DomainError("Fill the required lines first: " + ", ".join(missing[:8]), "required", 422)
+
+
 @router.post("/logs/{lid}/submit")
 def submit_log(lid: uuid.UUID, ctx: Ctx = Depends(require("op.enter")), db: Session = DB) -> dict:
     lg, t = _log(db, ctx, lid, lock=True)
@@ -423,6 +462,7 @@ def submit_log(lid: uuid.UUID, ctx: Ctx = Depends(require("op.enter")), db: Sess
         raise DomainError("Only a draft log can be submitted", "not_draft", 409)
     if not _over(ctx, t, lg):
         raise DomainError("The day / shift is not over yet", "in_progress", 422)
+    _required(db, t, lg)
     lg.status, lg.submitted_by_id, lg.submitted_at = OpReportStatus.SUBMITTED, ctx.user.id, utcnow()
     return {"status": lg.status.value}
 
@@ -434,6 +474,7 @@ def confirm_log(lid: uuid.UUID, ctx: Ctx = Depends(require("op.confirm")), db: S
         raise DomainError("The log is already confirmed", "confirmed", 409)
     if not _over(ctx, t, lg):
         raise DomainError("The day / shift is not over yet", "in_progress", 422)
+    _required(db, t, lg)
     _, end = svc.window_of(t, ctx.plant, lg.log_date, lg.shift)
     vals = svc.values_of(db, [lg.id])[lg.id]
     updated = []
@@ -483,7 +524,11 @@ def dashboard(
     ctx: Ctx = Depends(require("op.view")),
     db: Session = DB,
 ) -> dict:
-    """Production, losses and utilities of the last `days` production days, ending with the day in progress."""
+    """Production, losses, KPIs and log lines of a line for the last `days` production days, ending with the day in
+    progress. Any report profile: the production rows are the standard measures (gross = produced, a = good,
+    b = downgrade); profile extras (e.g. the paper mill's sheet breaks) are present only when the profile has them."""
+    from app.services.production import paper
+
     machines = [
         m
         for m in db.execute(select(OpMachine).where(OpMachine.plant_id == ctx.plant_id).order_by(OpMachine.code)).scalars()
@@ -497,40 +542,49 @@ def dashboard(
     net_by_day: dict[str, float] = {}
     period = None
     disc_names = {d.id: d.code for d in db.execute(select(OpDiscipline).where(OpDiscipline.plant_id == ctx.plant_id)).scalars()}
+
+    def named(x: dict) -> dict:
+        return {disc_names.get(uuid.UUID(k), k) if k != "none" else "—": v for k, v in x.items()}
+
     if m is not None:
         reports = list(
             db.execute(select(OpDailyReport).where(OpDailyReport.machine_id == m.id, OpDailyReport.report_date >= d0, OpDailyReport.report_date <= d1)
                        .order_by(OpDailyReport.report_date)).scalars()
         )  # fmt: skip
+        by_cat: dict[str, float] = {}
         for r in reports:
-            c = ops.compute(db, r, ctx.plant)
-            net_by_day[r.report_date.isoformat()] = c["day"]["net"]
+            c = ops.compute(db, r, ctx.plant, to_date=False)
+            ms = c["measures"]
+            net_by_day[r.report_date.isoformat()] = ms["net"] or 0.0
             prod.append({
-                "date": r.report_date.isoformat(), "status": r.status.value, "in_progress": c["in_progress"], "gross": c["day"]["gross"],
-                "net": c["day"]["net"], "a": c["day"]["a"], "reject": c["day"]["reject"], "b": c["day"]["b"] + c["day"]["s"],
-                "trim": c["day"]["trim"], "run_hours": c["run_hours"], "oee": c["oee"]["oee"], "availability": c["oee"]["availability"],
-                "performance": c["oee"]["performance"], "quality": c["oee"]["quality"], "breaks": c["stops"]["breaks_count"],
-                "breaks_hours": c["stops"]["breaks_hours"], "downtime_hours": c["stops"]["downtime_hours"],
+                "date": r.report_date.isoformat(), "status": r.status.value, "in_progress": c["in_progress"], "gross": ms["produced"],
+                "net": ms["net"], "a": ms["good"], "reject": ms["reject"], "b": ms["downgrade"], "trim": ms.get("trim"), "run_hours": ms["run_hours"],
+                "oee": c["oee"]["oee"], "availability": c["oee"]["availability"], "performance": c["oee"]["performance"], "quality": c["oee"]["quality"],
+                "breaks": ms.get("breaks"), "breaks_hours": ms.get("breaks_hours"), "downtime_hours": ms["downtime_hours"],
             })  # fmt: skip
+            if not c["in_progress"]:
+                for code, h in c["loss_categories"]["hours_by_code"].items():
+                    by_cat[code] = round(by_cat.get(code, 0.0) + h, 3)
         if reports:
-            p = ops._period_totals(db, m, d0, d1)
-            p["stops"]["downtime_by_discipline"] = {
-                disc_names.get(uuid.UUID(k), k) if k != "none" else "—": v for k, v in p["stops"]["downtime_by_discipline"].items()
-            }
-            p["stops"]["breaks_count_by_discipline"] = {
-                disc_names.get(uuid.UUID(k), k) if k != "none" else "—": v for k, v in p["stops"]["breaks_count_by_discipline"].items()
-            }
-            p["stops"]["breaks_hours_by_discipline"] = {
-                disc_names.get(uuid.UUID(k), k) if k != "none" else "—": v for k, v in p["stops"]["breaks_hours_by_discipline"].items()
-            }
+            cat_names = {x.code: x.name for x in db.execute(select(OpLossCategory).where(OpLossCategory.plant_id == ctx.plant_id)).scalars()}
+            parents = {x.code for x in db.execute(select(OpLossCategory).where(OpLossCategory.plant_id == ctx.plant_id, OpLossCategory.parent_id.is_(None))).scalars()}
+            loss = {cat_names.get(k, "—"): v for k, v in sorted(by_cat.items(), key=lambda kv: -kv[1]) if k in parents or k == "none"}
+            if m.report_profile == "paper_machine":
+                p = paper._period_totals(db, m, d0, d1)
+                for k in ("downtime_by_discipline", "breaks_count_by_discipline", "breaks_hours_by_discipline"):
+                    p["stops"][k] = named(p["stops"][k])
+            else:
+                evs = stops_of(db, [r.id for r in reports])
+                p = {"stops": {"downtime_by_discipline": named(discipline_hours(evs, parts_of(db, [e.id for e in evs])))}}
+            p["loss_by_category"] = loss
             period = p
     logs = []
     for t in db.execute(
         select(OpLogTemplate).where(OpLogTemplate.plant_id == ctx.plant_id, OpLogTemplate.is_active.is_(True)).order_by(OpLogTemplate.sort)
     ).scalars():
-        if not ctx.dept_ok(t.department_id):
+        if not ctx.dept_ok(t.department_id) or (m is not None and t.machine_id not in (None, m.id)):
             continue
-        fields = [x for x in svc.fields_of(db, t.id, active_only=True) if x.chart and x.kind != "text"]
+        fields = [x for x in svc.fields_of(db, t.id, active_only=True) if x.chart and x.kind in svc.NUMERIC_KINDS]
         if not fields:
             continue
         series = svc.daily_series(db, t, d0, d1)
@@ -544,7 +598,10 @@ def dashboard(
             out_fields.append({**field_out(x), "series": s, "per_ton_series": per_ton, "total": total,
                                "per_ton_period": round(total / sum(net_by_day[d] for d in s if d in net_by_day), 4) if x.per_ton and total is not None and any(net_by_day.get(d) for d in s) else None})  # fmt: skip
         logs.append({"template": template_out(t), "fields": out_fields})
+    kpi_rows = [k for k in kp.plant_kpis(db, ctx.plant_id) if k.dashboard and (k.machine_id is None or (m is not None and k.machine_id == m.id))]
     return {
-        "start": d0.isoformat(), "end": d1.isoformat(), "machines": [{"id": str(x.id), "code": x.code, "name": x.name} for x in machines],
-        "machine_id": str(m.id) if m else None, "production": prod, "period": period, "logs": logs,
+        "start": d0.isoformat(), "end": d1.isoformat(),
+        "machines": [{"id": str(x.id), "code": x.code, "name": x.name, "profile": x.report_profile, "unit": x.output_unit} for x in machines],
+        "machine_id": str(m.id) if m else None, "profile": m.report_profile if m else None, "unit": m.output_unit if m else None,
+        "production": prod, "period": period, "logs": logs, "kpis": kp.evaluate(db, ctx.plant, kpi_rows, today, days=min(days, 60), line_id=m.id if m else None),
     }  # fmt: skip

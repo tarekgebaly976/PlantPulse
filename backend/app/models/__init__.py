@@ -8,6 +8,7 @@ from app.models import (  # noqa: F401
     operations,
     pdm,
     pm,
+    production,
     rca,
     shifts,
     shutdowns,

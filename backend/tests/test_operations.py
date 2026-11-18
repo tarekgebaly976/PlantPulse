@@ -34,6 +34,7 @@ def setup_mill(world: World) -> dict:
             "name": "Paper machine 1",
             "department_id": str(world.depts["PM"].id),
             "asset_id": line["id"],
+            "report_profile": "paper_machine",
             "trim_width_m": 3.2,
             "day_start": "07:00",
             "shifts": [{"code": "D", "name": "Day shift", "start": "07:00"}, {"code": "N", "name": "Night shift", "start": "19:00"}],

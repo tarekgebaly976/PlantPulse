@@ -1,4 +1,7 @@
-"""Operations module: calculations of the paper machine's daily production report (a typical paper-mill daily form).
+"""Paper mill configuration (report profile "paper_machine"): calculations of the paper machine's daily production
+report, as on a typical paper-mill daily form. Used only by lines whose report profile is paper_machine; the
+industry-independent engine (measures, KPIs, alerts, insights) never imports paper terms and reads this profile
+through `measures()` like any other.
 
 Everything the mill's Excel sheet calculates is calculated here from what was entered, never typed:
 
@@ -14,89 +17,29 @@ Everything the mill's Excel sheet calculates is calculated here from what was en
 
 import uuid
 from collections import defaultdict
-from datetime import date, datetime, time, timedelta
-from decimal import Decimal
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.assets import DowntimeEvent
-from app.models.enums import OpEventType, OpLossKind, OpReportStatus
+from app.models.enums import OpEventType, OpLossKind
 from app.models.operations import (
     OpDailyReport,
-    OpDiscipline,
     OpMachine,
     OpQualityLoss,
     OpReel,
     OpRunSegment,
     OpStopPart,
 )
-from app.models.system import ProductionRecord
 from app.models.tenancy import Plant
+from app.services.production.periods import DAY_HOURS, day_window, f, planned_hours, r3, r4, shift_windows
+from app.services.production.periods import hours as _hours
+from app.services.production.periods import overlap_h as _overlap_h
+from app.services.production.stops import loss_tables, parts_of, stops_of
 
-DAY_HOURS = 24.0
 TOL_MT = 0.01  # tonnes: differences below this are rounding
 TOL_H = 0.02  # hours
-
-
-def f(v: Decimal | float | int | None) -> float:
-    return float(v) if v is not None else 0.0
-
-
-def r3(v: float) -> float:
-    return round(v, 3)
-
-
-def r4(v: float | None) -> float | None:
-    return None if v is None else round(v, 4)
-
-
-def day_window(machine: OpMachine, plant: Plant, d: date) -> tuple[datetime, datetime]:
-    """Production day `d` runs from the machine's day start on d to the same time on d + 1 (plant time zone)."""
-    tz = ZoneInfo(plant.timezone)
-    start = datetime.combine(d, machine.day_start or time(7, 0), tzinfo=tz)
-    return start, start + timedelta(days=1)
-
-
-def shift_windows(machine: OpMachine, plant: Plant, d: date) -> list[tuple[str, str, datetime, datetime]]:
-    """[(code, name, start, end)] of the machine's shifts in production day d (each ends where the next starts)."""
-    t0, t1 = day_window(machine, plant, d)
-    shifts = machine.shifts or [
-        {"code": "D", "name": "Day shift", "start": "07:00"},
-        {"code": "N", "name": "Night shift", "start": "19:00"},
-    ]
-    starts = []
-    for s in shifts:
-        hh, mm = (int(x) for x in str(s.get("start", "07:00")).split(":")[:2])
-        st = datetime.combine(d, time(hh, mm), tzinfo=t0.tzinfo)
-        if st < t0:
-            st += timedelta(days=1)
-        starts.append((st, str(s["code"]), str(s.get("name") or s["code"])))
-    starts.sort()
-    out = []
-    for i, (st, code, name) in enumerate(starts):
-        end = starts[i + 1][0] if i + 1 < len(starts) else t1
-        out.append((code, name, st, end))
-    return out
-
-
-def _overlap_h(a0: datetime, a1: datetime, b0: datetime, b1: datetime) -> float:
-    return max(0.0, (min(a1, b1) - max(a0, b0)).total_seconds() / 3600)
-
-
-def planned_hours(machine: OpMachine, plant: Plant, d: date, now: datetime | None = None) -> float:
-    """Hours of production day d that have passed: 24 for a finished day, the elapsed part for the day in progress
-    (so the OEE of today and of the month to date are fair while the day runs)."""
-    t0, t1 = day_window(machine, plant, d)
-    now = now or datetime.now(t0.tzinfo)
-    if now >= t1:
-        return DAY_HOURS
-    return max(0.0, min(DAY_HOURS, (now - t0).total_seconds() / 3600))
-
-
-def _hours(a: datetime, b: datetime | None) -> float:
-    return (b - a).total_seconds() / 3600 if b else 0.0
 
 
 # ---------------------------------------------------------------- production figures
@@ -133,22 +76,6 @@ def oee(run_h: float, planned_h: float, gross: float, ideal: float, a: float, ne
 
 
 # ---------------------------------------------------------------- stops
-def stops_of(db: Session, report_ids: list[uuid.UUID]) -> list[DowntimeEvent]:
-    if not report_ids:
-        return []
-    return list(
-        db.execute(select(DowntimeEvent).where(DowntimeEvent.op_report_id.in_(report_ids)).order_by(DowntimeEvent.started_at)).scalars()
-    )
-
-
-def parts_of(db: Session, event_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[OpStopPart]]:
-    out: dict[uuid.UUID, list[OpStopPart]] = defaultdict(list)
-    if event_ids:
-        for p in db.execute(select(OpStopPart).where(OpStopPart.downtime_event_id.in_(event_ids))).scalars():
-            out[p.downtime_event_id].append(p)
-    return out
-
-
 def stop_tables(events: list[DowntimeEvent], parts: dict[uuid.UUID, list[OpStopPart]]) -> dict:
     """Machine shutdown hours by discipline (+ planned) and sheet breaks (count, hours) by discipline."""
     down: dict[str, float] = defaultdict(float)
@@ -191,15 +118,6 @@ def stop_tables(events: list[DowntimeEvent], parts: dict[uuid.UUID, list[OpStopP
     }
 
 
-def classify(event_type: str, disciplines: list[OpDiscipline]) -> tuple[bool, bool]:
-    """(is_failure, is_planned) of a stop for the maintenance KPIs: a breakdown is an equipment failure when a
-    maintenance discipline (mechanical, electrical, instrumentation …) is responsible; sheet breaks and process
-    stops are not failures (they would wreck MTBF)."""
-    planned = event_type == OpEventType.PLANNED
-    failure = event_type == OpEventType.BREAKDOWN and any(d.maintenance for d in disciplines)
-    return failure, planned
-
-
 # ---------------------------------------------------------------- the report
 def _period_totals(db: Session, machine: OpMachine, d0: date, d1: date) -> dict:
     """Totals of a machine's reports from d0 to d1 (inclusive): production, run, ideal, OEE, stops, breaks."""
@@ -236,7 +154,7 @@ def _period_totals(db: Session, machine: OpMachine, d0: date, d1: date) -> dict:
     }
 
 
-def compute(db: Session, report: OpDailyReport, plant: Plant) -> dict:
+def compute(db: Session, report: OpDailyReport, plant: Plant, to_date: bool = True) -> dict:
     machine = db.get(OpMachine, report.machine_id)
     assert machine is not None
     t0, t1 = day_window(machine, plant, report.report_date)
@@ -336,17 +254,19 @@ def compute(db: Session, report: OpDailyReport, plant: Plant) -> dict:
 
     # to date
     d = report.report_date
-    mtd = _period_totals(db, machine, d.replace(day=1), d)
-    ytd = _period_totals(db, machine, d.replace(month=1, day=1), d)
+    mtd = _period_totals(db, machine, d.replace(day=1), d) if to_date else None
+    ytd = _period_totals(db, machine, d.replace(month=1, day=1), d) if to_date else None
     steam_per_t = f(report.steam_mt) / day_tot["net"] if report.steam_mt is not None and day_tot["net"] else None
-    return {
+    plan_h = planned_hours(machine, plant, report.report_date)
+    out = {
+        "profile": "paper_machine",
         "window": {"start": t0.isoformat(), "end": t1.isoformat()},
         "shifts": shifts,
         "day": day_tot,
         "segments": seg_rows,
         "run_hours": round(run_h, 3),
         "ideal_mt": r3(ideal),
-        "oee": oee(run_h, planned_hours(machine, plant, report.report_date), day_tot["gross"], ideal, day_tot["a"], day_tot["net"]),
+        "oee": oee(run_h, plan_h, day_tot["gross"], ideal, day_tot["a"], day_tot["net"]),
         "in_progress": datetime.now(t1.tzinfo) < t1,
         "gross_by_gsm": {k: r3(v) for k, v in sorted(by_gsm.items())},
         "stops": st,
@@ -355,38 +275,40 @@ def compute(db: Session, report: OpDailyReport, plant: Plant) -> dict:
         "mtd": mtd,
         "ytd": ytd,
         "warnings": warnings,
+        "loss_categories": loss_tables(db, events),
+    }
+    out["measures"] = measures(out, report, plan_h)
+    return out
+
+
+def measures(calc: dict, report: OpDailyReport, plan_h: float) -> dict[str, float | None]:
+    """The paper report in the standard production measures of the generic engine (app.services.production.measures):
+    produced = gross, good = A-grade, downgrade = B + S, reject, net, ideal tonnes; stop time includes sheet breaks.
+    Paper-only extras (breaks, trim, steam) keep their own names and are used only by the paper mill's KPIs."""
+    d, st, lc = calc["day"], calc["stops"], calc["loss_categories"]
+    return {
+        "planned_hours": plan_h,
+        "run_hours": calc["run_hours"],
+        "produced": d["gross"],
+        "good": d["a"],
+        "reject": d["reject"],
+        "downgrade": r3(d["b"] + d["s"]),
+        "net": d["net"],
+        "ideal": calc["ideal_mt"] if calc["ideal_mt"] else None,
+        "downtime_hours": r3(st["downtime_hours"] + st["breaks_hours"]),
+        "planned_downtime_hours": st["planned_hours"],
+        "unplanned_downtime_hours": r3(st["downtime_hours"] - st["planned_hours"] + st["breaks_hours"]),
+        "failure_hours": lc["failure_hours"],
+        "stops": lc["stops"],
+        "failures": lc["failures"],
+        "quality_loss": r3(calc["losses"]["reject"] + calc["losses"]["downgrade"]),
+        **{f"loss_{k}": v for k, v in lc["hours_by_code"].items()},
+        "breaks": st["breaks_count"],
+        "breaks_hours": st["breaks_hours"],
+        "trim": d["trim"],
+        "steam": f(report.steam_mt) if report.steam_mt is not None else None,
     }
 
 
-def write_production_record(db: Session, report: OpDailyReport, plant: Plant, calc: dict) -> None:
-    """Confirmed report → the day's production record of the machine, so OEE and cost per ton on the KPI pages use the
-    same figures as the report (planned 24 h, run hours, gross, A-grade, ideal and net tonnes)."""
-    machine = db.get(OpMachine, report.machine_id)
-    assert machine is not None
-    rec = db.execute(
-        select(ProductionRecord).where(
-            ProductionRecord.plant_id == plant.id,
-            ProductionRecord.department_id == machine.department_id,
-            ProductionRecord.asset_id == machine.asset_id,
-            ProductionRecord.record_date == report.report_date,
-        )
-    ).scalar_one_or_none()
-    if rec is None:
-        rec = ProductionRecord(
-            plant_id=plant.id, department_id=machine.department_id, asset_id=machine.asset_id, record_date=report.report_date
-        )
-        db.add(rec)
-    run_h = calc["run_hours"]
-    rec.tons_produced = Decimal(str(calc["day"]["gross"]))
-    rec.good_tons = Decimal(str(calc["day"]["a"]))
-    rec.net_tons = Decimal(str(calc["day"]["net"]))
-    rec.ideal_tons = Decimal(str(calc["ideal_mt"]))
-    rec.planned_production_hours = Decimal(str(round(calc["oee"]["planned_hours"], 2)))
-    rec.run_hours = Decimal(str(round(run_h, 2)))
-    rec.ideal_rate_tph = Decimal(str(round(calc["ideal_mt"] / run_h, 3))) if run_h else None
-    rec.created_by_id = report.confirmed_by_id
-    db.flush()
-
-
-def is_locked(report: OpDailyReport) -> bool:
-    return report.status == OpReportStatus.CONFIRMED
+# measures only this profile provides (besides the standard ones), for the KPI editor's list of codes
+EXTRA_MEASURES = {"breaks": "count", "breaks_hours": "h", "trim": "qty", "steam": "qty"}

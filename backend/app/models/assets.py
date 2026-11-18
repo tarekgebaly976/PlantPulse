@@ -139,4 +139,6 @@ class DowntimeEvent(Base, PlantScoped, Timestamped, Attributed):
     source: Mapped[str] = mapped_column(String(16), default="maintenance", server_default="maintenance")
     event_type: Mapped[str | None] = mapped_column(String(20))  # app.models.enums.OpEventType
     section_id: Mapped[uuid.UUID | None] = fk("op_sections.id", nullable=True, ondelete="SET NULL", index=False)
+    # production module: the configured loss category of the stop (app.models.production.OpLossCategory)
+    loss_category_id: Mapped[uuid.UUID | None] = fk("op_loss_categories.id", nullable=True, ondelete="SET NULL", index=False)
     op_report_id: Mapped[uuid.UUID | None] = fk("op_daily_reports.id", nullable=True, ondelete="CASCADE")
