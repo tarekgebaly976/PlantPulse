@@ -10,6 +10,7 @@ import { Modal } from "@/components/Modal";
 import { DeptSelect, Loading, PageHeader, Section } from "@/components/ui";
 import { post, put } from "@/lib/api";
 import { fmtNum, useMut, useQ } from "@/lib/hooks";
+import { useSession } from "@/lib/session";
 import { FEATURES, type AlertRule, type Condition, type KpiDef, type KpiVariable, type LossCategory, type OpConfig, type OpSettings, type Product, type SetupStatus } from "@/lib/ops";
 
 type Num = number | string;
@@ -187,6 +188,7 @@ function RuleModal({ form, kpis, vars, roles, lines, onClose }: { form: RForm | 
 
 function View() {
   const { t } = useTranslation();
+  const { can } = useSession();
   const st = useQ<SetupStatus>("/operations/setup");
   const settings = useQ<OpSettings>("/operations/settings");
   const products = useQ<Product[]>("/operations/products");
@@ -199,9 +201,9 @@ function View() {
   if (!st.data || !settings.data) return <Loading />;
   const c = st.data.counts;
   const lines = settings.data.machines;
-  const steps: { key: string; n: number | boolean; href: string }[] = [
+  const steps: { key: string; n: number | boolean; href: string | null }[] = [
     { key: "industry", n: !!st.data.config.industry, href: "#plant" },
-    { key: "areas", n: c.areas ?? 0, href: "/admin" },
+    { key: "areas", n: c.areas ?? 0, href: can("plant.admin") ? "/admin" : null }, // departments are managed by the plant administrator
     { key: "lines", n: c.lines ?? 0, href: "/operations/settings" },
     { key: "shifts", n: c.lines_with_shifts ?? 0, href: "/operations/settings" },
     { key: "products", n: c.products ?? 0, href: "#products" },
@@ -224,7 +226,7 @@ function View() {
             {steps.map((s) => (
               <Stepper.Step key={s.key} completedIcon={<IconCheck size={14} />} color={s.n ? "teal" : "gray"} icon={s.n ? <IconCheck size={14} /> : undefined}
                 label={<Group gap={6}><Text size="sm" fw={500}>{t(`setup.steps.${s.key}`)}</Text>{typeof s.n === "number" && <Badge size="xs" variant="light" color={s.n ? "teal" : "gray"}>{s.n}</Badge>}
-                  <Button size="compact-xs" variant="subtle" component={Link} href={s.href}>{t("setup.open")}</Button></Group>}
+                  {s.href && <Button size="compact-xs" variant="subtle" component={Link} href={s.href}>{t("setup.open")}</Button>}</Group>}
                 description={t(`setup.stepHint.${s.key}`)} />
             ))}
           </Stepper>
