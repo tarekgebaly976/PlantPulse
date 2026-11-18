@@ -214,6 +214,14 @@ function View() {
     { key: "alerts", n: c.alert_rules ?? 0, href: "#alerts" },
   ];
   const doneSteps = steps.filter((s) => !!s.n).length;
+  const num = (v: number | null) => (v === null ? "" : fmtNum(v, 2));
+  /** A rule's condition in words, e.g. "total above 10 in 7 days", "below 65 for 2 days in a row". */
+  const ruleText = (r: AlertRule) => ({
+    below: t("setup.rule.txt.below", { v: num(r.threshold), n: r.periods }), above: t("setup.rule.txt.above", { v: num(r.threshold), n: r.periods }),
+    outside: t("setup.rule.txt.outside", { lo: num(r.threshold) || "…", hi: num(r.threshold_high) || "…", n: r.periods }), kpi_limits: t("setup.rule.txt.kpi_limits", { n: r.periods }),
+    total_above: t("setup.rule.txt.total_above", { v: num(r.threshold), d: r.lookback_days }), trend_down: t("setup.rule.txt.trend_down", { v: num(r.threshold), d: r.lookback_days }),
+    trend_up: t("setup.rule.txt.trend_up", { v: num(r.threshold), d: r.lookback_days }), action_overdue: t("setup.rule.txt.action_overdue", { v: num(r.threshold) || "0" }),
+  } as Record<string, string>)[r.condition] ?? r.condition;
   const catName = (id: string | null) => cats.data?.find((x) => x.id === id)?.name;
   const lineCode = (id: string | null) => lines.find((m) => m.id === id)?.code;
   return (
@@ -225,7 +233,7 @@ function View() {
           <Stepper active={doneSteps} orientation="vertical" size="sm" allowNextStepsSelect={false}>
             {steps.map((s) => (
               <Stepper.Step key={s.key} completedIcon={<IconCheck size={14} />} color={s.n ? "teal" : "gray"} icon={s.n ? <IconCheck size={14} /> : undefined}
-                label={<Group gap={6}><Text size="sm" fw={500}>{t(`setup.steps.${s.key}`)}</Text>{typeof s.n === "number" && <Badge size="xs" variant="light" color={s.n ? "teal" : "gray"}>{s.n}</Badge>}
+                label={<Group gap={6}><Text size="sm" fw={500}>{t(`setup.steps.${s.key}`)}</Text>{typeof s.n === "number" && <Badge size="xs" style={{ overflow: "visible" }} variant="light" color={s.n ? "teal" : "gray"}>{s.n}</Badge>}
                   {s.href && <Button size="compact-xs" variant="subtle" component={Link} href={s.href}>{t("setup.open")}</Button>}</Group>}
                 description={t(`setup.stepHint.${s.key}`)} />
             ))}
@@ -239,10 +247,11 @@ function View() {
         <div id="products" />
         <Section title={t("gen.set.products")} actions={<Button size="xs" leftSection={<IconPlus size={14} />}
           onClick={() => setPf({ code: "", name: "", category: "", machine_id: null, unit: "", rate: "", cycle: "", attrs: "", is_active: true })}>{t("common.add")}</Button>}>
-          <Table.ScrollContainer minWidth={560}><Table striped><Table.Tbody>
+          <Table.ScrollContainer minWidth={640}><Table striped>
+            <Table.Thead><Table.Tr><Table.Th>{t("ops.set.code")}</Table.Th><Table.Th>{t("ops.set.name")}</Table.Th><Table.Th>{t("setup.prod.category")}</Table.Th><Table.Th>{t("kpi2.line")}</Table.Th><Table.Th>{t("setup.prod.rate")}</Table.Th><Table.Th /></Table.Tr></Table.Thead><Table.Tbody>
             {(products.data ?? []).map((p) => (
               <Table.Tr key={p.id} opacity={p.is_active ? 1 : 0.5}><Table.Td className="mono">{p.code}</Table.Td><Table.Td>{p.name}</Table.Td><Table.Td>{p.category}</Table.Td><Table.Td>{lineCode(p.machine_id) ?? t("kpi2.allLines")}</Table.Td>
-                <Table.Td>{p.ideal_rate_per_h !== null ? `${fmtNum(p.ideal_rate_per_h, 2)} /h` : p.ideal_cycle_s !== null ? `${fmtNum(p.ideal_cycle_s, 2)} s` : "—"}</Table.Td>
+                <Table.Td>{p.ideal_rate_per_h !== null ? `${fmtNum(p.ideal_rate_per_h, 2)} ${p.unit ?? lines.find((m) => m.id === p.machine_id)?.output_unit ?? ""}/h` : p.ideal_cycle_s !== null ? `${fmtNum(p.ideal_cycle_s, 2)} s` : "—"}</Table.Td>
                 <Table.Td><Button size="compact-xs" variant="subtle" onClick={() => setPf({ id: p.id, code: p.code, name: p.name, category: p.category ?? "", machine_id: p.machine_id, unit: p.unit ?? "",
                   rate: p.ideal_rate_per_h ?? "", cycle: p.ideal_cycle_s ?? "", attrs: Object.entries(p.attributes).map(([k, v]) => `${k}=${v}`).join("\n"), is_active: p.is_active })}><IconPencil size={14} /></Button></Table.Td></Table.Tr>
             ))}
@@ -252,11 +261,12 @@ function View() {
         <div id="losses" />
         <Section title={t("setup.losses")} actions={<Button size="xs" leftSection={<IconPlus size={14} />}
           onClick={() => setLf({ code: "", name: "", parent_id: null, affects: "availability", event_type: "other", planned: false, failure: false, discipline_id: null, department_id: null, sort: ((cats.data?.length ?? 0) + 1) * 10, is_active: true })}>{t("common.add")}</Button>}>
-          <Table.ScrollContainer minWidth={560}><Table striped><Table.Tbody>
+          <Table.ScrollContainer minWidth={720}><Table striped>
+            <Table.Thead><Table.Tr><Table.Th>{t("ops.set.code")}</Table.Th><Table.Th>{t("ops.set.name")}</Table.Th><Table.Th>{t("setup.loss.affects")}</Table.Th><Table.Th>{t("setup.loss.eventType")}</Table.Th><Table.Th>{t("setup.loss.flags")}</Table.Th><Table.Th /></Table.Tr></Table.Thead><Table.Tbody>
             {(cats.data ?? []).map((x) => (
               <Table.Tr key={x.id} opacity={x.is_active ? 1 : 0.5}>
-                <Table.Td className="mono">{x.code}</Table.Td><Table.Td>{x.parent_id ? `${catName(x.parent_id)} › ` : ""}{x.name}</Table.Td><Table.Td>{t(`gen.factor.${x.affects}`)}</Table.Td>
-                <Table.Td>{x.planned && <Badge size="xs" variant="light" color="gray">{t("ops.tables.planned")}</Badge>}{x.failure && <Badge size="xs" variant="light" color="red">{t("ops.stops.failure")}</Badge>}</Table.Td>
+                <Table.Td className="mono">{x.code}</Table.Td><Table.Td>{x.parent_id ? `${catName(x.parent_id)} › ` : ""}{x.name}</Table.Td><Table.Td>{t(`gen.factor.${x.affects}`)}</Table.Td><Table.Td>{t(`ops.stops.types.${x.event_type}`)}</Table.Td>
+                <Table.Td className="nowrap">{x.planned && <Badge size="xs" style={{ overflow: "visible" }} variant="light" color="gray">{t("setup.loss.planned")}</Badge>}{x.failure && <Badge size="xs" style={{ overflow: "visible" }} variant="light" color="red">{t("ops.stops.failure")}</Badge>}</Table.Td>
                 <Table.Td><Button size="compact-xs" variant="subtle" onClick={() => setLf({ id: x.id, code: x.code, name: x.name, parent_id: x.parent_id, affects: x.affects, event_type: x.event_type, planned: x.planned,
                   failure: x.failure, discipline_id: x.discipline_id, department_id: x.department_id, sort: x.sort, is_active: x.is_active })}><IconPencil size={14} /></Button></Table.Td>
               </Table.Tr>
@@ -268,13 +278,15 @@ function View() {
         <Section title={t("setup.rules")} actions={<Button size="xs" leftSection={<IconPlus size={14} />}
           onClick={() => setRf({ code: "", name: "", source_kind: "kpi", source_code: null, condition: "kpi_limits", threshold: "", threshold_high: "", periods: 1, lookback_days: 7, severity: "warning",
             machine_id: null, notify_role: null, notify_email: false, escalate_after_days: "", escalate_role: null, is_active: true })}>{t("common.add")}</Button>}>
-          <Table.ScrollContainer minWidth={600}><Table striped><Table.Tbody>
+          <Table.ScrollContainer minWidth={820}><Table striped>
+            <Table.Thead><Table.Tr><Table.Th>{t("ins.rule")}</Table.Th><Table.Th>{t("setup.rule.sourceKind")}</Table.Th><Table.Th>{t("setup.rule.condition")}</Table.Th><Table.Th>{t("setup.rule.severity")}</Table.Th><Table.Th>{t("setup.rule.notify")}</Table.Th><Table.Th /></Table.Tr></Table.Thead><Table.Tbody>
             {(rules.data?.items ?? []).map((r) => (
               <Table.Tr key={r.id} opacity={r.is_active ? 1 : 0.5}>
                 <Table.Td>{r.name}</Table.Td><Table.Td className="mono" fz="xs">{r.source_code ?? ""}</Table.Td>
-                <Table.Td>{t(`ins.cond.${r.condition}`)}{r.threshold !== null ? ` ${fmtNum(r.threshold, 2)}` : ""}</Table.Td>
-                <Table.Td><Badge size="xs" variant="light" color={r.severity === "critical" ? "red" : r.severity === "warning" ? "orange" : "blue"}>{t(`ins.sev.${r.severity}`)}</Badge></Table.Td>
-                <Table.Td>{rules.data?.roles.find((x) => x.code === r.notify_role)?.name ?? "—"}</Table.Td>
+                <Table.Td>{ruleText(r)}</Table.Td>
+                <Table.Td className="nowrap"><Badge size="xs" style={{ overflow: "visible" }} variant="light" color={r.severity === "critical" ? "red" : r.severity === "warning" ? "orange" : "blue"}>{t(`ins.sev.${r.severity}`)}</Badge></Table.Td>
+                <Table.Td>{rules.data?.roles.find((x) => x.code === r.notify_role)?.name ?? t("setup.rule.notifyDefault")}
+                  {r.escalate_role && r.escalate_after_days && <Text size="xs" c="dimmed">{t("setup.rule.escalates", { n: r.escalate_after_days, role: rules.data?.roles.find((x) => x.code === r.escalate_role)?.name ?? r.escalate_role })}</Text>}</Table.Td>
                 <Table.Td><Button size="compact-xs" variant="subtle" onClick={() => setRf({ id: r.id, code: r.code, name: r.name, source_kind: r.source_kind, source_code: r.source_code, condition: r.condition,
                   threshold: r.threshold ?? "", threshold_high: r.threshold_high ?? "", periods: r.periods, lookback_days: r.lookback_days, severity: r.severity, machine_id: r.machine_id, notify_role: r.notify_role,
                   notify_email: r.notify_email, escalate_after_days: r.escalate_after_days ?? "", escalate_role: r.escalate_role, is_active: r.is_active })}><IconPencil size={14} /></Button></Table.Td>
