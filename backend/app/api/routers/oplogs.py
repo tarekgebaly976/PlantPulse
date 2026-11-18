@@ -552,6 +552,8 @@ def dashboard(
                        .order_by(OpDailyReport.report_date)).scalars()
         )  # fmt: skip
         by_cat: dict[str, float] = {}
+        tot: dict[str, float] = {}
+        n_days = 0
         for r in reports:
             c = ops.compute(db, r, ctx.plant, to_date=False)
             ms = c["measures"]
@@ -563,6 +565,10 @@ def dashboard(
                 "breaks": ms.get("breaks"), "breaks_hours": ms.get("breaks_hours"), "downtime_hours": ms["downtime_hours"],
             })  # fmt: skip
             if not c["in_progress"]:
+                n_days += 1
+                for k2, v2 in ms.items():
+                    if v2 is not None and not k2.startswith("loss_"):
+                        tot[k2] = tot.get(k2, 0.0) + float(v2)
                 for code, h in c["loss_categories"]["hours_by_code"].items():
                     by_cat[code] = round(by_cat.get(code, 0.0) + h, 3)
         if reports:
@@ -577,6 +583,11 @@ def dashboard(
                 evs = stops_of(db, [r.id for r in reports])
                 p = {"stops": {"downtime_by_discipline": named(discipline_hours(evs, parts_of(db, [e.id for e in evs])))}}
             p["loss_by_category"] = loss
+            from app.services.production.generic import oee as _oee
+
+            p["summary"] = {"days": n_days, **{k2: round(v2, 3) for k2, v2 in tot.items()},
+                            "oee": _oee(tot.get("run_hours"), tot.get("planned_hours", 0.0), tot.get("produced", 0.0), tot.get("ideal"),
+                                        tot.get("good", 0.0), tot.get("net", 0.0))}  # fmt: skip
             period = p
     logs = []
     for t in db.execute(

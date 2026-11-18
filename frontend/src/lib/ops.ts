@@ -1,12 +1,19 @@
-// Operations module (paper machine daily production report): types and time helpers.
+// Production module: types and time helpers. The core is industry-independent (production lines with a production
+// model, output unit and report profile; standard measures, KPIs, loss categories, alerts, actions, insights);
+// "paper_machine" is the paper mill report profile (grades, runs, reels, sheet breaks).
 
 export interface OpShift { code: string; name: string; start: string }
 export interface OpGrade { id: string; machine_id: string; code: string; name: string | null; gsm: number; target_speed_mpm: number | null; ideal_mt_min: number; is_active: boolean }
 export interface OpSection { id: string; name: string; asset_id: string | null; sort: number; is_active: boolean }
 export interface OpMachine {
   id: string; code: string; name: string; department_id: string; asset_id: string; trim_width_m: number | null; day_start: string;
+  production_model: ProductionModel; output_unit: string; report_profile: ReportProfile;
   shifts: OpShift[]; is_active: boolean; grades?: OpGrade[]; sections?: OpSection[];
 }
+export type ProductionModel = "continuous" | "batch" | "discrete";
+export type ReportProfile = "generic" | "paper_machine";
+export const PRODUCTION_MODELS: ProductionModel[] = ["continuous", "batch", "discrete"];
+export const isPaper = (m: { report_profile?: string } | null | undefined) => m?.report_profile === "paper_machine";
 export interface OpDiscipline { id: string; code: string; name: string; maintenance: boolean; sort: number; is_active: boolean }
 export interface OpDefect { id: string; name: string; disposition: string; is_active: boolean }
 export interface OpSettings { machines: OpMachine[]; disciplines: OpDiscipline[]; defects: OpDefect[] }
@@ -35,7 +42,7 @@ export interface Segment {
 export interface Reel { id: string; shift: string; reel_no: string; gsm: number | null; gross_mt: number; net_mt: number; reject_mt: number; b_grade_mt: number; s_grade_mt: number; trim_mt: number; note: string | null }
 export interface Stop {
   id: string; started_at: string; ended_at: string | null; hours: number | null; event_type: "breakdown" | "sheet_break" | "planned" | "other";
-  section_id: string | null; asset_id: string; reason: string | null; is_failure: boolean; production_loss_tons: number | null;
+  section_id: string | null; asset_id: string; reason: string | null; is_failure: boolean; is_planned: boolean; production_loss_tons: number | null; loss_category_id: string | null;
   parts: { discipline_id: string; hours: number }[];
 }
 export interface Loss { id: string; kind: "reject" | "downgrade"; shift: string | null; defect_id: string | null; defect_text: string | null; qty_mt: number; disposition: string | null }
@@ -46,12 +53,85 @@ export interface Report {
   confirmed_by: string | null; confirmed_at: string | null; reopen_note: string | null;
   prev: { id: string; date: string } | null; next: { id: string; date: string } | null;
   segments: Segment[]; reels: Reel[]; stops: Stop[]; losses: Loss[]; calc: Calc; shift_logs: ShiftLogSection[]; utilities: DayUtilities[];
+  outputs: Output[];
 }
 export interface ReportRow {
-  id: string; machine_id: string; machine: string; report_date: string; status: string; revision: number; gross: number; net: number; a: number;
-  reject_pct: number | null; run_hours: number; oee: number | null; breaks: number; downtime_hours: number; warnings: number;
+  id: string; machine_id: string; machine: string; profile: ReportProfile; unit: string; report_date: string; status: string; revision: number;
+  gross: number; net: number; a: number; reject_pct: number | null; run_hours: number | null; oee: number | null; breaks: number | null; downtime_hours: number; warnings: number;
 }
-export interface ReportList { items: ReportRow[]; month: string; today: string; mtd: Period | null }
+/** Month to date: paper profile (Period) or generic (standard measures). */
+export interface GenericPeriod { days: number; measures: Record<string, number | null>; oee: Oee }
+export interface ReportList { items: ReportRow[]; month: string; today: string; mtd: (Period | GenericPeriod) | null }
+
+// ------------------------------------------------------------------ generic report profile
+export interface Output {
+  id: string; shift: string | null; product_id: string | null; order_ref: string | null; started_at: string | null; ended_at: string | null;
+  run_hours: number | null; hours: number | null; planned_qty: number | null; input_qty: number | null; produced_qty: number; reject_qty: number;
+  downgrade_qty: number; good_qty: number; ideal_rate_per_h: number | null; ideal_qty: number | null; completed: boolean; note: string | null;
+}
+export interface GenericTotals {
+  lines: number; produced: number; good: number; reject: number; downgrade: number; net: number; run_hours: number | null; planned_qty: number | null;
+  input_qty: number | null; ideal: number | null; batches: number; batches_completed: number; reject_pct: number | null; downgrade_pct: number | null;
+  yield_pct: number | null; target_pct: number | null;
+}
+export interface LossTables { hours_by_code: Record<string, number>; count_by_code: Record<string, number>; hours_by_factor: Record<string, number>; failure_hours: number; failures: number; stops: number }
+export interface GenericCalc {
+  profile: "generic"; unit: string; window: { start: string; end: string };
+  shifts: (GenericTotals & { code: string; name: string; supervisor?: string | null; stop_hours: number | null })[];
+  day: GenericTotals; run_hours: number | null; ideal: number | null; cycle_time_s: number | null; oee: Oee; in_progress: boolean;
+  by_product: Record<string, number>; stops: { downtime_hours: number; planned_hours: number; downtime_by_discipline: Record<string, number> };
+  loss_categories: LossTables; losses: { reject: number; downgrade: number }; warnings: Warning[]; mtd: GenericPeriod | null; ytd: GenericPeriod | null;
+  measures: Record<string, number | null>;
+}
+
+// ------------------------------------------------------------------ configuration (industry-independent)
+export interface OpConfig {
+  industry: string | null; template: string | null; features: Record<string, boolean>; labels: Record<string, string>; setup_done: boolean;
+  templates: { key: string; name: string }[];
+}
+export const FEATURES = ["reports", "logs", "dashboard", "kpis", "alerts", "insights", "actions"] as const;
+export interface Product {
+  id: string; code: string; name: string; category: string | null; machine_id: string | null; unit: string | null; ideal_rate_per_h: number | null;
+  ideal_cycle_s: number | null; attributes: Record<string, string>; is_active: boolean;
+}
+export type Affects = "availability" | "performance" | "quality" | "none";
+export interface LossCategory {
+  id: string; code: string; name: string; parent_id: string | null; affects: Affects; event_type: "breakdown" | "planned" | "other" | "sheet_break";
+  planned: boolean; failure: boolean; discipline_id: string | null; department_id: string | null; sort: number; is_active: boolean;
+}
+export interface KpiDef {
+  id: string; code: string; name: string; description: string | null; formula: string; unit: string | null; decimals: number; direction: "higher" | "lower";
+  target: number | null; warn: number | null; critical: number | null; period: "day" | "week" | "month"; machine_id: string | null; department_id: string | null;
+  standard: boolean; dashboard: boolean; sort: number; is_active: boolean;
+}
+export interface KpiVariable { code: string; kind: "measure" | "profile" | "loss" | "log"; unit: string | null; label?: string; form?: string; agg?: string }
+export interface KpiLib { code: string; name: string; formula: string; unit: string; direction: "higher" | "lower"; description: string }
+export type KpiStatus = "missing" | "no_target" | "ok" | "off_target" | "warning" | "critical";
+export interface KpiValue { value: number | null; status: KpiStatus; missing: string[] }
+export interface KpiResult extends Omit<KpiDef, "sort" | "is_active"> {
+  lines: string[]; values: { day: KpiValue; week: KpiValue; month: KpiValue; today: KpiValue }; series: { date: string; value: number }[]; trend_pct: number | null;
+}
+export type Condition = "below" | "above" | "outside" | "kpi_limits" | "total_above" | "trend_down" | "trend_up" | "action_overdue";
+export interface AlertRule {
+  id: string; code: string; name: string; source_kind: "kpi" | "measure" | "none"; source_code: string | null; condition: Condition; threshold: number | null;
+  threshold_high: number | null; periods: number; lookback_days: number; severity: "info" | "warning" | "critical"; machine_id: string | null;
+  department_id: string | null; notify_role: string | null; notify_email: boolean; escalate_after_days: number | null; escalate_role: string | null; is_active: boolean;
+}
+export interface OpAlert {
+  id: string; rule: AlertRule | null; line: string | null; status: "open" | "acknowledged" | "resolved" | "closed"; severity: "info" | "warning" | "critical";
+  period_date: string; value: number | null; detail: Record<string, unknown>; first_seen: string; last_seen: string; acknowledged_by: string | null;
+  acknowledged_at: string | null; escalated: boolean; closed_at: string | null;
+}
+export interface OpAction {
+  id: string; title: string; description: string | null; status: "open" | "in_progress" | "done" | "cancelled"; owner_id: string | null; owner: string | null;
+  due_date: string | null; source: "manual" | "alert" | "insight" | "report"; alert_id: string | null; report_id: string | null; machine_id: string | null;
+  line: string | null; result: string | null; overdue: boolean; created_at: string | null; closed_at: string | null;
+}
+export interface Insight { id: string; kind: string; severity: "critical" | "warning" | "info"; line: string | null; params: Record<string, unknown>; recommendation: string }
+export interface SetupStatus { config: OpConfig; counts: Record<string, number>; units: string[]; models: string[] }
+
+/** Colour of a KPI or alert status. */
+export const statusColor = (s: string) => ({ critical: "red", warning: "orange", off_target: "yellow", ok: "teal", no_target: "gray", missing: "gray", info: "blue" } as Record<string, string>)[s] ?? "gray";
 
 export const EVENT_TYPES = ["breakdown", "sheet_break", "planned", "other"] as const;
 
@@ -115,14 +195,16 @@ export function currentProductionDay(dayStart: string, tz?: string): string {
 }
 
 // ------------------------------------------------------------------ daily logs (utilities, stock preparation …)
-export type LogKind = "meter" | "counter" | "number" | "check" | "text" | "calc";
+export type LogKind = "meter" | "counter" | "number" | "check" | "text" | "calc" | "select" | "multi" | "datetime" | "product" | "ref";
+export const LOG_KINDS: LogKind[] = ["meter", "counter", "number", "check", "text", "calc", "select", "multi", "datetime", "product", "ref"];
+export const TEXT_KINDS: LogKind[] = ["text", "select", "multi", "datetime", "product", "ref"];
 export interface LogField {
   id: string; section: string; code: string; label: string; kind: LogKind; unit: string | null; decimals: number; formula: string | null;
-  low: number | null; high: number | null; meter_id: string | null; chart: boolean; per_ton: boolean; day_agg: "sum" | "avg" | null; sort: number; is_active: boolean;
+  low: number | null; high: number | null; target: number | null; required: boolean; options: string[] | null; meter_id: string | null; chart: boolean; per_ton: boolean; day_agg: "sum" | "avg" | null; sort: number; is_active: boolean;
 }
 export interface LogTemplate {
   id: string; code: string; name: string; department_id: string; frequency: "day" | "shift"; day_start: string; shifts: OpShift[];
-  issues: boolean; in_pm_report: boolean; sort: number; is_active: boolean; fields?: LogField[];
+  issues: boolean; machine_id: string | null; in_pm_report: boolean; sort: number; is_active: boolean; fields?: LogField[];
 }
 export interface LogValue { opening: number | null; closing: number | null; value: number | null; text: string | null; flag: "low" | "high" | null }
 export interface LogWarning { code: string; item: string }
@@ -139,13 +221,21 @@ export interface LogRow { id: string; log_date: string; shift: string; status: s
 export interface LogList { items: LogRow[]; month: string; columns: LogField[]; template: LogTemplate }
 
 export interface DashDay {
-  date: string; status: string; in_progress: boolean; gross: number; net: number; a: number; reject: number; b: number; trim: number; run_hours: number;
-  oee: number | null; availability: number | null; performance: number | null; quality: number | null; breaks: number; breaks_hours: number; downtime_hours: number;
+  date: string; status: string; in_progress: boolean; gross: number; net: number; a: number; reject: number; b: number; trim: number | null; run_hours: number | null;
+  oee: number | null; availability: number | null; performance: number | null; quality: number | null; breaks: number | null; breaks_hours: number | null; downtime_hours: number;
+}
+/** Totals of the finished days of the period in the standard measures (paper extras breaks / trim only on a paper line). */
+export interface DashSummary {
+  days: number; produced?: number; good?: number; reject?: number; downgrade?: number; net?: number; run_hours?: number; planned_hours?: number; ideal?: number;
+  downtime_hours?: number; planned_downtime_hours?: number; failure_hours?: number; stops?: number; breaks?: number; breaks_hours?: number; trim?: number; oee: Oee;
 }
 export interface DashField extends LogField { series: Record<string, number>; per_ton_series: Record<string, number> | null; total: number | null; per_ton_period: number | null }
 export interface Dashboard {
-  start: string; end: string; machines: { id: string; code: string; name: string }[]; machine_id: string | null; production: DashDay[];
-  period: Period | null; logs: { template: LogTemplate; fields: DashField[] }[];
+  start: string; end: string; machines: { id: string; code: string; name: string; profile: ReportProfile; unit: string }[]; machine_id: string | null;
+  profile: ReportProfile | null; unit: string | null; production: DashDay[];
+  period: { stops: Partial<StopTables> & { downtime_by_discipline: Record<string, number> }; loss_by_category: Record<string, number>;
+    summary: DashSummary } | null;
+  logs: { template: LogTemplate; fields: DashField[] }[]; kpis: KpiResult[];
 }
 
 /** Format a log value with the line's decimals. */

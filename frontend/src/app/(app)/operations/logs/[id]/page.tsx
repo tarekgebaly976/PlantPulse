@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionIcon, Alert, Badge, Button, Checkbox, Group, NumberInput, Paper, Stack, Switch, Table, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
+import { ActionIcon, Alert, Badge, Button, Checkbox, Group, MultiSelect, NumberInput, Paper, Select, Stack, Switch, Table, Text, Textarea, TextInput, Tooltip } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { IconAlertTriangle, IconChevronLeft, IconChevronRight, IconLock, IconPlus, IconPrinter, IconTrash } from "@tabler/icons-react";
 import Link from "next/link";
@@ -13,7 +13,7 @@ import { Modal } from "@/components/Modal";
 import { AssetPicker, ConfirmButton, Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { del, post, put } from "@/lib/api";
 import { fmtDate, useMut, useQ } from "@/lib/hooks";
-import { fmtVal, hm, logBase, type LogDetail, type LogField, type LogValue } from "@/lib/ops";
+import { fmtVal, hm, logBase, TEXT_KINDS, type LogDetail, type LogField, type LogValue, type Product } from "@/lib/ops";
 import { useSession } from "@/lib/session";
 
 type Draft = Record<string, { opening: number | string; closing: number | string; value: number | string | boolean; text: string }>;
@@ -55,11 +55,28 @@ function RaiseRequest({ onClose }: { onClose: () => void }) {
   );
 }
 
+const parseMulti = (txt: string): string[] => { try { const v = JSON.parse(txt || "[]"); return Array.isArray(v) ? v.map(String) : []; } catch { return []; } };
+
+/** Input of a select, multi (checklist), date/time, product or batch / order reference line; stored as text. */
+function TextKindInput({ f, d, ed, set, size }: { f: LogField; d: Draft[string]; ed: boolean; set: (p: Partial<Draft[string]>) => void; size: "xs" | "md" }) {
+  const products = useQ<Product[]>(f.kind === "product" ? "/operations/products" : null);
+  if (!ed) {
+    const shown = f.kind === "multi" ? parseMulti(d.text).join(", ") : d.text;
+    return <Text size="sm">{shown || "—"}</Text>;
+  }
+  if (f.kind === "select") return <Select size={size} aria-label={f.label} clearable data={f.options ?? []} value={d.text || null} onChange={(v) => set({ text: v ?? "" })} />;
+  if (f.kind === "multi") return <MultiSelect size={size} aria-label={f.label} data={f.options ?? []} value={parseMulti(d.text)} onChange={(v) => set({ text: v.length ? JSON.stringify(v) : "" })} />;
+  if (f.kind === "datetime") return <TextInput size={size} type="datetime-local" aria-label={f.label} value={d.text} onChange={(e) => set({ text: e.currentTarget.value })} />;
+  if (f.kind === "product") return <Select size={size} aria-label={f.label} clearable searchable value={d.text || null} onChange={(v) => set({ text: v ?? "" })}
+    data={(products.data ?? []).filter((p) => p.is_active || p.code === d.text).map((p) => ({ value: p.code, label: `${p.code} – ${p.name}` }))} />;
+  return <TextInput size={size} aria-label={f.label} value={d.text} maxLength={f.kind === "ref" ? 60 : 2000} onChange={(e) => set({ text: e.currentTarget.value })} />;
+}
+
 function FieldRow({ f, v, d, ed, set }: { f: LogField; v: LogValue | undefined; d: Draft[string]; ed: boolean; set: (p: Partial<Draft[string]>) => void }) {
   const { t } = useTranslation();
   const flagged = v?.flag ? <Badge size="xs" color="red" variant="light" ms={4}>{t(`logs.flag.${v.flag}`)}</Badge> : null;
   const limits = f.kind !== "check" && (f.low !== null || f.high !== null) ? <Text span size="xs" c="dimmed">{f.low ?? "…"}–{f.high ?? "…"}</Text> : null;
-  const label = <Stack gap={0}><Text size="sm">{f.label}</Text>{f.kind === "calc" && <Text size="xs" c="dimmed" className="mono">= {f.formula}</Text>}
+  const label = <Stack gap={0}><Text size="sm">{f.label}{f.required && <Text span c="red"> *</Text>}</Text>{f.kind === "calc" && <Text size="xs" c="dimmed" className="mono">= {f.formula}</Text>}
     {f.kind === "counter" && f.meter_id && <Tooltip label={t("logs.toMeter")} multiline w={260}><Badge size="xs" variant="light" color="gray" w="fit-content">{t("logs.toMeterShort")}</Badge></Tooltip>}</Stack>;
   const numInput = (key: "opening" | "closing" | "value", aria: string) => ed ? (
     <NumberInput size="xs" w={130} hideControls decimalScale={3} aria-label={`${f.label} ${aria}`}
@@ -73,6 +90,8 @@ function FieldRow({ f, v, d, ed, set }: { f: LogField; v: LogValue | undefined; 
     cells = <><Table.Td colSpan={2} /><Table.Td>{numInput("value", "")}{flagged}</Table.Td></>;
   } else if (f.kind === "check") {
     cells = <><Table.Td colSpan={2} /><Table.Td><Group gap={4}><Checkbox aria-label={f.label} readOnly={!ed} checked={!!d.value} onChange={(e) => set({ value: e.currentTarget.checked })} />{flagged}</Group></Table.Td></>;
+  } else if (TEXT_KINDS.includes(f.kind) && f.kind !== "text") {
+    cells = <Table.Td colSpan={3}><TextKindInput f={f} d={d} ed={ed} set={set} size="xs" /></Table.Td>;
   } else if (f.kind === "text") {
     cells = <Table.Td colSpan={3}>{ed ? <TextInput size="xs" aria-label={f.label} value={d.text} onChange={(e) => set({ text: e.currentTarget.value })} /> : <Text size="sm">{d.text || "—"}</Text>}</Table.Td>;
   } else {
@@ -110,6 +129,7 @@ function FieldCard({ f, v, d, ed, set }: { f: LogField; v: LogValue | undefined;
       </>}
       {f.kind === "number" && box("value", t("logs.value"))}
       {f.kind === "check" && <Switch size="md" label={d.value ? t("common.yes") : t("common.no")} readOnly={!ed} checked={!!d.value} onChange={(e) => ed && set({ value: e.currentTarget.checked })} />}
+      {TEXT_KINDS.includes(f.kind) && f.kind !== "text" && <TextKindInput f={f} d={d} ed={ed} set={set} size="md" />}
       {f.kind === "text" && (ed ? <Textarea autosize minRows={1} size="md" aria-label={f.label} value={d.text} onChange={(e) => set({ text: e.currentTarget.value })} /> : <Text>{d.text || "—"}</Text>)}
       {f.kind === "calc" && <Text size="lg" fw={700}>{fmtVal(v?.value, f.decimals)} {unit}</Text>}
       {limits}
@@ -139,7 +159,7 @@ function LogView() {
       values: d.fields.filter((f) => f.kind !== "calc").map((f) => {
         const x = draft![f.id]!;
         return f.kind === "meter" || f.kind === "counter" ? { field_id: f.id, opening: n(x.opening), closing: n(x.closing) }
-          : f.kind === "text" ? { field_id: f.id, text: x.text } : f.kind === "check" ? { field_id: f.id, value: x.value ? 1 : 0 } : { field_id: f.id, value: n(x.value) };
+          : TEXT_KINDS.includes(f.kind) ? { field_id: f.id, text: x.text } : f.kind === "check" ? { field_id: f.id, value: x.value ? 1 : 0 } : { field_id: f.id, value: n(x.value) };
       }),
     });
   });

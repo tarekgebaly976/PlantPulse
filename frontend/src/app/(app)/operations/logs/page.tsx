@@ -12,7 +12,7 @@ import { Modal } from "@/components/Modal";
 import { DataTable, Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { post } from "@/lib/api";
 import { useMut, useQ } from "@/lib/hooks";
-import { currentProductionDay, fmtVal, logBase, type LogList, type LogTemplate } from "@/lib/ops";
+import { currentProductionDay, fmtVal, logBase, type LogList, type LogTemplate, type OpConfig } from "@/lib/ops";
 import { useSession } from "@/lib/session";
 
 function NewLog({ t: tpl, onClose }: { t: LogTemplate; onClose: () => void }) {
@@ -36,6 +36,7 @@ function NewLog({ t: tpl, onClose }: { t: LogTemplate; onClose: () => void }) {
 
 function List() {
   const { t } = useTranslation();
+  const cfgLabel = useQ<OpConfig>("/operations/config").data?.labels?.logs;
   const router = useRouter();
   const { can } = useSession();
   const tq = useQ<LogTemplate[]>("/operations/log-templates");
@@ -56,7 +57,7 @@ function List() {
   return (
     <>
       {spPage && <BackLink href="/operations" label={t("ops.title")} />}
-      <PageHeader title={spPage ? tpl?.name ?? t("nav.operations") : t("logs.title")} actions={tpl && can("op.enter") ? <Button leftSection={<IconPlus size={16} />} onClick={() => setOpen(true)}>{tpl.frequency === "shift" ? t("logs.newShift") : t("logs.newDay")}</Button> : undefined}>
+      <PageHeader title={spPage ? tpl?.name ?? t("nav.operations") : cfgLabel ?? t("logs.title")} actions={tpl && can("op.enter") ? <Button leftSection={<IconPlus size={16} />} onClick={() => setOpen(true)}>{tpl.frequency === "shift" ? t("logs.newShift") : t("logs.newDay")}</Button> : undefined}>
         <Text size="sm" c="dimmed">{spPage ? t("logs.spSubtitle") : t("logs.subtitle")}</Text>
       </PageHeader>
       {open && tpl && <NewLog t={tpl} onClose={() => setOpen(false)} />}

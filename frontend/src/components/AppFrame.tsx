@@ -5,7 +5,7 @@ import { Modal } from "@/components/Modal";
 import { useDisclosure, useNetwork } from "@mantine/hooks";
 import {
   IconAlertTriangle, IconBell, IconBox, IconBuildingFactory2, IconChartLine, IconNotebook, IconCalendarTime, IconChartBar, IconClipboardList, IconDashboard, IconDroplet, IconFishBone, IconHeartRateMonitor,
-  IconKey, IconLanguage, IconLogout, IconMoon, IconPlus, IconSun, IconQrcode, IconSettings, IconSitemap, IconTool, IconToolsKitchen, IconUserCheck, IconWifi, IconWifiOff, IconRoute,
+  IconAdjustments, IconBulb, IconGauge, IconKey, IconLanguage, IconLogout, IconMoon, IconPlus, IconSun, IconQrcode, IconSettings, IconSitemap, IconTool, IconToolsKitchen, IconUserCheck, IconWifi, IconWifiOff, IconRoute,
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -19,7 +19,8 @@ import { useSession } from "@/lib/session";
 import { GlobalSearch } from "./Search";
 import { Loading } from "./ui";
 
-type NavItem = { href: string; key: string; icon: typeof IconDashboard; perm?: string };
+/** feature: hidden when the plant's production setup switches the feature off; label: the plant may rename the entry. */
+type NavItem = { href: string; key: string; icon: typeof IconDashboard; perm?: string; feature?: string; label?: string };
 const NAV_GROUPS: { key: string | null; items: NavItem[] }[] = [
   { key: null, items: [{ href: "/", key: "nav.dashboard", icon: IconDashboard }] },
   { key: "navGroup.daily", items: [
@@ -30,9 +31,12 @@ const NAV_GROUPS: { key: string | null; items: NavItem[] }[] = [
     { href: "/work-orders", key: "nav.workOrders", icon: IconClipboardList, perm: "wo.view" },
   ] },
   { key: "navGroup.operations", items: [
-    { href: "/operations/dashboard", key: "nav.opsDashboard", icon: IconChartLine, perm: "op.view" },
-    { href: "/operations", key: "nav.operations", icon: IconBuildingFactory2, perm: "op.view" },
-    { href: "/operations/logs", key: "nav.opsLogs", icon: IconNotebook, perm: "op.view" },
+    { href: "/operations/dashboard", key: "nav.opsDashboard", icon: IconChartLine, perm: "op.view", feature: "dashboard" },
+    { href: "/operations", key: "nav.operations", icon: IconBuildingFactory2, perm: "op.view", feature: "reports", label: "reports" },
+    { href: "/operations/logs", key: "nav.opsLogs", icon: IconNotebook, perm: "op.view", feature: "logs", label: "logs" },
+    { href: "/operations/kpis", key: "nav.opsKpis", icon: IconGauge, perm: "op.view", feature: "kpis" },
+    { href: "/operations/insights", key: "nav.opsInsights", icon: IconBulb, perm: "op.view", feature: "insights" },
+    { href: "/operations/setup", key: "nav.opsSetup", icon: IconAdjustments, perm: "op.manage" },
   ] },
   { key: "navGroup.maintenance", items: [
     { href: "/pm", key: "nav.pm", icon: IconCalendarTime, perm: "pm.view" },
@@ -83,6 +87,9 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const activeHref = pathname === "/" ? "/" : NAV_GROUPS.flatMap((g) => g.items.map((x) => x.href))
     .filter((h) => h !== "/" && (pathname === h || pathname.startsWith(`${h}/`))).sort((a, b) => b.length - a.length)[0];
   const counts = useQ<NavCounts>("/dashboard/summary", undefined, { refetchInterval: 60_000 });
+  const opCfg = useQ<{ features: Record<string, boolean>; labels: Record<string, string> }>(can("op.view") ? "/operations/config" : null, undefined, { staleTime: 300_000 });
+  const navShown = (n: NavItem) => (!n.perm || can(n.perm)) && (!n.feature || opCfg.data?.features?.[n.feature] !== false);
+  const navLabel = (n: NavItem) => (n.label && opCfg.data?.labels?.[n.label]) || t(n.key);
   const { setColorScheme } = useMantineColorScheme();
   const dark = useComputedColorScheme("light", { getInitialValueInEffect: true }) === "dark";
 
@@ -160,7 +167,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
       <AppShell.Navbar p="xs" className="pp-nav">
         <AppShell.Section grow component={ScrollArea} scrollbarSize={8} type="auto" offsetScrollbars className="pp-nav-scroll">
           {NAV_GROUPS.map((g) => {
-            const items = g.items.filter((n) => !n.perm || can(n.perm));
+            const items = g.items.filter(navShown);
             if (items.length === 0) return null;
             return (
               <div key={g.key ?? "top"}>
@@ -168,10 +175,10 @@ export function AppFrame({ children }: { children: ReactNode }) {
                 {items.map((n) => {
                   const c = navCount(n.href, counts.data);
                   return (
-                    <NavLink key={n.href} component={Link} href={n.href} label={t(n.key)} leftSection={<n.icon size={19} stroke={1.7} />}
+                    <NavLink key={n.href} component={Link} href={n.href} label={navLabel(n)} leftSection={<n.icon size={19} stroke={1.7} />}
                       className="tap-target pp-navlink" active={n.href === activeHref}
                       rightSection={c ? <Badge size="sm" circle={c.n < 10} color={c.color} variant="filled" aria-hidden>{c.n}</Badge> : undefined}
-                      aria-label={t(n.key)} />
+                      aria-label={navLabel(n)} />
                   );
                 })}
               </div>

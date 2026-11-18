@@ -21,6 +21,11 @@ export default function OpsPrint() {
   const q = useQ<Report>(`/operations/reports/${id}`);
   const st = useQ<OpSettings>("/operations/settings");
   if (!q.data || !st.data) return <Loading />;
+  if (q.data.machine.report_profile !== "paper_machine") {
+    // the generic report prints from its own page (browser print); this layout is the paper mill's form
+    return <Group p="md"><Button component={Link} href={`/operations/${q.data.id}`} leftSection={<IconArrowBack size={16} />}>{t("ops.report.title")}</Button>
+      <Button leftSection={<IconPrinter size={16} />} onClick={() => window.print()}>{t("ops.report.print")}</Button></Group>;
+  }
   const r = q.data;
   const s = st.data;
   const c = r.calc;

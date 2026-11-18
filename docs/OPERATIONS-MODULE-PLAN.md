@@ -37,7 +37,41 @@ Branch: `claude/serene-davinci-0arq11` (migrations up to 0021)
   water & RO, WWTP with pH / COD / TSS / sludge, power house, power consumption, boiler house, compressed air, natural
   gas). Log forms can be marked "show inside the PM & SP daily report"; each line can add up or average its shifts.
   Clear back buttons and "Previous day / Next day" on the detail pages (phones).
-- Not yet: Excel import of past daily sheets, winder/FSC, Q-factors (phase 2).
+- **Multi-industry architecture (18 Nov, migration 0025).** The module is industry-independent; the paper mill is one
+  configuration of it.
+  - *Core* (`app/services/production/`): production lines (table `op_machines`) with a production model (continuous,
+    batch, discrete), an output unit (t, pcs, m³, packs …) and a **report profile**. Every profile answers in the same
+    **standard measures** (`measures.py`: planned / run hours, produced, good, reject, downgrade, net, ideal,
+    planned and input quantity, batches, downtime, failures, stops, `loss_<CATEGORY>` hours) plus daily-log codes.
+    A measure that is not recorded is None, never 0. Quantities of different units are never added up: KPIs and
+    alert rules over several lines work per unit group.
+  - *Generic profile* (`generic.py`): output lines (product, batch / lot / order, run hours, planned, input,
+    produced, reject, downgrade; ideal rate copied from the product), stops classified by **loss category**,
+    quality losses, shift totals, OEE only when its data are there.
+  - *Paper profile* (`paper.py`, profile `paper_machine`): grades / GSM, runs, reels, sheet breaks, trim, steam —
+    isolated; the engine never imports paper terms. Lines made before 0025 were set to this profile.
+  - *Configurable* (`app/models/production.py`, Production setup page): products, loss categories (sub-categories,
+    KPI factor reduced, how a stop counts for maintenance, failure flag, discipline / area), KPIs (`kpis.py`:
+    standard library incl. OEE (optional), custom formulas over measures and log codes, target / warning /
+    critical, direction, line or area scope; status ok / off target / warning / critical / no target / missing
+    data), alert rules (`alerts.py`: below, above, outside, KPI limits, total over look-back, trend down / up,
+    overdue actions; consecutive days; role to notify, e-mail, escalation; worker job every 3 h and "Check now"),
+    alerts (open / acknowledged / resolved / closed), actions (owner, due date, from an alert or insight).
+  - *Production insights* (`insights.py`): last 7 days against the 21 before — KPI deviations, negative trends,
+    abnormal consumption per unit, parameters outside limits or unusual, repeated losses, bottleneck / main loss,
+    low target achievement, high reject, maintenance-related losses, overdue actions, unacknowledged alerts; each
+    with a recommendation.
+  - *Templates and onboarding* (`templates.py`): "general" and "paper_mill" (adds only what is missing; never
+    overwrites); plant setup: industry (informational), features shown in the menu, menu names, setup checklist
+    of 10 steps. Future industry templates are new entries there.
+  - *Form builder*: new line kinds select (status), multi (checklist), datetime, product, ref (batch / order);
+    target, required lines (block submit), forms linked to a line ("per unit" = per unit of that line's output).
+  - Demo: plant DPM from the paper_mill template, utilities / SP forms linked to PM1, plus generic discrete line
+    **SH1 – Sheeter & packing line** (packs, 3 invented products, output lines, stops by category, 3 sample actions).
+  - New pages: Production KPIs, Production insights, Production setup. Default menu names are generic
+    ("Production reports", "Daily logs"); the paper template names them "PM & SP daily report" / "Utilities daily report".
+- Not yet: Excel import of past daily sheets, winder/FSC, Q-factors (phase 2); a paper-report category picker
+  (paper stops get their loss category from the stop type); further industry templates.
 
 To switch it on for the real installation later: add `CMMS_OPERATIONS_MODULE=true` to `deploy/.env` and restart.
 

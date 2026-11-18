@@ -558,6 +558,7 @@ def get_report(rid: uuid.UUID, ctx: Ctx = Depends(require("op.view")), db: Sessi
                 "asset_id": str(e.asset_id),
                 "reason": e.reason,
                 "is_failure": e.is_failure,
+                "is_planned": e.is_planned,
                 "production_loss_tons": _num(e.production_loss_tons),
                 "parts": [{"discipline_id": str(p.discipline_id), "hours": _num(p.hours)} for p in parts.get(e.id, [])],
             }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionIcon, Alert, Autocomplete, Badge, Button, Checkbox, Group, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Table, Text, TextInput } from "@mantine/core";
+import { ActionIcon, Alert, Autocomplete, Badge, Button, Checkbox, Group, NumberInput, SegmentedControl, Select, SimpleGrid, Stack, Table, Text, Textarea, TextInput } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import Link from "next/link";
@@ -12,20 +12,22 @@ import { Modal } from "@/components/Modal";
 import { AssetPicker, DeptSelect, Loading, PageHeader, Section } from "@/components/ui";
 import { post, put } from "@/lib/api";
 import { fmtNum, useMut, useQ } from "@/lib/hooks";
-import type { LogField, LogKind, LogTemplate, OpDefect, OpDiscipline, OpGrade, OpMachine, OpSection, OpSettings, OpShift } from "@/lib/ops";
+import { isPaper, LOG_KINDS, PRODUCTION_MODELS, type LogField, type LogKind, type LogTemplate, type OpDefect, type OpDiscipline, type OpGrade, type OpMachine, type OpSection, type OpSettings, type OpShift, type ProductionModel, type ReportProfile } from "@/lib/ops";
 
 type Num = number | string;
 const n = (v: Num | null | undefined) => (v === "" || v === null || v === undefined ? null : Number(v));
 
 // ---------------- machine
-interface MForm { id?: string; code: string; name: string; department_id: string | null; asset_id: string | null; trim_width_m: Num; day_start: string; shifts: OpShift[]; is_active: boolean }
+interface MForm { id?: string; code: string; name: string; department_id: string | null; asset_id: string | null; trim_width_m: Num; day_start: string; shifts: OpShift[]; is_active: boolean;
+  production_model: ProductionModel; output_unit: string; report_profile: ReportProfile }
 
 function MachineModal({ form, onClose }: { form: MForm | null; onClose: () => void }) {
   const { t } = useTranslation();
   const [f, setF] = useState<MForm | null>(form);
   const save = useMut(() => {
     if (!f) return Promise.resolve();
-    const body = { code: f.code, name: f.name, department_id: f.department_id, asset_id: f.asset_id, trim_width_m: n(f.trim_width_m), day_start: f.day_start, shifts: f.shifts, is_active: f.is_active };
+    const body = { code: f.code, name: f.name, department_id: f.department_id, asset_id: f.asset_id, trim_width_m: f.report_profile === "paper_machine" ? n(f.trim_width_m) : null,
+      day_start: f.day_start, shifts: f.shifts, is_active: f.is_active, production_model: f.production_model, output_unit: f.output_unit.trim() || "t", report_profile: f.report_profile };
     return f.id ? put(`/operations/machines/${f.id}`, body) : post("/operations/machines", body);
   }, { onDone: onClose });
   if (!f) return null;
@@ -39,8 +41,17 @@ function MachineModal({ form, onClose }: { form: MForm | null; onClose: () => vo
         </SimpleGrid>
         <DeptSelect label={t("ops.set.dept")} value={f.department_id} onChange={(v) => set({ department_id: v })} />
         <AssetPicker label={t("ops.set.asset")} required value={f.asset_id} onChange={(v) => set({ asset_id: v })} />
+        <SimpleGrid cols={{ base: 1, sm: 3 }}>
+          <Select label={t("gen.set.model")} allowDeselect={false} value={f.production_model} onChange={(v) => v && set({ production_model: v as ProductionModel })}
+            data={PRODUCTION_MODELS.map((x) => ({ value: x, label: t(`gen.models.${x}`) }))} />
+          <Autocomplete label={t("gen.set.unit")} description={t("gen.set.unitHint")} value={f.output_unit} onChange={(v) => set({ output_unit: v })}
+            data={["t", "kg", "m³", "m", "m²", "l", "pcs", "packs", "units", "batch", "MWh"]} maxLength={12} />
+          <Select label={t("gen.set.profile")} allowDeselect={false} value={f.report_profile} onChange={(v) => v && set({ report_profile: v as ReportProfile })}
+            data={(["generic", "paper_machine"] as const).map((x) => ({ value: x, label: t(`gen.profiles.${x}`) }))} />
+        </SimpleGrid>
+        <Text size="xs" c="dimmed">{t(`gen.profileHint.${f.report_profile}`)}</Text>
         <SimpleGrid cols={2}>
-          <NumberInput label={t("ops.set.width")} min={0} decimalScale={3} value={f.trim_width_m} onChange={(v) => set({ trim_width_m: v })} />
+          {f.report_profile === "paper_machine" && <NumberInput label={t("ops.set.width")} min={0} decimalScale={3} value={f.trim_width_m} onChange={(v) => set({ trim_width_m: v })} />}
           <TextInput type="time" label={t("ops.set.dayStart")} value={f.day_start} onChange={(e) => set({ day_start: e.currentTarget.value })} />
         </SimpleGrid>
         <Text size="sm" fw={500}>{t("ops.set.shifts")}</Text>
@@ -172,15 +183,17 @@ function DefectModal({ form, onClose }: { form: XForm | null; onClose: () => voi
 
 
 // ---------------- daily log forms
-interface TForm { id?: string; code: string; name: string; department_id: string | null; frequency: "day" | "shift"; day_start: string; shifts: OpShift[]; issues: boolean; in_pm_report: boolean; sort: Num; is_active: boolean }
-interface FForm { id?: string; section: string; code: string; label: string; kind: LogKind; unit: string; decimals: Num; formula: string; low: Num; high: Num; meter_id: string | null; chart: boolean; per_ton: boolean; day_agg: string | null; sort: Num; is_active: boolean }
+interface TForm { id?: string; code: string; name: string; department_id: string | null; frequency: "day" | "shift"; day_start: string; shifts: OpShift[]; issues: boolean; in_pm_report: boolean; sort: Num; is_active: boolean; machine_id: string | null }
+interface FForm { id?: string; section: string; code: string; label: string; kind: LogKind; unit: string; decimals: Num; formula: string; low: Num; high: Num; meter_id: string | null; chart: boolean; per_ton: boolean; day_agg: string | null; sort: Num; is_active: boolean;
+  target: Num; required: boolean; options: string }
 
 function TemplateModal({ form, onClose }: { form: TForm | null; onClose: () => void }) {
   const { t } = useTranslation();
+  const lines = useQ<OpSettings>("/operations/settings").data?.machines ?? [];
   const [f, setF] = useState<TForm | null>(form);
   const save = useMut(() => {
     if (!f) return Promise.resolve();
-    const body = { code: f.code, name: f.name, department_id: f.department_id, frequency: f.frequency, day_start: f.day_start, shifts: f.frequency === "shift" ? f.shifts : [], issues: f.issues, in_pm_report: f.in_pm_report, sort: n(f.sort) ?? 0, is_active: f.is_active };
+    const body = { code: f.code, name: f.name, department_id: f.department_id, frequency: f.frequency, day_start: f.day_start, shifts: f.frequency === "shift" ? f.shifts : [], issues: f.issues, in_pm_report: f.in_pm_report, sort: n(f.sort) ?? 0, is_active: f.is_active, machine_id: f.machine_id };
     return f.id ? put(`/operations/log-templates/${f.id}`, body) : post("/operations/log-templates", body);
   }, { onDone: onClose });
   if (!f) return null;
@@ -192,7 +205,11 @@ function TemplateModal({ form, onClose }: { form: TForm | null; onClose: () => v
           <TextInput label={t("ops.set.code")} required value={f.code} onChange={(e) => set({ code: e.currentTarget.value })} />
           <TextInput label={t("ops.set.name")} required value={f.name} onChange={(e) => set({ name: e.currentTarget.value })} />
         </SimpleGrid>
-        <DeptSelect label={t("ops.set.dept")} value={f.department_id} onChange={(v) => set({ department_id: v })} />
+        <SimpleGrid cols={{ base: 1, sm: 2 }}>
+          <DeptSelect label={t("ops.set.dept")} value={f.department_id} onChange={(v) => set({ department_id: v })} />
+          <Select label={t("gen.set.formLine")} description={t("gen.set.formLineHint")} clearable value={f.machine_id} onChange={(v) => set({ machine_id: v })}
+            data={lines.map((m) => ({ value: m.id, label: `${m.code} – ${m.name}` }))} />
+        </SimpleGrid>
         <SimpleGrid cols={2}>
           <Select label={t("logs.set.frequency")} value={f.frequency} onChange={(v) => set({ frequency: (v ?? "day") as TForm["frequency"] })}
             data={[{ value: "day", label: t("logs.set.daily") }, { value: "shift", label: t("logs.set.perShift") }]} />
@@ -218,7 +235,8 @@ function TemplateModal({ form, onClose }: { form: TForm | null; onClose: () => v
   );
 }
 
-const KINDS: LogKind[] = ["meter", "counter", "number", "check", "text", "calc"];
+const KINDS: LogKind[] = LOG_KINDS;
+const NUMERIC: LogKind[] = ["meter", "counter", "number", "check", "calc"];
 
 function FieldModal({ tpl, form, onClose }: { tpl: LogTemplate; form: FForm | null; onClose: () => void }) {
   const { t } = useTranslation();
@@ -227,7 +245,9 @@ function FieldModal({ tpl, form, onClose }: { tpl: LogTemplate; form: FForm | nu
   const save = useMut(() => {
     if (!f) return Promise.resolve();
     const body = { section: f.section, code: f.code, label: f.label, kind: f.kind, unit: f.unit || null, decimals: n(f.decimals) ?? 1, formula: f.kind === "calc" ? f.formula : null,
-      low: n(f.low), high: n(f.high), meter_id: f.kind === "counter" ? f.meter_id : null, chart: f.chart, per_ton: f.per_ton, day_agg: f.day_agg || null, sort: n(f.sort) ?? 0, is_active: f.is_active };
+      low: n(f.low), high: n(f.high), meter_id: f.kind === "counter" ? f.meter_id : null, chart: f.chart, per_ton: f.per_ton, day_agg: f.day_agg || null, sort: n(f.sort) ?? 0, is_active: f.is_active,
+      target: NUMERIC.includes(f.kind) ? n(f.target) : null, required: f.required,
+      options: f.kind === "select" || f.kind === "multi" ? f.options.split("\n").map((x) => x.trim()).filter(Boolean) : null };
     return f.id ? put(`/operations/log-fields/${f.id}`, body) : post(`/operations/log-templates/${tpl.id}/fields`, body);
   }, { onDone: onClose });
   if (!f) return null;
@@ -249,17 +269,21 @@ function FieldModal({ tpl, form, onClose }: { tpl: LogTemplate; form: FForm | nu
           className="mono" value={f.formula} onChange={(e) => set({ formula: e.currentTarget.value })} />}
         {f.kind === "counter" && <Select label={t("logs.set.meter")} description={t("logs.toMeter")} clearable searchable value={f.meter_id} onChange={(v) => set({ meter_id: v })}
           data={(meters.data ?? []).map((m) => ({ value: m.id, label: m.label }))} />}
-        {f.kind !== "text" && <SimpleGrid cols={4}>
+        {(f.kind === "select" || f.kind === "multi") && <Textarea label={t("gen.set.options")} description={t("gen.set.optionsHint")} autosize minRows={3}
+          value={f.options} onChange={(e) => set({ options: e.currentTarget.value })} />}
+        {NUMERIC.includes(f.kind) && <SimpleGrid cols={4}>
           <TextInput label={t("logs.set.unit")} value={f.unit} onChange={(e) => set({ unit: e.currentTarget.value })} />
           <NumberInput label={t("logs.set.decimals")} min={0} max={4} value={f.decimals} onChange={(v) => set({ decimals: v })} />
           <NumberInput label={t("logs.set.low")} value={f.low} onChange={(v) => set({ low: v })} />
           <NumberInput label={t("logs.set.high")} value={f.high} onChange={(v) => set({ high: v })} />
         </SimpleGrid>}
-        {f.kind !== "text" && f.kind !== "check" && <Select label={t("logs.set.dayAgg")} value={f.day_agg ?? ""} onChange={(v) => set({ day_agg: v || null })}
+        {NUMERIC.includes(f.kind) && f.kind !== "check" && <NumberInput label={t("gen.set.target")} description={t("gen.set.targetHint")} value={f.target} onChange={(v) => set({ target: v })} />}
+        {NUMERIC.includes(f.kind) && f.kind !== "check" && <Select label={t("logs.set.dayAgg")} value={f.day_agg ?? ""} onChange={(v) => set({ day_agg: v || null })}
           data={[{ value: "", label: t("logs.set.aggAuto") }, { value: "sum", label: t("logs.set.aggSum") }, { value: "avg", label: t("logs.set.aggAvg") }]} />}
-        {f.kind !== "text" && <Group>
+        {f.kind !== "calc" && <Checkbox label={t("gen.set.required")} checked={f.required} onChange={(e) => set({ required: e.currentTarget.checked })} />}
+        {NUMERIC.includes(f.kind) && <Group>
           <Checkbox label={t("logs.set.chart")} checked={f.chart} onChange={(e) => set({ chart: e.currentTarget.checked })} />
-          <Checkbox label={t("logs.set.perTon")} checked={f.per_ton} onChange={(e) => set({ per_ton: e.currentTarget.checked })} />
+          <Checkbox label={t("gen.set.perUnit")} checked={f.per_ton} onChange={(e) => set({ per_ton: e.currentTarget.checked })} />
         </Group>}
         <SimpleGrid cols={2}>
           <NumberInput label={t("ops.set.sort")} min={0} value={f.sort} onChange={(v) => set({ sort: v })} />
@@ -280,13 +304,14 @@ function LogForms() {
   const phone = useMediaQuery("(max-width: 48em)");
   const list = q.data ?? [];
   const tpl = list.find((x) => x.id === tid) ?? list[0];
-  const editT = (x: LogTemplate): TForm => ({ id: x.id, code: x.code, name: x.name, department_id: x.department_id, frequency: x.frequency, day_start: x.day_start, shifts: x.shifts, issues: x.issues, in_pm_report: x.in_pm_report, sort: x.sort, is_active: x.is_active });
+  const editT = (x: LogTemplate): TForm => ({ id: x.id, code: x.code, name: x.name, department_id: x.department_id, frequency: x.frequency, day_start: x.day_start, shifts: x.shifts, issues: x.issues, in_pm_report: x.in_pm_report, sort: x.sort, is_active: x.is_active, machine_id: x.machine_id });
   const editF = (x: LogField): FForm => ({ id: x.id, section: x.section, code: x.code, label: x.label, kind: x.kind, unit: x.unit ?? "", decimals: x.decimals, formula: x.formula ?? "",
-    low: x.low ?? "", high: x.high ?? "", meter_id: x.meter_id, chart: x.chart, per_ton: x.per_ton, day_agg: x.day_agg, sort: x.sort, is_active: x.is_active });
+    low: x.low ?? "", high: x.high ?? "", meter_id: x.meter_id, chart: x.chart, per_ton: x.per_ton, day_agg: x.day_agg, sort: x.sort, is_active: x.is_active,
+    target: x.target ?? "", required: x.required, options: (x.options ?? []).join("\n") });
   const last = (tpl?.fields ?? []).at(-1);
   return (
     <Section title={t("logs.set.title")} actions={<Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => setTf({ code: "", name: "", department_id: null, frequency: "day", day_start: "07:00",
-      shifts: [{ code: "D", name: "Day shift", start: "07:00" }, { code: "N", name: "Night shift", start: "19:00" }], issues: false, in_pm_report: false, sort: list.length * 10 + 10, is_active: true })}>{t("logs.set.newForm")}</Button>}>
+      shifts: [{ code: "D", name: "Day shift", start: "07:00" }, { code: "N", name: "Night shift", start: "19:00" }], issues: false, in_pm_report: false, sort: list.length * 10 + 10, is_active: true, machine_id: null })}>{t("logs.set.newForm")}</Button>}>
       <Text size="xs" c="dimmed" mb="xs">{t("logs.set.hint")}</Text>
       {tpl && <>
         <Group mb="sm" gap="xs">
@@ -294,7 +319,7 @@ function LogForms() {
             orientation={phone ? "vertical" : "horizontal"} fullWidth={phone} w={phone ? "100%" : undefined} />
           <Edit onClick={() => setTf(editT(tpl))} />
           <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={() => setFf({ section: last?.section ?? "", code: "", label: "", kind: "number", unit: "", decimals: 1, formula: "",
-            low: "", high: "", meter_id: null, chart: false, per_ton: false, day_agg: null, sort: (last?.sort ?? 0) + 10, is_active: true })}>{t("logs.set.addLine")}</Button>
+            low: "", high: "", meter_id: null, chart: false, per_ton: false, day_agg: null, sort: (last?.sort ?? 0) + 10, is_active: true, target: "", required: false, options: "" })}>{t("logs.set.addLine")}</Button>
         </Group>
         <Table.ScrollContainer minWidth={700}>
           <Table striped>
@@ -304,7 +329,7 @@ function LogForms() {
               {(tpl.fields ?? []).map((x) => (
                 <Table.Tr key={x.id}><Table.Td>{x.section}</Table.Td><Table.Td className="mono">{x.code}</Table.Td><Table.Td>{x.label} <Off on={x.is_active} />{x.formula && <Text size="xs" c="dimmed" className="mono">= {x.formula}</Text>}</Table.Td>
                   <Table.Td>{t(`logs.kinds.${x.kind}`)}{x.meter_id && " ⏱"}</Table.Td><Table.Td>{x.unit}</Table.Td><Table.Td>{x.low !== null || x.high !== null ? `${x.low ?? "…"}–${x.high ?? "…"}` : ""}</Table.Td>
-                  <Table.Td>{x.chart ? "📈" : ""}{x.per_ton ? " /t" : ""}</Table.Td><Table.Td><Edit onClick={() => setFf(editF(x))} /></Table.Td></Table.Tr>
+                  <Table.Td>{x.chart ? "📈" : ""}{x.per_ton ? " /u" : ""}{x.required ? " *" : ""}</Table.Td><Table.Td><Edit onClick={() => setFf(editF(x))} /></Table.Td></Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
@@ -331,7 +356,8 @@ function SettingsView() {
   if (!q.data) return <Loading />;
   const { machines, disciplines, defects } = q.data;
   const m = machines.find((x) => x.id === (mid ?? machines[0]?.id));
-  const editM = (x: OpMachine): MForm => ({ id: x.id, code: x.code, name: x.name, department_id: x.department_id, asset_id: x.asset_id, trim_width_m: x.trim_width_m ?? "", day_start: x.day_start, shifts: x.shifts, is_active: x.is_active });
+  const editM = (x: OpMachine): MForm => ({ id: x.id, code: x.code, name: x.name, department_id: x.department_id, asset_id: x.asset_id, trim_width_m: x.trim_width_m ?? "", day_start: x.day_start,
+    shifts: x.shifts, is_active: x.is_active, production_model: x.production_model, output_unit: x.output_unit, report_profile: x.report_profile });
   const editG = (g: OpGrade): GForm => ({ id: g.id, code: g.code, name: g.name ?? "", gsm: g.gsm, speed: g.target_speed_mpm ?? "", ideal: g.ideal_mt_min, is_active: g.is_active });
   const editS = (s: OpSection): SForm => ({ id: s.id, name: s.name, asset_id: s.asset_id, sort: s.sort, is_active: s.is_active });
   const editD = (d: OpDiscipline): DForm => ({ id: d.id, code: d.code, name: d.name, maintenance: d.maintenance, sort: d.sort, is_active: d.is_active });
@@ -343,14 +369,15 @@ function SettingsView() {
       <PageHeader title={t("ops.set.title")} />
       <Stack>
         <Section title={t("ops.set.machines")} actions={add(() => setMf({ code: "", name: "", department_id: null, asset_id: null, trim_width_m: "", day_start: "07:00",
-          shifts: [{ code: "D", name: "Day shift", start: "07:00" }, { code: "N", name: "Night shift", start: "19:00" }], is_active: true }))}>
+          shifts: [{ code: "D", name: "Day shift", start: "07:00" }, { code: "N", name: "Night shift", start: "19:00" }], is_active: true,
+          production_model: "continuous", output_unit: "t", report_profile: "generic" }))}>
           {machines.length === 0 ? <Alert color="blue">{t("ops.noMachine")}</Alert> : (
             <Table.ScrollContainer minWidth={460}><Table striped><Table.Tbody>
               {machines.map((x) => (
                 <Table.Tr key={x.id} bg={x.id === m?.id ? "var(--mantine-color-blue-light)" : undefined} style={{ cursor: "pointer" }} onClick={() => setMid(x.id)}>
                   <Table.Td fw={600}>{x.code}</Table.Td><Table.Td>{x.name} <Off on={x.is_active} /></Table.Td>
                   <Table.Td>{t("ops.set.dayStart")} {x.day_start}</Table.Td><Table.Td>{x.shifts.map((s) => `${s.code} ${s.start}`).join(" · ")}</Table.Td>
-                  <Table.Td>{x.trim_width_m ? `${x.trim_width_m} m` : ""}</Table.Td>
+                  <Table.Td>{t(`gen.models.${x.production_model}`)} · {x.output_unit}{isPaper(x) && <Badge ms={6} size="xs" variant="light">{t("gen.profiles.paper_machine")}</Badge>}</Table.Td>
                   <Table.Td onClick={(e) => e.stopPropagation()}><Edit onClick={() => setMf(editM(x))} /></Table.Td>
                 </Table.Tr>
               ))}
@@ -359,7 +386,7 @@ function SettingsView() {
         </Section>
         {m && (
           <SimpleGrid cols={{ base: 1, lg: 2 }}>
-            <Section title={`${t("ops.set.grades")} · ${m.code}`} actions={add(() => setGf({ code: "", name: "", gsm: "", speed: "", ideal: "", is_active: true }))}>
+            {isPaper(m) ? <Section title={`${t("ops.set.grades")} · ${m.code}`} actions={add(() => setGf({ code: "", name: "", gsm: "", speed: "", ideal: "", is_active: true }))}>
               <Text size="xs" c="dimmed" mb="xs">{t("ops.set.rateHint")}</Text>
               <Table.ScrollContainer minWidth={460}><Table striped>
                 <Table.Thead><Table.Tr><Table.Th>{t("ops.set.gsm")}</Table.Th><Table.Th>{t("ops.set.targetSpeed")}</Table.Th><Table.Th>{t("ops.set.ideal")}</Table.Th>
@@ -372,7 +399,8 @@ function SettingsView() {
                   ))}
                 </Table.Tbody>
               </Table></Table.ScrollContainer>
-            </Section>
+            </Section> : <Section title={`${t("gen.set.products")} · ${m.code}`}><Text size="sm">{t("gen.set.productsHint")}</Text>
+              <Button mt="xs" size="xs" variant="light" component={Link} href="/operations/setup#products">{t("gen.set.openSetup")}</Button></Section>}
             <Section title={`${t("ops.set.sections")} · ${m.code}`} actions={add(() => setSf({ name: "", asset_id: null, sort: (m.sections?.length ?? 0) + 1, is_active: true }))}>
               <Table.ScrollContainer minWidth={460}><Table striped><Table.Tbody>
                 {(m.sections ?? []).map((s) => (

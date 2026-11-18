@@ -12,11 +12,12 @@ import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
 import { Modal } from "@/components/Modal";
 import { BackLink, oeeColor, PeriodTiles, ShiftLogs, Tile } from "@/components/Ops";
+import { GenericReport } from "@/components/OpsGeneric";
 import { ConfirmButton, Loading, PageHeader, Section, StatusBadge } from "@/components/ui";
 import { del, patch, post, put } from "@/lib/api";
 import { fmtNum, useMut, useQ } from "@/lib/hooks";
 import {
-  atTime, EVENT_TYPES, hhmm, hm, nextDay, pct, t3, type Loss, type OpSettings, type Reel, type Report, type Segment, type Stop,
+  atTime, EVENT_TYPES, hhmm, hm, isPaper, nextDay, pct, t3, type Loss, type OpSettings, type Reel, type Report, type Segment, type Stop,
 } from "@/lib/ops";
 import { useSession } from "@/lib/session";
 
@@ -315,7 +316,7 @@ function ReportView() {
   const lastSeg = r.segments[r.segments.length - 1];
   const lastReel = r.reels[r.reels.length - 1];
   const inProgress = c.in_progress;
-  const discIds = [...new Set([...Object.keys(c.stops.downtime_by_discipline), ...Object.keys(c.stops.breaks_count_by_discipline)])];
+  const discIds = [...new Set([...Object.keys(c.stops.downtime_by_discipline ?? {}), ...Object.keys(c.stops.breaks_count_by_discipline ?? {})])];
   const orderedDiscs = [...s.disciplines.filter((d) => discIds.includes(d.id)).map((d) => d.id), ...discIds.filter((x) => !s.disciplines.some((d) => d.id === x))];
   const newRun = (): RunForm => ({
     start: lastSeg ? hm(lastSeg.ended_at, tz) : r.machine.day_start, end: "", grade_id: lastSeg?.grade_id ?? null, speed: lastSeg?.speed_mpm ?? "", reason: "", gc_h: "", gc_rej: "",
@@ -342,7 +343,7 @@ function ReportView() {
   return (
     <>
       <BackLink href="/operations" label={t("ops.title")} />
-      <PageHeader title={`${t("ops.report.title")} · ${r.machine.code} · ${r.report_date}`} actions={<>
+      <PageHeader title={`${isPaper(r.machine) ? t("ops.report.title") : t("gen.reportTitle")} · ${r.machine.code} · ${r.report_date}`} actions={<>
         <Button variant="default" component={Link} href={`/operations/${id}/print`} leftSection={<IconPrinter size={16} />}>{t("ops.report.print")}</Button>
         {r.status === "draft" && !inProgress && can("op.enter") && <ConfirmButton color="blue" loading={act.isPending} onConfirm={() => act.mutate("submit")}>{t("ops.report.submit")}</ConfirmButton>}
         {r.status !== "confirmed" && !inProgress && can("op.confirm") && <ConfirmButton color="teal" loading={act.isPending} onConfirm={() => act.mutate("confirm")}>{t("ops.report.confirm")}</ConfirmButton>}
@@ -360,7 +361,10 @@ function ReportView() {
           {r.confirmed_by && <Text size="sm" c="dimmed">· {t("ops.report.confirmedBy", { who: r.confirmed_by })}</Text>}
         </Group>
       </PageHeader>
-      <Stack>
+      {!isPaper(r.machine) ? <GenericReport r={r} s={s} extras={<>
+        {r.shift_logs.map((sec) => <Section key={sec.template.id} title={sec.template.name}><ShiftLogs sec={sec} date={r.report_date} canStart={can("op.enter")} /></Section>)}
+        <DayUtilities r={r} />
+      </>} /> : <Stack>
         {r.status === "submitted" && <Alert color="blue" icon={<IconLock />}>{t("ops.report.readOnlySubmitted")}</Alert>}
         {r.status === "confirmed" && <Alert color="teal" icon={<IconLock />}>{t("ops.report.readOnlyConfirmed")}</Alert>}
         {r.reopen_note && r.status === "draft" && <Alert color="orange">{t("ops.report.reopened", { note: r.reopen_note })}</Alert>}
@@ -535,7 +539,7 @@ function ReportView() {
         <Utilities key={`${r.id}-${r.status}`} r={r} />
 
         <Paper withBorder p="md" radius="md"><Stack><PeriodTiles p={c.mtd} title={t("ops.tiles.mtd")} /><PeriodTiles p={c.ytd} title={t("ops.tiles.ytd")} /></Stack></Paper>
-      </Stack>
+      </Stack>}
       <RunModal key={`run-${run?.id ?? "new"}-${String(!!run)}`} r={r} s={s} form={run} onClose={() => setRun(null)} />
       <ReelModal key={`reel-${reel?.id ?? "new"}-${String(!!reel)}`} r={r} form={reel} onClose={() => setReel(null)} />
       <StopModal key={`stop-${stop?.id ?? "new"}-${String(!!stop)}`} r={r} s={s} form={stop} onClose={() => setStop(null)} />

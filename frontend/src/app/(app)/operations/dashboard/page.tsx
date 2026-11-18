@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
 import { oeeColor, Tile } from "@/components/Ops";
+import { KpiCard } from "@/components/OpsKpi";
 import { Loading, PageHeader } from "@/components/ui";
 import { fmtNum, useQ } from "@/lib/hooks";
 import { fmtVal, hhmm, pct, type Dashboard, type DashField } from "@/lib/ops";
@@ -27,10 +28,10 @@ const short = (d: string) => d.slice(5); // MM-DD on the axis
 /** Axis ticks: compact numbers, no unit (the chart title carries it). */
 const tick = (v: number) => (Math.abs(v) >= 10000 ? `${fmtNum(v / 1000, 0)}k` : fmtNum(v, Math.abs(v) < 10 ? 2 : 0));
 
-function FieldChart({ f, perTon, color }: { f: DashField; perTon: boolean; color: string }) {
+function FieldChart({ f, perTon, color, out }: { f: DashField; perTon: boolean; color: string; out: string }) {
   const { t } = useTranslation();
   const src = perTon && f.per_ton_series ? f.per_ton_series : f.series;
-  const unit = perTon && f.per_ton_series ? `${f.unit ?? ""}/t` : f.unit ?? "";
+  const unit = perTon && f.per_ton_series ? `${f.unit ?? ""}/${out}` : f.unit ?? "";
   const data = Object.entries(src).sort(([a], [b]) => a.localeCompare(b)).map(([d, v]) => ({ day: short(d), v }));
   const digits = perTon ? 3 : f.decimals;
   return (
@@ -55,6 +56,9 @@ function View() {
   if (!q.data) return <Loading />;
   const d = q.data;
   const p = d.period;
+  const sm = p?.summary;
+  const u = d.unit ?? "";
+  const paper = d.profile === "paper_machine";
   const done = d.production.filter((x) => !x.in_progress);
   const prodData = done.map((x) => ({ day: short(x.date), a: x.a, down: Math.round(x.b * 1000) / 1000, reject: x.reject }));
   const oeeData = done.map((x) => ({ day: short(x.date), oee: x.oee !== null ? x.oee * 100 : null }));
@@ -69,26 +73,33 @@ function View() {
       <Group mb="md" gap="sm" wrap="wrap">
         <SegmentedControl value={days} onChange={setDays} data={[{ value: "7", label: t("opsDash.days", { n: 7 }) }, { value: "30", label: t("opsDash.days", { n: 30 }) }, { value: "90", label: t("opsDash.days", { n: 90 }) }]} />
         {d.machines.length > 1 && <Select w={220} data={d.machines.map((m) => ({ value: m.id, label: `${m.code} – ${m.name}` }))} value={mid ?? d.machine_id} onChange={setMid} />}
-        <Switch label={t("opsDash.perTon")} checked={perTon} onChange={(e) => setPerTon(e.currentTarget.checked)} />
+        <Switch label={t("gen.dash.perUnit", { u })} checked={perTon} onChange={(e) => setPerTon(e.currentTarget.checked)} />
       </Group>
       {!p && d.logs.length === 0 ? <Alert color="blue">{t("ops.noMachine")}</Alert> : (
         <Stack>
-          {p && (
+          {d.kpis.length > 0 && (
             <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }}>
-              <Tile label={t("ops.tiles.gross")} value={`${fmtNum(p.production.gross, 0)} t`} sub={`${t("opsDash.perDay")} ${fmtNum(p.production.gross / Math.max(p.days, 1), 0)} t`} />
-              <Tile label={t("ops.tiles.a")} value={`${fmtNum(p.production.a, 0)} t`} sub={`B+S ${pct(p.production.b_pct)} · ${t("ops.tiles.reject")} ${pct(p.production.reject_pct)}`} />
-              <Tile label={t("ops.tiles.oee")} value={pct(p.oee.oee)} color={oeeColor(p.oee.oee)} sub={`⁦${pct(p.oee.availability, 0)} × ${pct(p.oee.performance, 0)} × ${pct(p.oee.quality, 0)}⁩`} />
-              <Tile label={t("ops.tiles.downtime")} value={hhmm(p.stops.downtime_hours)} sub={`${t("ops.tables.planned")} ${hhmm(p.stops.planned_hours)}`} />
-              <Tile label={t("ops.tiles.breaks")} value={String(p.stops.breaks_count)} sub={hhmm(p.stops.breaks_hours)} />
-              <Tile label={t("ops.tiles.trim")} value={pct(p.production.trim_pct)} sub={`${fmtNum(p.production.trim, 0)} t`} />
-              {perTonTiles.map((f) => <Tile key={f.id} label={`${f.label} / t`} value={`${fmtVal(f.per_ton_period, 3)} ${f.unit ?? ""}/t`} sub={`${fmtVal(f.total, 0)} ${f.unit ?? ""}`} />)}
+              {d.kpis.map((k) => <KpiCard key={`${k.id}-${k.lines.join()}`} k={k} />)}
+            </SimpleGrid>
+          )}
+          {sm && (
+            <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }}>
+              <Tile label={t("gen.tiles.produced")} value={`${fmtNum(sm.produced ?? 0, 0)} ${u}`} sub={`${t("opsDash.perDay")} ${fmtNum((sm.produced ?? 0) / Math.max(sm.days, 1), 0)} ${u}`} />
+              <Tile label={t("gen.tiles.good")} value={`${fmtNum(sm.good ?? 0, 0)} ${u}`}
+                sub={`${t("gen.tiles.downgrade")} ${pct(sm.net ? (sm.downgrade ?? 0) / sm.net : null)} · ${t("ops.tiles.reject")} ${pct(sm.net ? (sm.reject ?? 0) / sm.net : null)}`} />
+              <Tile label={t("ops.tiles.oee")} value={pct(sm.oee.oee)} color={oeeColor(sm.oee.oee)} sub={`⁦${pct(sm.oee.availability, 0)} × ${pct(sm.oee.performance, 0)} × ${pct(sm.oee.quality, 0)}⁩`} />
+              <Tile label={t("ops.tiles.downtime")} value={hhmm(sm.downtime_hours ?? 0)} sub={`${t("ops.tables.planned")} ${hhmm(sm.planned_downtime_hours ?? 0)}`} />
+              {paper ? <Tile label={t("ops.tiles.breaks")} value={String(sm.breaks ?? 0)} sub={hhmm(sm.breaks_hours ?? 0)} />
+                : <Tile label={t("gen.tiles.stops")} value={String(sm.stops ?? 0)} sub={`${t("gen.tiles.failures")} ${hhmm(sm.failure_hours ?? 0)}`} />}
+              {paper && <Tile label={t("ops.tiles.trim")} value={pct(sm.produced ? (sm.trim ?? 0) / sm.produced : null)} sub={`${fmtNum(sm.trim ?? 0, 0)} ${u}`} />}
+              {perTonTiles.map((f) => <Tile key={f.id} label={`${f.label} / ${u}`} value={`${fmtVal(f.per_ton_period, 3)} ${f.unit ?? ""}/${u}`} sub={`${fmtVal(f.total, 0)} ${f.unit ?? ""}`} />)}
             </SimpleGrid>
           )}
           {p && (
             <SimpleGrid cols={{ base: 1, lg: 2 }}>
-              <ChartCard title={t("opsDash.production")} sub={t("opsDash.productionSub")}>
+              <ChartCard title={`${t("gen.dash.production")}, ${u}`} sub={t("gen.dash.productionSub")}>
                 <BarChart h={240} data={prodData} dataKey="day" type="stacked" withLegend legendProps={{ verticalAlign: "bottom" }} gridAxis="y" barProps={{ radius: 2 }}
-                  valueFormatter={(x) => `${fmtNum(x, 1)} t`} yAxisProps={{ tickFormatter: tick }} series={[{ name: "a", label: t("ops.tiles.a"), color: c[0]! }, { name: "down", label: t("opsDash.downgrade"), color: c[1]! }, { name: "reject", label: t("ops.tiles.reject"), color: c[2]! }]} />
+                  valueFormatter={(x) => `${fmtNum(x, 1)} ${u}`} yAxisProps={{ tickFormatter: tick }} series={[{ name: "a", label: t("gen.tiles.good"), color: c[0]! }, { name: "down", label: t("gen.tiles.downgrade"), color: c[1]! }, { name: "reject", label: t("ops.tiles.reject"), color: c[2]! }]} />
               </ChartCard>
               <ChartCard title={t("ops.tiles.oee")} sub={t("ops.report.oeeFormula")}>
                 <LineChart h={240} data={oeeData} dataKey="day" series={[{ name: "oee", label: "OEE", color: c[0]! }]} curveType="linear" strokeWidth={2}
@@ -100,25 +111,38 @@ function View() {
                   legendProps={{ verticalAlign: "bottom" }} yAxisProps={{ domain: [0, 100], tickFormatter: (v: number) => `${v}%` }} valueFormatter={(x) => `${fmtNum(x, 1)}%`}
                   series={[{ name: "av", label: t("ops.tiles.availability"), color: c[0]! }, { name: "pe", label: t("ops.tiles.performance"), color: c[1]! }, { name: "qu", label: t("ops.tiles.quality"), color: c[2]! }]} />
               </ChartCard>
-              <ChartCard title={t("opsDash.breaksDay")}>
-                <BarChart h={200} data={done.map((x) => ({ day: short(x.date), n: x.breaks }))} dataKey="day" gridAxis="y" barProps={{ radius: 2 }}
-                  series={[{ name: "n", label: t("ops.tiles.breaks"), color: c[0]! }]} />
+              {paper ? (
+                <ChartCard title={t("opsDash.breaksDay")}>
+                  <BarChart h={200} data={done.map((x) => ({ day: short(x.date), n: x.breaks }))} dataKey="day" gridAxis="y" barProps={{ radius: 2 }}
+                    series={[{ name: "n", label: t("ops.tiles.breaks"), color: c[0]! }]} />
+                </ChartCard>
+              ) : (
+                <ChartCard title={t("gen.dash.downtimeDay")}>
+                  <BarChart h={200} data={done.map((x) => ({ day: short(x.date), n: x.downtime_hours }))} dataKey="day" gridAxis="y" barProps={{ radius: 2 }}
+                    valueFormatter={(x) => hhmm(x)} series={[{ name: "n", label: t("ops.tiles.downtime"), color: c[0]! }]} />
+                </ChartCard>
+              )}
+              <ChartCard title={t("gen.dash.lossCat")} sub={t("opsDash.hours")}>
+                <BarChart h={Math.max(160, 28 * Object.keys(p.loss_by_category).length + 40)} data={pareto(p.loss_by_category)} dataKey="k" orientation="vertical"
+                  gridAxis="x" barProps={{ radius: 2 }} valueFormatter={(x) => hhmm(x)} xAxisProps={{ tickFormatter: (v: number) => `${v} h` }} series={[{ name: "v", label: t("opsDash.hours"), color: c[1]! }]} />
               </ChartCard>
               <ChartCard title={t("opsDash.downtimeDisc")} sub={t("opsDash.hours")}>
                 <BarChart h={Math.max(160, 28 * Object.keys(p.stops.downtime_by_discipline).length + 40)} data={pareto(p.stops.downtime_by_discipline)} dataKey="k" orientation="vertical"
                   gridAxis="x" barProps={{ radius: 2 }} valueFormatter={(x) => hhmm(x)} xAxisProps={{ tickFormatter: (v: number) => `${v} h` }} series={[{ name: "v", label: t("opsDash.hours"), color: c[0]! }]} />
               </ChartCard>
-              <ChartCard title={t("opsDash.breaksDisc")} sub={t("ops.tables.count")}>
-                <BarChart h={Math.max(160, 28 * Object.keys(p.stops.breaks_count_by_discipline).length + 40)} data={pareto(p.stops.breaks_count_by_discipline)} dataKey="k" orientation="vertical"
-                  gridAxis="x" barProps={{ radius: 2 }} series={[{ name: "v", label: t("ops.tables.count"), color: c[0]! }]} />
-              </ChartCard>
+              {paper && p.stops.breaks_count_by_discipline && (
+                <ChartCard title={t("opsDash.breaksDisc")} sub={t("ops.tables.count")}>
+                  <BarChart h={Math.max(160, 28 * Object.keys(p.stops.breaks_count_by_discipline).length + 40)} data={pareto(p.stops.breaks_count_by_discipline)} dataKey="k" orientation="vertical"
+                    gridAxis="x" barProps={{ radius: 2 }} series={[{ name: "v", label: t("ops.tables.count"), color: c[0]! }]} />
+                </ChartCard>
+              )}
             </SimpleGrid>
           )}
           {d.logs.map((l) => (
             <Stack key={l.template.id} gap="xs">
               <Title order={4} mt="sm">{l.template.name}</Title>
               <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-                {l.fields.map((f) => <FieldChart key={f.id} f={f} perTon={perTon && f.per_ton} color={c[0]!} />)}
+                {l.fields.map((f) => <FieldChart key={f.id} f={f} perTon={perTon && f.per_ton} color={c[0]!} out={u} />)}
               </SimpleGrid>
             </Stack>
           ))}
