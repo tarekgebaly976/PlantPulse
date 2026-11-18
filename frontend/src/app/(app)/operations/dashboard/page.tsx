@@ -79,7 +79,7 @@ function View() {
         <Stack>
           {d.kpis.length > 0 && (
             <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }}>
-              {d.kpis.map((k) => <KpiCard key={`${k.id}-${k.lines.join()}`} k={k} />)}
+              {d.kpis.map((k) => <KpiCard key={`${k.id}-${k.lines.join()}`} k={k} period="range" />)}
             </SimpleGrid>
           )}
           {sm && (
@@ -92,7 +92,9 @@ function View() {
               {paper ? <Tile label={t("ops.tiles.breaks")} value={String(sm.breaks ?? 0)} sub={hhmm(sm.breaks_hours ?? 0)} />
                 : <Tile label={t("gen.tiles.stops")} value={String(sm.stops ?? 0)} sub={`${t("gen.tiles.failures")} ${hhmm(sm.failure_hours ?? 0)}`} />}
               {paper && <Tile label={t("ops.tiles.trim")} value={pct(sm.produced ? (sm.trim ?? 0) / sm.produced : null)} sub={`${fmtNum(sm.trim ?? 0, 0)} ${u}`} />}
-              {perTonTiles.map((f) => <Tile key={f.id} label={`${f.label} / ${u}`} value={`${fmtVal(f.per_ton_period, 3)} ${f.unit ?? ""}/${u}`} sub={`${fmtVal(f.total, 0)} ${f.unit ?? ""}`} />)}
+              {perTonTiles.map((f) => perTon
+                ? <Tile key={f.id} label={`${f.label} / ${u}`} value={`${fmtVal(f.per_ton_period, 3)} ${f.unit ?? ""}/${u}`} sub={`${t("gen.dash.total")} ${fmtVal(f.total, 0)} ${f.unit ?? ""}`} />
+                : <Tile key={f.id} label={f.label} value={`${fmtVal(f.total, 0)} ${f.unit ?? ""}`} sub={`${fmtVal(f.per_ton_period, 3)} ${f.unit ?? ""}/${u}`} />)}
             </SimpleGrid>
           )}
           {p && (

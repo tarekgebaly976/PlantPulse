@@ -131,7 +131,9 @@ def unit_groups(lines: list[OpMachine]) -> list[list[OpMachine]]:
     return list(groups.values()) or [[]]
 
 
-def evaluate(db: Session, plant: Plant, kpis: list[OpKpi], today: date, days: int = 30, line_id: uuid.UUID | None = None) -> list[dict]:
+def evaluate(
+    db: Session, plant: Plant, kpis: list[OpKpi], today: date, days: int = 30, line_id: uuid.UUID | None = None, range_days: int | None = None
+) -> list[dict]:
     """Each KPI: last complete day, last 7 days, month to date, daily series of `days`, trend, status, missing codes.
     `line_id`: plant-wide KPIs are worked out for this line only (a line's dashboard). A scope whose lines count
     output in different units gives one result per unit group; a group that never records what the KPI needs (e.g.
@@ -145,6 +147,8 @@ def evaluate(db: Session, plant: Plant, kpis: list[OpKpi], today: date, days: in
         "month": ms.days_between(last.replace(day=1), last),
         "today": [today],
     }
+    if range_days:  # a dashboard window: its finished days (the day in progress is left out, as on the dashboard)
+        periods["range"] = ms.days_between(today - timedelta(days=range_days - 1), last)
     cache: dict[tuple, list] = {}
     out = []
     for k in kpis:

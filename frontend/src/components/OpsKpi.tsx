@@ -12,9 +12,9 @@ export function kpiText(v: KpiValue, decimals: number, unit: string): string {
 }
 
 /** A KPI tile: value of the chosen period, status against target and limits, missing data, trend, sparkline. */
-export function KpiCard({ k, period = "week" }: { k: KpiResult; period?: "day" | "week" | "month" }) {
+export function KpiCard({ k, period = "week" }: { k: KpiResult; period?: "day" | "week" | "month" | "range" }) {
   const { t } = useTranslation();
-  const v = k.values[period];
+  const v = k.values[period] ?? k.values.week;
   const tr = k.trend_pct;
   const worse = tr !== null && ((k.direction === "higher" && tr < 0) || (k.direction === "lower" && tr > 0));
   return (

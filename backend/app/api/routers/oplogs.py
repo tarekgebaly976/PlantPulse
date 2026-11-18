@@ -614,5 +614,5 @@ def dashboard(
         "start": d0.isoformat(), "end": d1.isoformat(),
         "machines": [{"id": str(x.id), "code": x.code, "name": x.name, "profile": x.report_profile, "unit": x.output_unit} for x in machines],
         "machine_id": str(m.id) if m else None, "profile": m.report_profile if m else None, "unit": m.output_unit if m else None,
-        "production": prod, "period": period, "logs": logs, "kpis": kp.evaluate(db, ctx.plant, kpi_rows, today, days=min(days, 60), line_id=m.id if m else None),
+        "production": prod, "period": period, "logs": logs, "kpis": kp.evaluate(db, ctx.plant, kpi_rows, today, days=days, line_id=m.id if m else None, range_days=days),
     }  # fmt: skip

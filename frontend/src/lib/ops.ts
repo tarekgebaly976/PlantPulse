@@ -109,7 +109,7 @@ export interface KpiLib { code: string; name: string; formula: string; unit: str
 export type KpiStatus = "missing" | "no_target" | "ok" | "off_target" | "warning" | "critical";
 export interface KpiValue { value: number | null; status: KpiStatus; missing: string[] }
 export interface KpiResult extends Omit<KpiDef, "sort" | "is_active"> {
-  lines: string[]; values: { day: KpiValue; week: KpiValue; month: KpiValue; today: KpiValue }; series: { date: string; value: number }[]; trend_pct: number | null;
+  lines: string[]; values: { day: KpiValue; week: KpiValue; month: KpiValue; today: KpiValue; range?: KpiValue }; series: { date: string; value: number }[]; trend_pct: number | null;
 }
 export type Condition = "below" | "above" | "outside" | "kpi_limits" | "total_above" | "trend_down" | "trend_up" | "action_overdue";
 export interface AlertRule {
