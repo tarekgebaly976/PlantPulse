@@ -232,7 +232,8 @@ export interface DashSummary {
 }
 export interface DashField extends LogField { series: Record<string, number>; per_ton_series: Record<string, number> | null; total: number | null; per_ton_period: number | null }
 export interface Dashboard {
-  start: string; end: string; machines: { id: string; code: string; name: string; profile: ReportProfile; unit: string }[]; machine_id: string | null;
+  start: string; end: string; areas: { id: string; code: string; name: string; name_ar: string | null; lines: number }[]; department_id: string | null;
+  machines: { id: string; code: string; name: string; profile: ReportProfile; unit: string }[]; machine_id: string | null;
   profile: ReportProfile | null; unit: string | null; production: DashDay[];
   period: { stops: Partial<StopTables> & { downtime_by_discipline: Record<string, number> }; loss_by_category: Record<string, number>;
     summary: DashSummary } | null;

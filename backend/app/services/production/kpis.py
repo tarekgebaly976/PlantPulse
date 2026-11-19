@@ -164,6 +164,7 @@ def evaluate(
     days: int = 30,
     line_id: uuid.UUID | None = None,
     range_days: int | None = None,
+    area_id: uuid.UUID | None = None,
 ) -> list[dict]:
     """Each KPI: last complete day, last 7 days, month to date, daily series of `days`, trend, status, missing codes.
     `line_id`: plant-wide KPIs are worked out for this line only (a line's dashboard). A scope whose lines count
@@ -184,15 +185,15 @@ def evaluate(
     out = []
     for k in kpis:
         scope = (k.machine_id, k.department_id)
-        if line_id is not None and k.machine_id is None and k.department_id is None:
-            scope = (line_id, None)
+        if (line_id is not None or area_id is not None) and k.machine_id is None and k.department_id is None:
+            scope = (line_id, area_id)  # an area's / a line's dashboard: plant-wide KPIs for that area or line
         qty = uses_quantities(k.formula)
         key = (*scope, qty)
         if key not in cache:
             lines = ms.lines_in_scope(db, plant.id, scope[0], scope[1])
             groups = unit_groups(lines) if qty else [lines]  # counts and hours add up over any lines; tonnes and pieces do not
             whole = scope == (None, None) and len(groups) == 1
-            cache[key] = [(g, *ms.collect(db, plant, g, d0, today, plant_wide=whole)) for g in groups]
+            cache[key] = [(g, *ms.collect(db, plant, g, d0, today, plant_wide=whole, area_id=scope[1])) for g in groups]
         entries = cache[key]
         for lines, daily, agg in entries:
             needed = names_in(k.formula)

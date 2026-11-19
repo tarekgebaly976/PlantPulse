@@ -48,13 +48,14 @@ function FieldChart({ f, perTon, color, out }: { f: DashField; perTon: boolean; 
 }
 
 function View() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const scheme = useComputedColorScheme("light");
   const c = SERIES[scheme === "dark" ? "dark" : "light"];
   const [days, setDays] = useState("30");
+  const [area, setArea] = useState<string | null>(null);
   const [mid, setMid] = useState<string | null>(null);
   const [perTon, setPerTon] = useState(true);
-  const q = useQ<Dashboard>("/operations/dashboard", { days, machine_id: mid ?? undefined });
+  const q = useQ<Dashboard>("/operations/dashboard", { days, department_id: area ?? undefined, machine_id: mid ?? undefined });
   if (!q.data) return <Loading />;
   const d = q.data;
   const p = d.period;
@@ -75,10 +76,12 @@ function View() {
       </PageHeader>
       <Group mb="md" gap="sm" wrap="wrap">
         <SegmentedControl value={days} onChange={setDays} data={[{ value: "7", label: t("opsDash.days", { n: 7 }) }, { value: "30", label: t("opsDash.days", { n: 30 }) }, { value: "90", label: t("opsDash.days", { n: 90 }) }]} />
-        {d.machines.length > 1 && <Select w={220} data={d.machines.map((m) => ({ value: m.id, label: `${m.code} – ${m.name}` }))} value={mid ?? d.machine_id} onChange={setMid} />}
-        <Switch label={t("gen.dash.perUnit", { u })} checked={perTon} onChange={(e) => setPerTon(e.currentTarget.checked)} />
+        {d.areas.length > 1 && <Select w={220} aria-label={t("safe.area")} allowDeselect={false} value={area ?? d.department_id} onChange={(v) => { setArea(v); setMid(null); }}
+          data={d.areas.map((a) => ({ value: a.id, label: `${a.code} – ${i18n.language === "ar" && a.name_ar ? a.name_ar : a.name}` }))} />}
+        {d.machines.length > 1 && <Select w={220} allowDeselect={false} data={d.machines.map((m) => ({ value: m.id, label: `${m.code} – ${m.name}` }))} value={mid ?? d.machine_id} onChange={setMid} />}
+        {u && <Switch label={t("gen.dash.perUnit", { u })} checked={perTon} onChange={(e) => setPerTon(e.currentTarget.checked)} />}
       </Group>
-      {!p && d.logs.length === 0 ? <Alert color="blue">{t("ops.noMachine")}</Alert> : (
+      {!p && d.logs.length === 0 && d.kpis.length === 0 ? <Alert color="blue">{t("ops.noMachine")}</Alert> : (
         <Stack>
           {d.kpis.length > 0 && (
             <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }}>

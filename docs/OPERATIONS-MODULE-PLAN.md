@@ -88,6 +88,10 @@ Branch: `claude/serene-davinci-0arq11` (migrations up to 0021)
   1,000,000 h (ILO / most countries, default) or 200,000 h (OSHA). Months without hours are shown as missing and
   left out of the rolling rates. Also KPIs LTIFR / LTISR / TRIR (measures `hours_worked`, `recordable_incidents`,
   `lost_days`, `safety_base`) in the general template. Demo: invented hours for the last three months.
+- **Dashboard by area (19 Nov).** The production dashboard chooses an area (the plant's departments that have a
+  production line or a log form), then a line when the area has several. An area without a line (e.g. stock
+  preparation, utilities) shows its own log forms ("per t" on its form's line, or on all the plant's lines) and the
+  KPIs it can have (safety for that area); plant-wide KPIs an area never records are left out.
 - Not yet: Excel import of past daily sheets, winder/FSC, Q-factors (phase 2); further industry templates.
 
 To switch it on for the real installation later: add `CMMS_OPERATIONS_MODULE=true` to `deploy/.env` and restart.

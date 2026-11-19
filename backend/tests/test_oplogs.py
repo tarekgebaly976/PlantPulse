@@ -135,9 +135,16 @@ def test_dashboard(world: World):
     day = next(x for x in d["production"] if x["date"] == "2026-11-05")
     assert day["gross"] == pytest.approx(398.0) and day["oee"] == pytest.approx(0.6452, abs=0.0001)
     assert d["period"]["stops"]["downtime_by_discipline"] == {"MECH": 1.5, "ELEC": 1.5}
-    p_pm = next(x for x in d["logs"][0]["fields"] if x["code"] == "P_PM")
+    # areas: the paper machine's area by default (its line, no forms of other areas); the utilities area has no line:
+    # its own form, "per t" on the plant's output, and only the KPIs it can have
+    codes = {a["code"]: a for a in d["areas"]}
+    assert {"PM", "UTIL"} <= set(codes) and d["department_id"] == codes["PM"]["id"] and d["logs"] == []
+    u = mgr.ok("get", "/operations/dashboard", params={"days": 366, "department_id": codes["UTIL"]["id"]})
+    assert u["machines"] == [] and u["period"] is None and u["unit"] == "t"
+    p_pm = next(x for x in u["logs"][0]["fields"] if x["code"] == "P_PM")
     assert p_pm["series"] == {"2026-11-05": 117.69}
     assert p_pm["per_ton_series"]["2026-11-05"] == pytest.approx(117.69 / 392.3, abs=0.0001)  # MWh per t net
+    assert all(k["code"] not in ("OEE", "PRODUCTION") for k in u["kpis"])
     assert rid
 
 

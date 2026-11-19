@@ -28,6 +28,7 @@ from app.services import oplogs as svc
 from app.services.common import audit, plant_today, utcnow
 from app.services.pm import record_meter_reading
 from app.services.production import kpis as kp
+from app.services.production import measures as msr
 from app.services.production import reports as ops
 from app.services.production.measures import STANDARD
 from app.services.production.stops import discipline_hours, parts_of, stops_of
@@ -522,19 +523,39 @@ def delete_log(lid: uuid.UUID, ctx: Ctx = Depends(require("op.confirm")), db: Se
 def dashboard(
     days: int = Query(30, ge=7, le=366),
     machine_id: uuid.UUID | None = None,
+    department_id: uuid.UUID | None = None,
     ctx: Ctx = Depends(require("op.view")),
     db: Session = DB,
 ) -> dict:
-    """Production, losses, KPIs and log lines of a line for the last `days` production days, ending with the day in
-    progress. Any report profile: the production rows are the standard measures (gross = produced, a = good,
+    """Production, losses, KPIs and log lines of an area (and of one of its lines) for the last `days` production days,
+    ending with the day in progress. Areas are the plant's departments with a production line or a log form; an area
+    without a line shows its log forms and area KPIs (e.g. safety). Any report profile: the production rows are the standard measures (gross = produced, a = good,
     b = downgrade); profile extras (e.g. the paper mill's sheet breaks) are present only when the profile has them."""
     from app.services.production import paper
 
-    machines = [
+    all_lines = [
         m
         for m in db.execute(select(OpMachine).where(OpMachine.plant_id == ctx.plant_id).order_by(OpMachine.code)).scalars()
         if ctx.dept_ok(m.department_id)
     ]
+    templates = [
+        t
+        for t in db.execute(
+            select(OpLogTemplate).where(OpLogTemplate.plant_id == ctx.plant_id, OpLogTemplate.is_active.is_(True)).order_by(OpLogTemplate.sort)
+        ).scalars()
+        if ctx.dept_ok(t.department_id)
+    ]
+    used = {m.department_id for m in all_lines if m.is_active} | {t.department_id for t in templates}
+    areas = [
+        a
+        for a in db.execute(select(Department).where(Department.plant_id == ctx.plant_id, Department.is_active.is_(True)).order_by(Department.code)).scalars()
+        if a.id in used and ctx.dept_ok(a.id)
+    ]
+    if department_id is None and machine_id is not None:
+        department_id = next((x.department_id for x in all_lines if x.id == machine_id), None)
+    first_line_area = next((x.department_id for x in all_lines if x.is_active and any(a.id == x.department_id for a in areas)), None)
+    area = next((a for a in areas if a.id == department_id), None) or next((a for a in areas if a.id == first_line_area), None) or (areas[0] if areas else None)
+    machines = [x for x in all_lines if area is not None and x.department_id == area.id]
     m = next((x for x in machines if x.id == machine_id), machines[0] if machines else None)
     today = plant_today(ctx.plant)
     d1 = today
@@ -591,29 +612,48 @@ def dashboard(
                                         tot.get("good", 0.0), tot.get("net", 0.0))}  # fmt: skip
             period = p
     logs = []
-    for t in db.execute(
-        select(OpLogTemplate).where(OpLogTemplate.plant_id == ctx.plant_id, OpLogTemplate.is_active.is_(True)).order_by(OpLogTemplate.sort)
-    ).scalars():
-        if not ctx.dept_ok(t.department_id) or (m is not None and t.machine_id not in (None, m.id)):
-            continue
+    nets: dict[tuple, tuple[dict[str, float], str | None]] = {}
+    unit = m.output_unit if m else None
+    for t in templates:
+        if area is None or t.department_id != area.id or (m is not None and t.machine_id not in (None, m.id) and t.machine_id in {x.id for x in machines}):
+            continue  # the area's own forms (a form of another of the area's lines belongs to that line's view)
         fields = [x for x in svc.fields_of(db, t.id, active_only=True) if x.chart and x.kind in svc.NUMERIC_KINDS]
         if not fields:
             continue
+        # "per unit" basis: the line's output on its dashboard, else the form's own line (or all the plant's lines)
+        if m is not None:
+            basis, b_unit = net_by_day, m.output_unit
+        else:
+            b_lines = [x for x in all_lines if x.id == t.machine_id] or [x for x in all_lines if x.is_active]
+            units = {x.output_unit for x in b_lines}
+            key = tuple(x.id for x in b_lines)
+            if key not in nets:
+                ld = msr.line_daily(db, ctx.plant, b_lines, d0, d1) if len(units) == 1 else {}
+                nets[key] = ({d.isoformat(): v.get("net") or 0.0 for d, v in ld.items()}, units.pop() if len(units) == 1 else None)
+            basis, b_unit = nets[key]
+            unit = unit or b_unit
         series = svc.daily_series(db, t, d0, d1)
         out_fields = []
         for x in fields:
             s = series.get(str(x.id), {})
-            per_ton = None
-            if x.per_ton:
-                per_ton = {d: round(v / net_by_day[d], 4) for d, v in s.items() if net_by_day.get(d)}
+            pt = x.per_ton and bool(b_unit)
+            per_ton = {d: round(v / basis[d], 4) for d, v in s.items() if basis.get(d)} if pt else None
             total = sum(s.values()) if s else None
             out_fields.append({**field_out(x), "series": s, "per_ton_series": per_ton, "total": total,
-                               "per_ton_period": round(total / sum(net_by_day[d] for d in s if d in net_by_day), 4) if x.per_ton and total is not None and any(net_by_day.get(d) for d in s) else None})  # fmt: skip
+                               "per_ton_period": round(total / sum(basis[d] for d in s if d in basis), 4) if pt and total is not None and any(basis.get(d) for d in s) else None})  # fmt: skip
         logs.append({"template": template_out(t), "fields": out_fields})
-    kpi_rows = [k for k in kp.plant_kpis(db, ctx.plant_id) if k.dashboard and (k.machine_id is None or (m is not None and k.machine_id == m.id))]
+    kpi_rows = [
+        k for k in kp.plant_kpis(db, ctx.plant_id)
+        if k.dashboard and (k.machine_id is None or (m is not None and k.machine_id == m.id)) and (k.department_id is None or (area is not None and k.department_id == area.id))
+    ]  # fmt: skip
+    results = kp.evaluate(db, ctx.plant, kpi_rows, today, days=days, line_id=m.id if m else None, range_days=days, area_id=area.id if area else None)
+    # plant-wide KPIs an area or line never records (e.g. sheet breaks on a packing line, OEE where there is no line)
+    results = [r for r in results if r["machine_id"] or r["department_id"] or r["values"]["range"]["value"] is not None or r["series"]]
     return {
         "start": d0.isoformat(), "end": d1.isoformat(),
+        "areas": [{"id": str(a.id), "code": a.code, "name": a.name, "name_ar": a.name_ar, "lines": sum(1 for x in all_lines if x.department_id == a.id)} for a in areas],
+        "department_id": str(area.id) if area else None,
         "machines": [{"id": str(x.id), "code": x.code, "name": x.name, "profile": x.report_profile, "unit": x.output_unit} for x in machines],
-        "machine_id": str(m.id) if m else None, "profile": m.report_profile if m else None, "unit": m.output_unit if m else None,
-        "production": prod, "period": period, "logs": logs, "kpis": kp.evaluate(db, ctx.plant, kpi_rows, today, days=days, line_id=m.id if m else None, range_days=days),
+        "machine_id": str(m.id) if m else None, "profile": m.report_profile if m else None, "unit": unit,
+        "production": prod, "period": period, "logs": logs, "kpis": results,
     }  # fmt: skip

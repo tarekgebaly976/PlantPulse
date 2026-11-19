@@ -126,10 +126,11 @@ def line_daily(db: Session, plant: Plant, lines: list[OpMachine], d0: date, d1: 
 
 
 def log_daily(
-    db: Session, plant: Plant, lines: list[OpMachine] | None, d0: date, d1: date
+    db: Session, plant: Plant, lines: list[OpMachine] | None, d0: date, d1: date, area_id: uuid.UUID | None = None
 ) -> tuple[dict[date, dict[str, float]], dict[str, str]]:
     """{day: {log line code: day figure}} of the plant's daily log forms (those of other lines left out when a scope of
-    lines is given) and how each code adds up over a period ("sum" or "avg")."""
+    lines is given; with `area_id` only the area's forms and those of its lines) and how each code adds up over a
+    period ("sum" or "avg")."""
     ids = {m.id for m in lines} if lines is not None else None
     out: dict[date, dict[str, float]] = defaultdict(dict)
     agg: dict[str, str] = {}
@@ -137,6 +138,8 @@ def log_daily(
         select(OpLogTemplate).where(OpLogTemplate.plant_id == plant.id, OpLogTemplate.is_active.is_(True)).order_by(OpLogTemplate.sort)
     ).scalars():
         if ids is not None and t.machine_id is not None and t.machine_id not in ids:
+            continue
+        if area_id is not None and t.department_id != area_id and t.machine_id not in (ids or set()):
             continue
         fields = {str(fl.id): fl for fl in oplogs.fields_of(db, t.id, active_only=True) if fl.kind in oplogs.NUMERIC_KINDS}
         t_codes = {fl.code for fl in fields.values() if fl.code not in agg}
@@ -151,16 +154,18 @@ def log_daily(
 
 
 def collect(
-    db: Session, plant: Plant, lines: list[OpMachine], d0: date, d1: date, plant_wide: bool = False
+    db: Session, plant: Plant, lines: list[OpMachine], d0: date, d1: date, plant_wide: bool = False, area_id: uuid.UUID | None = None
 ) -> tuple[dict[date, dict[str, float | None]], dict[str, str]]:
     """Daily values of every measure and log code for the lines from d0 to d1, and the period rule of each code.
     Safety incidents: of the lines' areas (and the lines), or of the whole plant when `plant_wide`; every day counts
-    (a day without incidents is 0, not missing)."""
+    (a day without incidents is 0, not missing). `area_id`: an area's figures (its incidents, hours worked and log
+    forms), also for an area without production lines."""
     from app.services.production.incidents import daily_counts, daily_hours, safety_base
 
     daily = line_daily(db, plant, lines, d0, d1)
-    inc = daily_counts(db, plant, d0, d1, None if plant_wide else {m.department_id for m in lines}, {m.id for m in lines})
-    hrs = daily_hours(db, plant, d0, d1, None if plant_wide else {m.department_id for m in lines})
+    depts = None if plant_wide else ({area_id} if area_id else {m.department_id for m in lines})
+    inc = daily_counts(db, plant, d0, d1, depts, {m.id for m in lines})
+    hrs = daily_hours(db, plant, d0, d1, depts)
     base = float(safety_base(db, plant.id))
     for d in days_between(d0, d1):
         day = daily.setdefault(d, {})
@@ -172,7 +177,7 @@ def collect(
         day["safety_base"] = base
         if d in hrs:
             day["hours_worked"] = hrs[d]
-    logs, agg = log_daily(db, plant, lines, d0, d1)
+    logs, agg = log_daily(db, plant, lines, d0, d1, area_id)
     for d, vals in logs.items():
         day = daily.setdefault(d, {})
         for k, v in vals.items():
