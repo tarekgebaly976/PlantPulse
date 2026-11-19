@@ -16,7 +16,7 @@ from app.api.deps import Ctx, require
 from app.core.db import get_db
 from app.models.identity import Membership, Role, User
 from app.models.operations import OpDailyReport, OpDefect, OpDiscipline, OpLog, OpLogTemplate, OpMachine
-from app.models.production import OpAction, OpAlert, OpAlertRule, OpIncident, OpKpi, OpLossCategory, OpProduct
+from app.models.production import OpAction, OpAlert, OpAlertRule, OpIncident, OpKpi, OpLossCategory, OpProduct, OpWorkHours
 from app.models.tenancy import Department
 from app.schemas.common import In
 from app.services import oplogs as oplog_svc
@@ -67,12 +67,13 @@ class ConfigIn(In):
     features: dict[str, bool] = Field(default_factory=dict)
     labels: dict[str, str] = Field(default_factory=dict)
     setup_done: bool = False
+    safety_base: Literal[1_000_000, 200_000] = 1_000_000
 
 
 def config_out(c) -> dict:
     return {
         "industry": c.industry, "template": c.template, "features": {k: bool((c.features or {}).get(k, True)) for k in tpl.FEATURES},
-        "labels": {k: v for k, v in (c.labels or {}).items() if v}, "setup_done": c.setup_done,
+        "labels": {k: v for k, v in (c.labels or {}).items() if v}, "setup_done": c.setup_done, "safety_base": c.safety_base or 1_000_000,
         "templates": [{"key": k, "name": v["name"]} for k, v in tpl.TEMPLATES.items()],
     }  # fmt: skip
 
@@ -89,6 +90,7 @@ def put_config(body: ConfigIn, ctx: Ctx = Depends(require("op.manage")), db: Ses
     c.features = {k: bool(body.features.get(k, True)) for k in tpl.FEATURES}
     c.labels = {k: v.strip()[:60] for k, v in body.labels.items() if k in ("reports", "logs") and v and v.strip()}
     c.setup_done = body.setup_done
+    c.safety_base = body.safety_base
     db.flush()
     return config_out(c)
 
@@ -736,3 +738,64 @@ def update_incident(iid: uuid.UUID, body: IncidentIn, ctx: Ctx = Depends(require
     audit(db, "op.incident.update", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="op_incident", entity_id=i.id,
           data={"number": i.number, "status": i.status})  # fmt: skip
     return {"id": str(i.id), "status": i.status}
+
+
+# ================================================================ hours worked and safety rates
+class HoursRow(In):
+    department_id: uuid.UUID | None = None  # None: the whole plant
+    employee_hours: float = Field(0, ge=0, le=10_000_000)
+    contractor_hours: float = Field(0, ge=0, le=10_000_000)
+    note: str | None = Field(None, max_length=200)
+
+
+class HoursIn(In):
+    month: str = Field(pattern=r"^\d{4}-\d{2}$")
+    rows: list[HoursRow] = Field(max_length=200)
+
+
+def _month(m: str) -> date:
+    y, mo = (int(x) for x in m.split("-"))
+    if not 1 <= mo <= 12:
+        raise HTTPException(422, "Unknown month")
+    return date(y, mo, 1)
+
+
+@router.get("/work-hours")
+def get_work_hours(month: str = Query(pattern=r"^\d{4}-\d{2}$"), ctx: Ctx = Depends(require("op.view")), db: Session = DB) -> dict:
+    m = _month(month)
+    rows = db.execute(select(OpWorkHours).where(OpWorkHours.plant_id == ctx.plant_id, OpWorkHours.month == m)).scalars()
+    return {"month": month, "rows": [{"department_id": str(r.department_id) if r.department_id else None, "employee_hours": _f(r.employee_hours),
+                                      "contractor_hours": _f(r.contractor_hours), "note": r.note} for r in rows]}  # fmt: skip
+
+
+@router.put("/work-hours")
+def put_work_hours(body: HoursIn, ctx: Ctx = Depends(require("op.manage")), db: Session = DB) -> dict:
+    """Replace the hours worked of a month: one row per area, or one row for the whole plant (not both, which would
+    count the hours twice)."""
+    m = _month(body.month)
+    if m > plant_today(ctx.plant).replace(day=1):
+        raise HTTPException(422, "Hours cannot be entered for a future month")
+    depts = [r.department_id for r in body.rows]
+    if None in depts and len(body.rows) > 1:
+        raise HTTPException(422, "Enter the hours either per area or for the whole plant, not both")
+    if len(set(depts)) != len(depts):
+        raise HTTPException(422, "An area is listed twice")
+    for d in depts:
+        _dept(db, ctx, d)
+    db.execute(OpWorkHours.__table__.delete().where(OpWorkHours.plant_id == ctx.plant_id, OpWorkHours.month == m))
+    for r in body.rows:
+        if r.employee_hours or r.contractor_hours:
+            db.add(OpWorkHours(plant_id=ctx.plant_id, month=m, department_id=r.department_id, employee_hours=r.employee_hours,
+                               contractor_hours=r.contractor_hours, note=(r.note or "").strip() or None))  # fmt: skip
+    db.flush()
+    audit(db, "op.work_hours.save", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="op_work_hours", entity_id=None,
+          data={"month": body.month, "total": sum(r.employee_hours + r.contractor_hours for r in body.rows)})  # fmt: skip
+    return {"month": body.month, "saved": len([r for r in body.rows if r.employee_hours or r.contractor_hours])}
+
+
+@router.get("/safety-rates")
+def safety_rates(
+    months: int = Query(12, ge=1, le=36), department_id: uuid.UUID | None = None, ctx: Ctx = Depends(require("op.view")), db: Session = DB
+) -> dict:
+    """Monthly and rolling-12-month LTIFR, LTISR and TRIR with the hours worked and incident counts behind them."""
+    return inc_svc.monthly(db, ctx.plant, plant_today(ctx.plant), months, department_id)

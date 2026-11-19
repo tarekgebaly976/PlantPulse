@@ -31,7 +31,7 @@ from app.models.operations import (
     OpSection,
     OpStopPart,
 )
-from app.models.production import OpAction, OpIncident, OpOutput, OpPlantConfig, OpProduct
+from app.models.production import OpAction, OpIncident, OpOutput, OpPlantConfig, OpProduct, OpWorkHours
 from app.models.tenancy import Department, Organization, Plant
 from app.services.assets import compute_path, new_qr_token
 from app.services.common import utcnow
@@ -448,6 +448,7 @@ def build(db: Session, password: str, now: datetime | None = None) -> str:
     logs = build_logs(db, plant, ref, current, now)
     k = _converting_line(db, plant, ref, current, now)
     _incidents(db, plant, ref, current)
+    _work_hours(db, plant, ref, current)
     _actions(db, plant, ref, current)
     db.flush()
     alert_svc.evaluate(db, plant)
@@ -601,3 +602,25 @@ def _incidents(db: Session, plant: Plant, ref: dict, current: date) -> None:
             db.add(OpAction(plant_id=plant.id, title="Anti-slip mats and drainage check at the felt-change area (sample)", status="open",
                             due_date=current + timedelta(days=4), owner_id=users["prod.mgr"].id, source="incident", incident_id=i.id,
                             machine_id=i.machine_id, created_by_id=users["prod.mgr"].id))  # fmt: skip
+
+
+SAMPLE_HOURS = {
+    "PM": (13800, 1900),
+    "SP": (6200, 600),
+    "FH": (5100, 900),
+    "UTIL": (3000, 400),
+}  # employees, contractors per month (invented)
+
+
+def _work_hours(db: Session, plant: Plant, ref: dict, current: date) -> None:
+    """Hours worked of the last three months per area (the month in progress up to today), for the safety rates."""
+    rnd = random.Random(20261119)
+    m = current.replace(day=1)
+    for i in range(3):
+        nxt = date(m.year + (m.month == 12), m.month % 12 + 1, 1)
+        share = 1.0 if i else current.day / (nxt - m).days
+        for dept, (emp, con) in SAMPLE_HOURS.items():
+            db.add(OpWorkHours(plant_id=plant.id, month=m, department_id=ref["depts"][dept].id,
+                               employee_hours=Decimal(round(emp * share * rnd.uniform(0.95, 1.05))),
+                               contractor_hours=Decimal(round(con * share * rnd.uniform(0.8, 1.2)))))  # fmt: skip
+        m = (m - timedelta(days=1)).replace(day=1)

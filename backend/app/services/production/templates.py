@@ -42,6 +42,9 @@ GENERAL_KPIS = [
     ("MAINT_LOSS", 2, 4, 8, 2),
     ("INCIDENTS", 0, None, None, 0),
     ("LTI", 0, None, None, 0),
+    ("LTIFR", None, None, None, 2),
+    ("LTISR", None, None, None, 1),
+    ("TRIR", None, None, None, 2),
 ]
 
 GENERAL_RULES = [

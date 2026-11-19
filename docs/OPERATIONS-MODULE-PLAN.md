@@ -81,6 +81,13 @@ Branch: `claude/serene-davinci-0arq11` (migrations up to 0021)
   measures `incidents` / `lost_time_incidents` (KPIs INCIDENTS, LTI; alert rule LTI_REPORTED), insight for
   incidents open more than a week, "days without a lost-time incident". The demo SP form no longer has the single
   incident tick box; 6 invented sample incidents.
+- **Hours worked and safety rates (19 Nov, migration 0027).** Hours worked per month (employees, contractors) per
+  area or for the whole plant (`op_work_hours`, entered on the incidents page by `op.manage`). Safety rates on the
+  incidents page: rolling 12 months and per month LTIFR (lost-time injuries × base ÷ hours), LTISR (lost days × base
+  ÷ hours) and TRIR (lost-time + medical-treatment injuries × base ÷ hours); base per plant (Production setup):
+  1,000,000 h (ILO / most countries, default) or 200,000 h (OSHA). Months without hours are shown as missing and
+  left out of the rolling rates. Also KPIs LTIFR / LTISR / TRIR (measures `hours_worked`, `recordable_incidents`,
+  `lost_days`, `safety_base`) in the general template. Demo: invented hours for the last three months.
 - Not yet: Excel import of past daily sheets, winder/FSC, Q-factors (phase 2); further industry templates.
 
 To switch it on for the real installation later: add `CMMS_OPERATIONS_MODULE=true` to `deploy/.env` and restart.

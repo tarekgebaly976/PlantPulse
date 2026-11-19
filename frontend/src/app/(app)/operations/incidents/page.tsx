@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
 import { Tile } from "@/components/Ops";
+import { SafetyRatesSection } from "@/components/OpsSafetyRates";
 import { blankIncident, editIncident, IncidentModal, kindColor, sevColor, type IForm } from "@/components/OpsIncidents";
 import { DeptSelect, Loading, PageHeader, Section } from "@/components/ui";
 import { post } from "@/lib/api";
@@ -37,6 +38,7 @@ function View() {
           <Tile label={t("inc.thisMonth")} value={String(st.month_total)} sub={INCIDENT_KINDS.filter((k) => st.month_by_kind[k]).map((k) => `${t(`inc.kinds.${k}`)} ${st.month_by_kind[k]}`).join(" · ")} />
           <Tile label={t("inc.total")} value={String(st.total)} />
         </SimpleGrid>
+        <SafetyRatesSection />
         <Group gap="sm">
           <SegmentedControl value={status} onChange={setStatus} data={[{ value: "all", label: t("ins.all") }, { value: "active", label: t("inc.notClosed") }]} />
           <SegmentedControl value={days} onChange={setDays} data={[{ value: "30", label: t("opsDash.days", { n: 30 }) }, { value: "90", label: t("opsDash.days", { n: 90 }) }, { value: "365", label: t("opsDash.days", { n: 365 }) }]} />

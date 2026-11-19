@@ -87,6 +87,7 @@ export interface GenericCalc {
 // ------------------------------------------------------------------ configuration (industry-independent)
 export interface OpConfig {
   industry: string | null; template: string | null; features: Record<string, boolean>; labels: Record<string, string>; setup_done: boolean;
+  safety_base: number;
   templates: { key: string; name: string }[];
 }
 export const FEATURES = ["reports", "logs", "dashboard", "kpis", "alerts", "insights", "actions", "incidents"] as const;
@@ -271,4 +272,13 @@ export interface Incident {
 export interface IncidentList {
   items: Incident[]; can_report: boolean; can_close: boolean;
   stats: { open: number; month_by_kind: Record<string, number>; month_total: number; days_since_lost_time: number | null; total: number };
+}
+
+export interface SafetyMonth {
+  month: string; employee_hours: number | null; contractor_hours: number | null; hours: number | null; incidents: number; lost_time: number; recordable: number;
+  lost_days: number; ltifr: number | null; ltisr: number | null; trir: number | null;
+}
+export interface SafetyRates {
+  base: number; months: SafetyMonth[];
+  rolling: { months_with_hours: number; hours: number; lost_time: number; recordable: number; lost_days: number; ltifr: number | null; ltisr: number | null; trir: number | null };
 }

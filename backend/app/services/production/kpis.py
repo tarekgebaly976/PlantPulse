@@ -49,6 +49,12 @@ LIBRARY: list[dict] = [
      "description": "Run seconds per unit produced"},
     {"code": "INCIDENTS", "name": "Safety incidents", "formula": "incidents", "unit": "", "direction": "lower", "description": "Incidents in the register"},
     {"code": "LTI", "name": "Lost-time incidents", "formula": "lost_time_incidents", "unit": "", "direction": "lower", "description": "Incidents with lost working time"},
+    {"code": "LTIFR", "name": "Lost time injury frequency rate (LTIFR)", "formula": "lost_time_incidents * safety_base / hours_worked", "unit": "", "direction": "lower",
+     "description": "Lost-time injuries per 1,000,000 (or 200,000) hours worked"},
+    {"code": "LTISR", "name": "Lost time injury severity rate (LTISR)", "formula": "lost_days * safety_base / hours_worked", "unit": "", "direction": "lower",
+     "description": "Working days lost per 1,000,000 (or 200,000) hours worked"},
+    {"code": "TRIR", "name": "Total recordable incident rate (TRIR)", "formula": "recordable_incidents * safety_base / hours_worked", "unit": "", "direction": "lower",
+     "description": "Lost-time and medical-treatment injuries per 1,000,000 (or 200,000) hours worked"},
     {"code": "BATCH_DONE", "name": "Batch completion rate", "formula": "batches_completed / batches * 100", "unit": "%", "direction": "higher",
      "description": "Completed ÷ started batches / orders"},
 ]  # fmt: skip

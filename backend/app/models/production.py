@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,6 +24,8 @@ class OpPlantConfig(Base, Timestamped):
     features: Mapped[dict] = mapped_column(JSONB, default=dict)  # {"reports": true, "logs": true, "kpis": true, ...}
     labels: Mapped[dict] = mapped_column(JSONB, default=dict)  # {"reports": "...", "logs": "..."}: menu names
     setup_done: Mapped[bool] = mapped_column(Boolean, default=False)
+    # safety rates per this many hours worked: 1,000,000 (LTIFR as most of the world) or 200,000 (OSHA, US)
+    safety_base: Mapped[int] = mapped_column(Integer, default=1_000_000, server_default="1000000")
 
 
 class OpProduct(Base, PlantScoped, Timestamped):
@@ -219,3 +221,19 @@ class OpIncident(Base, PlantScoped, Timestamped):
     reported_by_id: Mapped[uuid.UUID | None] = fk("users.id", nullable=True, index=False)
     closed_by_id: Mapped[uuid.UUID | None] = fk("users.id", nullable=True, index=False)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OpWorkHours(Base, PlantScoped, Timestamped):
+    """Hours worked in a month (employees and contractors) of an area, or of the whole plant when the area is empty:
+    the exposure the safety rates (LTIFR, LTISR, TRIR) are worked out on. Entered once a month."""
+
+    __tablename__ = "op_work_hours"
+    __table_args__ = (
+        Index("uq_op_work_hours_month", "plant_id", "month", "department_id", unique=True, postgresql_nulls_not_distinct=True),
+    )
+    id: Mapped[uuid.UUID] = uuid_pk()
+    month: Mapped[date] = mapped_column(Date)  # first day of the month
+    department_id: Mapped[uuid.UUID | None] = fk("departments.id", nullable=True, ondelete="CASCADE", index=False)
+    employee_hours: Mapped[Decimal] = mapped_column(Numeric(12, 1), default=0)
+    contractor_hours: Mapped[Decimal] = mapped_column(Numeric(12, 1), default=0)
+    note: Mapped[str | None] = mapped_column(String(200))

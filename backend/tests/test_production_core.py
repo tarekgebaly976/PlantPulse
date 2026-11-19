@@ -34,7 +34,7 @@ def _yesterday() -> str:
 def setup_line(world: World) -> dict:
     mgr = world.api("manager")
     added = mgr.ok("post", "/operations/templates/general/apply")
-    assert added["loss_categories"] == 10 and added["kpis"] == 10 and added["alert_rules"] == 6
+    assert added["loss_categories"] == 10 and added["kpis"] == 13 and added["alert_rules"] == 6
     assert mgr.ok("post", "/operations/templates/general/apply") == {"loss_categories": 0, "kpis": 0, "alert_rules": 0}  # only what is missing
     line = mk_asset(mgr, world, "AL1")
     m = mgr.ok("post", "/operations/machines", {
@@ -231,3 +231,48 @@ def test_incident_register(world: World):
     mgr.ok("put", f"/operations/incidents/{b['id']}", {**full, "status": "closed", "root_cause": "Wet floor, no drainage"})
     assert mgr.ok("get", "/operations/incidents", params={"status": "active"})["stats"]["open"] == 1
     assert any(x["incident_id"] == b["id"] for x in mgr.ok("get", "/operations/actions")["items"])
+
+
+def test_safety_rates(world: World):
+    """Hand-worked: 1 lost-time injury (3 days lost) and 1 medical treatment case in a month with 40,000 + 10,000 hours:
+    LTIFR = 1 × 1,000,000 / 50,000 = 20; LTISR = 3 × 1,000,000 / 50,000 = 60; TRIR = 2 × 1,000,000 / 50,000 = 40.
+    With the US base 200,000: LTIFR 4, LTISR 12, TRIR 8."""
+    s = setup_line(world)
+    mgr = s["mgr"]
+    pm, sp = str(world.depts["PM"].id), str(world.depts["SP"].id)
+    day = _yesterday()
+    month = day[:7]
+    # hours per area, or for the whole plant, never both; not for a future month
+    mgr.ok("put", "/operations/work-hours", {"month": month, "rows": [{"department_id": None, "employee_hours": 1}, {"department_id": pm, "employee_hours": 1}]}, status=422)
+    mgr.ok("put", "/operations/work-hours", {"month": "2099-01", "rows": [{"department_id": pm, "employee_hours": 1}]}, status=422)
+    world.api("production").ok("put", "/operations/work-hours", {"month": month, "rows": []}, status=403)
+    mgr.ok("put", "/operations/work-hours", {"month": month, "rows": [{"department_id": pm, "employee_hours": 30000, "contractor_hours": 10000},
+                                                                       {"department_id": sp, "employee_hours": 10000}]})  # fmt: skip
+    assert len(mgr.ok("get", "/operations/work-hours", params={"month": month})["rows"]) == 2
+    base = {"occurred_at": f"{day}T10:00:00", "department_id": pm, "title": "Sample injury"}
+    mgr.ok("post", "/operations/incidents", {**base, "kind": "lost_time", "lost_days": 3, "injured": 1}, status=201)
+    mgr.ok("post", "/operations/incidents", {**base, "kind": "medical", "department_id": sp}, status=201)
+    mgr.ok("post", "/operations/incidents", {**base, "kind": "near_miss"}, status=201)  # not recordable
+    r = mgr.ok("get", "/operations/safety-rates", params={"months": 3})
+    row = next(x for x in r["months"] if x["month"].startswith(month))
+    assert r["base"] == 1_000_000 and row["hours"] == 50000 and (row["lost_time"], row["recordable"], row["lost_days"], row["incidents"]) == (1, 2, 3, 3)
+    assert (row["ltifr"], row["ltisr"], row["trir"]) == (20, 60, 40)
+    assert r["rolling"]["ltifr"] == 20 and r["rolling"]["months_with_hours"] == 1
+    # the same through the KPI engine (standard KPIs from the template), over the whole month
+    res = {k["code"]: k for k in mgr.ok("get", "/operations/kpi-results")}
+    # month to date: the month's 50,000 hours are spread over its days, so up to yesterday (day n of D) they are 50,000 × n / D
+    import calendar
+
+    y, mo, n = (int(x) for x in day.split("-"))
+    hours_to_date = 50000 * n / calendar.monthrange(y, mo)[1]
+    assert res["LTIFR"]["values"]["month"]["value"] == pytest.approx(1_000_000 / hours_to_date, abs=0.01)
+    assert res["TRIR"]["values"]["month"]["value"] == pytest.approx(2 * 1_000_000 / hours_to_date, abs=0.01)
+    assert res["LTISR"]["values"]["month"]["value"] == pytest.approx(3 * 1_000_000 / hours_to_date, abs=0.01)
+    # US base
+    cfg = mgr.ok("get", "/operations/config")
+    mgr.ok("put", "/operations/config", {"industry": cfg["industry"], "features": cfg["features"], "labels": cfg["labels"], "setup_done": False, "safety_base": 200000})
+    row = next(x for x in mgr.ok("get", "/operations/safety-rates")["months"] if x["month"].startswith(month))
+    assert (row["ltifr"], row["ltisr"], row["trir"]) == (4, 12, 8)
+    # an area's own rates
+    pm_row = next(x for x in mgr.ok("get", "/operations/safety-rates", params={"department_id": pm})["months"] if x["month"].startswith(month))
+    assert pm_row["hours"] == 40000 and pm_row["lost_time"] == 1 and pm_row["trir"] == 5  # 1 × 200,000 / 40,000

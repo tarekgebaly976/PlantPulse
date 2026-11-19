@@ -174,7 +174,9 @@ def generate(db: Session, plant: Plant, today: date, dept_ok=lambda _d: True) ->
                                                            OpIncident.created_at < datetime.combine(today - timedelta(days=7), time(0), tzinfo=UTC))
     ).scalar_one()  # fmt: skip
     if stale:
-        out.append({"kind": "open_incidents", "severity": "warning", "line": None, "params": {"n": stale}, "recommendation": "rec_incidents"})
+        out.append(
+            {"kind": "open_incidents", "severity": "warning", "line": None, "params": {"n": stale}, "recommendation": "rec_incidents"}
+        )
     open_alerts = db.execute(
         select(func.count()).select_from(OpAlert).where(OpAlert.plant_id == plant.id, OpAlert.status == "open")
     ).scalar_one()

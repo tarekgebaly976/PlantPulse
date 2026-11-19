@@ -40,6 +40,10 @@ STANDARD: dict[str, str] = {
     "quality_loss": "qty",  # rejected + downgraded quantity explained by defect
     "incidents": "count",  # safety incidents (register) of the lines' areas
     "lost_time_incidents": "count",
+    "recordable_incidents": "count",  # lost time + medical treatment (TRIR)
+    "lost_days": "count",  # working days lost to lost-time injuries (LTISR)
+    "hours_worked": "h",  # employees + contractors, from the monthly hours worked (spread over the days)
+    "safety_base": "count",  # the plant's rate base: 1,000,000 or 200,000 hours (LTIFR = LTI × base ÷ hours)
 }
 
 
@@ -152,21 +156,29 @@ def collect(
     """Daily values of every measure and log code for the lines from d0 to d1, and the period rule of each code.
     Safety incidents: of the lines' areas (and the lines), or of the whole plant when `plant_wide`; every day counts
     (a day without incidents is 0, not missing)."""
-    from app.services.production.incidents import daily_counts
+    from app.services.production.incidents import daily_counts, daily_hours, safety_base
 
     daily = line_daily(db, plant, lines, d0, d1)
     inc = daily_counts(db, plant, d0, d1, None if plant_wide else {m.department_id for m in lines}, {m.id for m in lines})
+    hrs = daily_hours(db, plant, d0, d1, None if plant_wide else {m.department_id for m in lines})
+    base = float(safety_base(db, plant.id))
     for d in days_between(d0, d1):
         day = daily.setdefault(d, {})
         c = inc.get(d, {})
         day["incidents"] = c.get("incidents", 0.0)
         day["lost_time_incidents"] = c.get("lost_time_incidents", 0.0)
+        day["recordable_incidents"] = c.get("recordable_incidents", 0.0)
+        day["lost_days"] = c.get("lost_days", 0.0)
+        day["safety_base"] = base
+        if d in hrs:
+            day["hours_worked"] = hrs[d]
     logs, agg = log_daily(db, plant, lines, d0, d1)
     for d, vals in logs.items():
         day = daily.setdefault(d, {})
         for k, v in vals.items():
             if k not in day:  # a standard measure wins over a log line with the same code
                 day[k] = v
+    agg["safety_base"] = "avg"  # a constant: never added up over the days
     return daily, agg
 
 

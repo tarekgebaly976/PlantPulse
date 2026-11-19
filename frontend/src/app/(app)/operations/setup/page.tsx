@@ -23,8 +23,9 @@ function PlantConfig({ cfg }: { cfg: OpConfig }) {
   const [features, setFeatures] = useState<Record<string, boolean>>(cfg.features);
   const [labels, setLabels] = useState<Record<string, string>>(cfg.labels);
   const [done, setDone] = useState(cfg.setup_done);
+  const [base, setBase] = useState(String(cfg.safety_base ?? 1000000));
   const [tpl, setTpl] = useState<string | null>(cfg.template ?? "general");
-  const save = useMut(() => put("/operations/config", { industry, features, labels, setup_done: done }));
+  const save = useMut(() => put("/operations/config", { industry, features, labels, setup_done: done, safety_base: Number(base) }));
   const apply = useMut((key: string) => post<Record<string, number>>(`/operations/templates/${key}/apply`), { success: false });
   return (
     <Stack>
@@ -42,6 +43,8 @@ function PlantConfig({ cfg }: { cfg: OpConfig }) {
         <TextInput label={t("setup.labelReports")} placeholder={t("nav.operations")} value={labels.reports ?? ""} onChange={(e) => setLabels({ ...labels, reports: e.currentTarget.value })} maxLength={60} />
         <TextInput label={t("setup.labelLogs")} placeholder={t("nav.opsLogs")} value={labels.logs ?? ""} onChange={(e) => setLabels({ ...labels, logs: e.currentTarget.value })} maxLength={60} />
       </SimpleGrid>
+      <Select w={360} label={t("safe.baseLabel")} description={t("safe.baseHint")} allowDeselect={false} value={base} onChange={(v) => v && setBase(v)}
+        data={[{ value: "1000000", label: t("safe.base1m") }, { value: "200000", label: t("safe.base200k") }]} />
       <Checkbox label={t("setup.done")} checked={done} onChange={(e) => setDone(e.currentTarget.checked)} />
       <Button w="fit-content" loading={save.isPending} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
     </Stack>
