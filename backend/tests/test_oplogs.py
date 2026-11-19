@@ -1,5 +1,7 @@
 """Operations daily logs (utilities / stock preparation forms) and the production dashboard. Invented sample values."""
 
+import uuid
+
 import pytest
 
 from app.core.config import get_settings
@@ -131,7 +133,7 @@ def test_dashboard(world: World):
     ut = setup_ut(world)
     lid = mgr.ok("post", "/operations/logs", {"template_id": ut["t"]["id"], "log_date": "2026-11-05"}, status=201)["id"]
     mgr.ok("put", f"/operations/logs/{lid}/values", {"values": [{"field_id": ut["f"]["P_PM"], "value": 117.69}]})
-    d = mgr.ok("get", "/operations/dashboard", params={"days": 366})
+    d = mgr.ok("get", "/operations/dashboard", params={"days": 366, "machine_id": s["machine"]["id"]})
     day = next(x for x in d["production"] if x["date"] == "2026-11-05")
     assert day["gross"] == pytest.approx(398.0) and day["oee"] == pytest.approx(0.6452, abs=0.0001)
     assert d["period"]["stops"]["downtime_by_discipline"] == {"MECH": 1.5, "ELEC": 1.5}
@@ -139,6 +141,12 @@ def test_dashboard(world: World):
     # its own form, "per t" on the plant's output, and only the KPIs it can have
     codes = {a["code"]: a for a in d["areas"]}
     assert {"PM", "UTIL"} <= set(codes) and d["department_id"] == codes["PM"]["id"] and d["logs"] == []
+    # with several areas the dashboard opens on the whole mill
+    mill = mgr.ok("get", "/operations/dashboard", params={"days": 366})
+    assert mill["department_id"] == "mill" and mill["mill"]["areas"]
+    pm = next(a for a in mill["mill"]["areas"] if a["code"] == "PM")
+    assert pm["lines"][0]["produced"] == pytest.approx(398.0) and pm["lines"][0]["oee"] == pytest.approx(0.6452, abs=0.0001)
+    assert mill["mill"]["production"][0]["unit"] == "t" and isinstance(mill["mill"]["losses"], list)
     u = mgr.ok("get", "/operations/dashboard", params={"days": 366, "department_id": codes["UTIL"]["id"]})
     assert u["machines"] == [] and u["period"] is None and u["unit"] == "t"
     p_pm = next(x for x in u["logs"][0]["fields"] if x["code"] == "P_PM")
@@ -180,3 +188,33 @@ def test_sp_shift_log_inside_pm_report(world: World):
     assert lines["Dump tank"]["flags"] == {"D": None, "N": "high"}
     # the shift log points back to the PM report of the same day
     assert mgr.ok("get", f"/operations/logs/{sec['logs']['N']['id']}")["pm_report_id"] == rid
+
+
+def test_dashboard_layout(world: World):
+    from tests.test_operations import fill_day, setup_mill
+
+    s = setup_mill(world)
+    mgr = s["mgr"]
+    fill_day(mgr, s)
+    mgr.ok("post", "/operations/templates/general/apply")
+    kpis = {k["code"]: k["id"] for k in mgr.ok("get", "/operations/kpis")["items"]}
+    lay = mgr.ok("get", "/operations/dashboard-layout", params={"scope": "mill"})
+    assert lay["custom"] is False and [x["id"] for x in lay["sections"]][:2] == ["areas", "kpis"] and lay["kpis"] is None
+    # the production manager hides a section, reorders and picks the KPIs for everyone
+    body = {
+        "scope": "mill",
+        "sections": [{"id": "safety", "on": True}, {"id": "losses", "on": False}],
+        "kpis": [kpis["LTIFR"], kpis["OEE"]],
+    }
+    out = mgr.ok("put", "/operations/dashboard-layout", body)
+    assert [x["id"] for x in out["sections"]][:2] == ["safety", "losses"] and out["sections"][1]["on"] is False
+    assert len(out["sections"]) == 6 and out["kpis"] == [kpis["LTIFR"], kpis["OEE"]]
+    d = world.api("planner").ok("get", "/operations/dashboard", params={"department_id": "mill"})  # other managers see it
+    assert d["layout"]["sections"][0]["id"] == "safety" and [k["code"] for k in d["mill"]["kpis"]][:1] == ["LTIFR"]
+    # only op.manage changes it; unknown KPI or area refused; reset
+    assert world.api("planner").put("/operations/dashboard-layout", json=body).status_code == 403
+    assert mgr.put("/operations/dashboard-layout", json={**body, "kpis": [str(uuid.uuid4())]}).status_code == 422
+    assert mgr.put("/operations/dashboard-layout", json={**body, "scope": str(world.plant_b.id)}).status_code == 404
+    area = mgr.ok("put", "/operations/dashboard-layout", {"scope": str(world.depts["PM"].id), "sections": [{"id": "logs", "on": False}]})
+    assert area["sections"][0] == {"id": "logs", "on": False} and len(area["sections"]) == 4
+    assert mgr.ok("put", "/operations/dashboard-layout", {"scope": "mill", "reset": True})["custom"] is False

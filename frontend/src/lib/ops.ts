@@ -238,6 +238,22 @@ export interface Dashboard {
   period: { stops: Partial<StopTables> & { downtime_by_discipline: Record<string, number> }; loss_by_category: Record<string, number>;
     summary: DashSummary } | null;
   logs: { template: LogTemplate; fields: DashField[] }[]; kpis: KpiResult[];
+  layout: DashLayout; mill: MillView | null;
+}
+export interface DashLayout { sections: { id: string; on: boolean }[]; kpis: string[] | null; custom: boolean }
+export interface MillLine {
+  id: string; code: string; name: string; unit: string; days: number; produced: number | null; good: number | null; planned_qty: number | null; oee: number | null;
+  availability: number | null; performance: number | null; quality: number | null; downtime_hours: number | null; failure_hours: number | null;
+}
+export interface MillArea {
+  id: string; code: string; name: string; name_ar: string | null; lines: MillLine[]; incidents: number; lost_time: number; open_alerts: number;
+  status: string; off: { code: string; name: string; status: string }[]; kpis: number;
+}
+export interface MillView {
+  kpis: KpiResult[]; areas: MillArea[]; production: { unit: string; lines: string[]; series: Record<string, number | string>[] }[];
+  losses: { code: string; name: string; hours: number }[];
+  safety: { base: number; rolling: SafetyRates["rolling"]; days_since_lost_time: number | null; incidents: number; lost_time: number };
+  follow_up: { alerts: Record<string, number>; open_alerts: number; overdue_actions: number; open_actions: number; open_incidents: number };
 }
 
 /** Format a log value with the line's decimals. */

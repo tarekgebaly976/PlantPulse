@@ -28,6 +28,7 @@ from app.services import oplogs as svc
 from app.services.common import audit, plant_today, utcnow
 from app.services.pm import record_meter_reading
 from app.services.production import kpis as kp
+from app.services.production import layout, mill
 from app.services.production import measures as msr
 from app.services.production import reports as ops
 from app.services.production.measures import STANDARD
@@ -523,13 +524,14 @@ def delete_log(lid: uuid.UUID, ctx: Ctx = Depends(require("op.confirm")), db: Se
 def dashboard(
     days: int = Query(30, ge=7, le=366),
     machine_id: uuid.UUID | None = None,
-    department_id: uuid.UUID | None = None,
+    department_id: str | None = Query(None, description='an area id, or "mill" for the whole mill'),
     ctx: Ctx = Depends(require("op.view")),
     db: Session = DB,
 ) -> dict:
     """Production, losses, KPIs and log lines of an area (and of one of its lines) for the last `days` production days,
     ending with the day in progress. Areas are the plant's departments with a production line or a log form; an area
-    without a line shows its log forms and area KPIs (e.g. safety). Any report profile: the production rows are the standard measures (gross = produced, a = good,
+    without a line shows its log forms and area KPIs (e.g. safety). "mill": every area on one screen (see mill.py).
+    The sections and KPIs shown follow the plant's dashboard layout (layout.py). Any report profile: the production rows are the standard measures (gross = produced, a = good,
     b = downgrade); profile extras (e.g. the paper mill's sheet breaks) are present only when the profile has them."""
     from app.services.production import paper
 
@@ -551,15 +553,38 @@ def dashboard(
         for a in db.execute(select(Department).where(Department.plant_id == ctx.plant_id, Department.is_active.is_(True)).order_by(Department.code)).scalars()
         if a.id in used and ctx.dept_ok(a.id)
     ]
-    if department_id is None and machine_id is not None:
-        department_id = next((x.department_id for x in all_lines if x.id == machine_id), None)
-    first_line_area = next((x.department_id for x in all_lines if x.is_active and any(a.id == x.department_id for a in areas)), None)
-    area = next((a for a in areas if a.id == department_id), None) or next((a for a in areas if a.id == first_line_area), None) or (areas[0] if areas else None)
-    machines = [x for x in all_lines if area is not None and x.department_id == area.id]
-    m = next((x for x in machines if x.id == machine_id), machines[0] if machines else None)
     today = plant_today(ctx.plant)
     d1 = today
     d0 = d1 - timedelta(days=days - 1)
+    head = {
+        "start": d0.isoformat(), "end": d1.isoformat(),
+        "areas": [{"id": str(a.id), "code": a.code, "name": a.name, "name_ar": a.name_ar, "lines": sum(1 for x in all_lines if x.department_id == a.id)} for a in areas],
+    }  # fmt: skip
+    plant_kpis = [k for k in kp.plant_kpis(db, ctx.plant_id) if ctx.dept_ok(k.department_id)]
+
+    def chosen(scope: str, default: list) -> tuple[dict, list]:
+        lay = layout.get(db, ctx.plant_id, scope)
+        if lay["kpis"] is None:
+            return lay, default
+        by_id = {str(k.id): k for k in plant_kpis}
+        return lay, [by_id[i] for i in lay["kpis"] if i in by_id]
+
+    if department_id == layout.MILL or (department_id is None and machine_id is None and len(areas) > 1):
+        lay, mill_kpis = chosen(layout.MILL, [k for k in plant_kpis if k.dashboard and k.machine_id is None and k.department_id is None])
+        area_kpis = [k for k in plant_kpis if k.dashboard]
+        return {**head, "department_id": layout.MILL, "layout": lay, "machines": [], "machine_id": None, "profile": None, "unit": None,
+                "production": [], "period": None, "logs": [], "kpis": [],
+                "mill": mill.view(db, ctx.plant, areas, all_lines, today, days, area_kpis, mill_kpis)}  # fmt: skip
+    try:
+        area_id = uuid.UUID(department_id) if department_id else None
+    except ValueError:
+        area_id = None
+    if area_id is None and machine_id is not None:
+        area_id = next((x.department_id for x in all_lines if x.id == machine_id), None)
+    first_line_area = next((x.department_id for x in all_lines if x.is_active and any(a.id == x.department_id for a in areas)), None)
+    area = next((a for a in areas if a.id == area_id), None) or next((a for a in areas if a.id == first_line_area), None) or (areas[0] if areas else None)
+    machines = [x for x in all_lines if area is not None and x.department_id == area.id]
+    m = next((x for x in machines if x.id == machine_id), machines[0] if machines else None)
     prod: list[dict] = []
     net_by_day: dict[str, float] = {}
     period = None
@@ -642,16 +667,15 @@ def dashboard(
             out_fields.append({**field_out(x), "series": s, "per_ton_series": per_ton, "total": total,
                                "per_ton_period": round(total / sum(basis[d] for d in s if d in basis), 4) if pt and total is not None and any(basis.get(d) for d in s) else None})  # fmt: skip
         logs.append({"template": template_out(t), "fields": out_fields})
-    kpi_rows = [
-        k for k in kp.plant_kpis(db, ctx.plant_id)
+    lay, kpi_rows = chosen(str(area.id) if area else "area", [
+        k for k in plant_kpis
         if k.dashboard and (k.machine_id is None or (m is not None and k.machine_id == m.id)) and (k.department_id is None or (area is not None and k.department_id == area.id))
-    ]  # fmt: skip
+    ])  # fmt: skip
     results = kp.evaluate(db, ctx.plant, kpi_rows, today, days=days, line_id=m.id if m else None, range_days=days, area_id=area.id if area else None)
     # plant-wide KPIs an area or line never records (e.g. sheet breaks on a packing line, OEE where there is no line)
     results = [r for r in results if r["machine_id"] or r["department_id"] or r["values"]["range"]["value"] is not None or r["series"]]
     return {
-        "start": d0.isoformat(), "end": d1.isoformat(),
-        "areas": [{"id": str(a.id), "code": a.code, "name": a.name, "name_ar": a.name_ar, "lines": sum(1 for x in all_lines if x.department_id == a.id)} for a in areas],
+        **head, "layout": lay, "mill": None,
         "department_id": str(area.id) if area else None,
         "machines": [{"id": str(x.id), "code": x.code, "name": x.name, "profile": x.report_profile, "unit": x.output_unit} for x in machines],
         "machine_id": str(m.id) if m else None, "profile": m.report_profile if m else None, "unit": unit,

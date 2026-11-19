@@ -1,12 +1,15 @@
 "use client";
 
 import { BarChart, LineChart } from "@mantine/charts";
-import { Alert, Group, Paper, SegmentedControl, Select, SimpleGrid, Stack, Switch, Text, Title, useComputedColorScheme } from "@mantine/core";
+import { Alert, Button, Group, Paper, SegmentedControl, Select, SimpleGrid, Stack, Switch, Text, Title, useComputedColorScheme } from "@mantine/core";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
 import { oeeColor, Tile } from "@/components/Ops";
 import { KpiCard } from "@/components/OpsKpi";
+import { LayoutModal, MillDashboard } from "@/components/OpsMill";
+import { IconAdjustments } from "@tabler/icons-react";
+import { useSession } from "@/lib/session";
 import { Loading, PageHeader } from "@/components/ui";
 import { fmtNum, useQ } from "@/lib/hooks";
 import { fmtVal, hhmm, pct, type Dashboard, type DashField } from "@/lib/ops";
@@ -55,6 +58,8 @@ function View() {
   const [area, setArea] = useState<string | null>(null);
   const [mid, setMid] = useState<string | null>(null);
   const [perTon, setPerTon] = useState(true);
+  const [edit, setEdit] = useState(false);
+  const { can } = useSession();
   const q = useQ<Dashboard>("/operations/dashboard", { days, department_id: area ?? undefined, machine_id: mid ?? undefined });
   if (!q.data) return <Loading />;
   const d = q.data;
@@ -68,6 +73,10 @@ function View() {
   const oeeData = done.map((x) => ({ day: short(x.date), oee: x.oee !== null ? x.oee * 100 : null }));
   const apq = done.map((x) => ({ day: short(x.date), av: x.availability !== null ? x.availability * 100 : null, pe: x.performance !== null ? x.performance * 100 : null, qu: x.quality !== null ? x.quality * 100 : null }));
   const pareto = (obj: Record<string, number>) => Object.entries(obj).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ k, v: Math.round(v * 100) / 100 }));
+  const isMill = d.department_id === "mill";
+  const on = (id: string) => d.layout.sections.find((x) => x.id === id)?.on ?? true;
+  const order = (id: string) => d.layout.sections.findIndex((x) => x.id === id);
+  const shownKpis = [...new Set((isMill ? d.mill?.kpis ?? [] : d.kpis).map((k) => k.id))];
   const perTonTiles = d.logs.flatMap((l) => l.fields.filter((f) => f.per_ton && f.per_ton_period !== null));
   return (
     <>
@@ -76,20 +85,23 @@ function View() {
       </PageHeader>
       <Group mb="md" gap="sm" wrap="wrap">
         <SegmentedControl value={days} onChange={setDays} data={[{ value: "7", label: t("opsDash.days", { n: 7 }) }, { value: "30", label: t("opsDash.days", { n: 30 }) }, { value: "90", label: t("opsDash.days", { n: 90 }) }]} />
-        {d.areas.length > 1 && <Select w={220} aria-label={t("safe.area")} allowDeselect={false} value={area ?? d.department_id} onChange={(v) => { setArea(v); setMid(null); }}
-          data={d.areas.map((a) => ({ value: a.id, label: `${a.code} – ${i18n.language === "ar" && a.name_ar ? a.name_ar : a.name}` }))} />}
+        {d.areas.length > 0 && <Select w={240} aria-label={t("safe.area")} allowDeselect={false} value={area ?? d.department_id} onChange={(v) => { setArea(v); setMid(null); }}
+          data={[...(d.areas.length > 1 ? [{ value: "mill", label: t("mill.title") }] : []), ...d.areas.map((a) => ({ value: a.id, label: `${a.code} – ${i18n.language === "ar" && a.name_ar ? a.name_ar : a.name}` }))]} />}
         {d.machines.length > 1 && <Select w={220} allowDeselect={false} data={d.machines.map((m) => ({ value: m.id, label: `${m.code} – ${m.name}` }))} value={mid ?? d.machine_id} onChange={setMid} />}
-        {u && <Switch label={t("gen.dash.perUnit", { u })} checked={perTon} onChange={(e) => setPerTon(e.currentTarget.checked)} />}
+        {u && !isMill && <Switch label={t("gen.dash.perUnit", { u })} checked={perTon} onChange={(e) => setPerTon(e.currentTarget.checked)} />}
+        {can("op.manage") && d.department_id && <Button size="xs" variant="light" leftSection={<IconAdjustments size={14} />} onClick={() => setEdit(true)}>{t("mill.customise")}</Button>}
       </Group>
-      {!p && d.logs.length === 0 && d.kpis.length === 0 ? <Alert color="blue">{t("ops.noMachine")}</Alert> : (
+      {edit && d.department_id && <LayoutModal key={d.department_id} scope={d.department_id} kind={isMill ? "mill" : "area"} layout={d.layout} defaultKpis={shownKpis} onClose={() => setEdit(false)} />}
+      {isMill && d.mill ? <MillDashboard m={d.mill} sections={d.layout.sections} colors={c} onArea={(id) => { setArea(id); setMid(null); }} /> :
+      !p && d.logs.length === 0 && d.kpis.length === 0 ? <Alert color="blue">{t("ops.noMachine")}</Alert> : (
         <Stack>
-          {d.kpis.length > 0 && (
-            <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }}>
+          {on("kpis") && d.kpis.length > 0 && (
+            <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} style={{ order: order("kpis") }}>
               {d.kpis.map((k) => <KpiCard key={`${k.id}-${k.lines.join()}`} k={k} period="range" showLine={false} />)}
             </SimpleGrid>
           )}
-          {sm && (
-            <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }}>
+          {on("summary") && sm && (
+            <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} style={{ order: order("summary") }}>
               <Tile label={t("gen.tiles.produced")} value={`${fmtNum(sm.produced ?? 0, 0)} ${u}`} sub={`${t("opsDash.perDay")} ${fmtNum((sm.produced ?? 0) / Math.max(sm.days, 1), 0)} ${u}`} />
               <Tile label={t("gen.tiles.good")} value={`${fmtNum(sm.good ?? 0, 0)} ${u}`}
                 sub={`${t("gen.tiles.downgrade")} ${pct(sm.net ? (sm.downgrade ?? 0) / sm.net : null)} · ${t("ops.tiles.reject")} ${pct(sm.net ? (sm.reject ?? 0) / sm.net : null)}`} />
@@ -103,8 +115,8 @@ function View() {
                 : <Tile key={f.id} label={f.label} value={fmtVal(f.total, 0)} unit={f.unit ?? ""} sub={`${fmtVal(f.per_ton_period, sig(f.per_ton_period))} ${f.unit ?? ""}/${u}`} />)}
             </SimpleGrid>
           )}
-          {p && (
-            <SimpleGrid cols={{ base: 1, lg: 2 }}>
+          {on("charts") && p && (
+            <SimpleGrid cols={{ base: 1, lg: 2 }} style={{ order: order("charts") }}>
               <ChartCard title={`${t("gen.dash.production")}, ${u}`} sub={t("gen.dash.productionSub")}>
                 <BarChart h={240} data={prodData} dataKey="day" type="stacked" withLegend legendProps={{ verticalAlign: "bottom" }} gridAxis="y" barProps={{ radius: 2 }}
                   valueFormatter={(x) => `${fmtNum(x, 1)} ${u}`} yAxisProps={{ tickFormatter: tick }} series={[{ name: "a", label: t("gen.tiles.good"), color: c[0]! }, { name: "down", label: t("gen.tiles.downgrade"), color: c[1]! }, { name: "reject", label: t("ops.tiles.reject"), color: c[2]! }]} />
@@ -146,8 +158,8 @@ function View() {
               )}
             </SimpleGrid>
           )}
-          {d.logs.map((l) => (
-            <Stack key={l.template.id} gap="xs">
+          {on("logs") && d.logs.map((l) => (
+            <Stack key={l.template.id} gap="xs" style={{ order: order("logs") }}>
               <Title order={4} mt="sm">{l.template.name}</Title>
               <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
                 {l.fields.map((f) => <FieldChart key={f.id} f={f} perTon={perTon && f.per_ton} color={c[0]!} out={u} />)}

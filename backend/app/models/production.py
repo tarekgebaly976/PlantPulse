@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,6 +26,8 @@ class OpPlantConfig(Base, Timestamped):
     setup_done: Mapped[bool] = mapped_column(Boolean, default=False)
     # safety rates per this many hours worked: 1,000,000 (LTIFR as most of the world) or 200,000 (OSHA, US)
     safety_base: Mapped[int] = mapped_column(Integer, default=1_000_000, server_default="1000000")
+    # production dashboard layout per view ("mill" or an area id): {"sections": [{"id", "on"}], "kpis": [kpi ids] | null}
+    dashboard: Mapped[dict] = mapped_column(JSONB, default=dict, server_default=text("'{}'::jsonb"))
 
 
 class OpProduct(Base, PlantScoped, Timestamped):

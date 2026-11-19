@@ -92,6 +92,14 @@ Branch: `claude/serene-davinci-0arq11` (migrations up to 0021)
   production line or a log form), then a line when the area has several. An area without a line (e.g. stock
   preparation, utilities) shows its own log forms ("per t" on its form's line, or on all the plant's lines) and the
   KPIs it can have (safety for that area); plant-wide KPIs an area never records are left out.
+- **Whole-mill view and dashboard layout (19 Nov, migration 0028).** "Whole mill" (first in the area list, the
+  default with several areas): area cards (output, OEE, downtime per line, incidents, open alerts, worst KPI status,
+  KPIs off target; tap = open the area), plant KPIs (per unit group), production per line, main losses over all
+  lines, safety rates, follow-up (open alerts, overdue / open actions, open incidents). "Customise" (op.manage:
+  production manager, administrator): per view (whole mill, each area) the sections on / off and their order, and the
+  KPIs (or the default "show on dashboard" ones); stored in `op_plant_config.dashboard`, the same for everyone.
+  Everyone with `op.view` sees the dashboard: by default every role with view rights (maintenance manager, planner,
+  engineer, management viewer, production roles); changed in Admin → Roles.
 - Not yet: Excel import of past daily sheets, winder/FSC, Q-factors (phase 2); further industry templates.
 
 To switch it on for the real installation later: add `CMMS_OPERATIONS_MODULE=true` to `deploy/.env` and restart.

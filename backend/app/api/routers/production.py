@@ -25,6 +25,7 @@ from app.services.production import alerts as alert_svc
 from app.services.production import incidents as inc_svc
 from app.services.production import insights as insight_svc
 from app.services.production import kpis as kp
+from app.services.production import layout
 from app.services.production import measures as ms
 from app.services.production import templates as tpl
 from app.services.production.periods import day_window
@@ -93,6 +94,52 @@ def put_config(body: ConfigIn, ctx: Ctx = Depends(require("op.manage")), db: Ses
     c.safety_base = body.safety_base
     db.flush()
     return config_out(c)
+
+
+class LayoutSection(In):
+    id: str = Field(max_length=20)
+    on: bool = True
+
+
+class LayoutIn(In):
+    scope: str = Field(max_length=40)  # "mill" or an area (department) id
+    sections: list[LayoutSection] | None = Field(None, max_length=20)
+    kpis: list[uuid.UUID] | None = Field(None, max_length=40)  # None = the KPIs marked "show on dashboard"
+    reset: bool = False
+
+
+def _scope(db: Session, ctx: Ctx, scope: str) -> str:
+    if scope == layout.MILL:
+        return scope
+    try:
+        dept = db.get(Department, uuid.UUID(scope))
+    except ValueError:
+        dept = None
+    if dept is None or dept.plant_id != ctx.plant_id or not ctx.dept_ok(dept.id):
+        raise HTTPException(404, "Unknown area")
+    return str(dept.id)
+
+
+@router.get("/dashboard-layout")
+def get_layout(scope: str, ctx: Ctx = Depends(require("op.view")), db: Session = DB) -> dict:
+    return {"scope": scope, **layout.get(db, ctx.plant_id, _scope(db, ctx, scope))}
+
+
+@router.put("/dashboard-layout")
+def put_layout(body: LayoutIn, ctx: Ctx = Depends(require("op.manage")), db: Session = DB) -> dict:
+    """The production dashboard's sections and KPIs of one view, for everyone who sees the dashboard."""
+    scope = _scope(db, ctx, body.scope)
+    if body.kpis is not None:
+        own = {k.id for k in kp.plant_kpis(db, ctx.plant_id, active_only=False)}
+        if any(k not in own for k in body.kpis):
+            raise HTTPException(422, "Unknown KPI")
+    if body.reset:
+        out = layout.put(db, ctx.plant_id, scope, None, None)
+    else:
+        out = layout.put(db, ctx.plant_id, scope, [x.model_dump() for x in body.sections or []], [str(k) for k in body.kpis] if body.kpis is not None else None)
+    audit(db, "op.dashboard.layout", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="op_plant_config", entity_id=None,
+          data={"scope": scope, "reset": body.reset})  # fmt: skip
+    return {"scope": body.scope, **out}
 
 
 @router.post("/templates/{key}/apply")
