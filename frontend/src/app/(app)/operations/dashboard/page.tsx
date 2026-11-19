@@ -2,7 +2,8 @@
 
 import { BarChart, LineChart } from "@mantine/charts";
 import { Alert, Button, Group, Paper, SegmentedControl, Select, SimpleGrid, Stack, Switch, Text, Title, useComputedColorScheme } from "@mantine/core";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
 import { oeeColor, Tile } from "@/components/Ops";
@@ -54,9 +55,23 @@ function View() {
   const { t, i18n } = useTranslation();
   const scheme = useComputedColorScheme("light");
   const c = SERIES[scheme === "dark" ? "dark" : "light"];
-  const [days, setDays] = useState("30");
-  const [area, setArea] = useState<string | null>(null);
-  const [mid, setMid] = useState<string | null>(null);
+  // area, line and period live in the address, so the phone's Back button goes area → whole mill → previous page
+  const router = useRouter();
+  const sp = useSearchParams();
+  const days = ["7", "30", "90"].includes(sp.get("days") ?? "") ? sp.get("days")! : "30";
+  const area = sp.get("area");
+  const mid = sp.get("line");
+  const go = (p: { days?: string; area?: string | null; line?: string | null }, replace = false) => {
+    const q = new URLSearchParams();
+    const next = { days, area, line: mid, ...p };
+    if (next.days !== "30") q.set("days", next.days);
+    if (next.area) q.set("area", next.area);
+    if (next.line) q.set("line", next.line);
+    const url = `/operations/dashboard${q.size ? `?${q}` : ""}`;
+    if (replace) router.replace(url, { scroll: false });
+    else router.push(url);
+  };
+  const setArea = (v: string | null) => go({ area: v, line: null });
   const [perTon, setPerTon] = useState(true);
   const [edit, setEdit] = useState(false);
   const { can } = useSession();
@@ -84,15 +99,15 @@ function View() {
         <Text size="sm" c="dimmed">{t("opsDash.subtitle", { start: d.start, end: d.end })}</Text>
       </PageHeader>
       <Group mb="md" gap="sm" wrap="wrap">
-        <SegmentedControl value={days} onChange={setDays} data={[{ value: "7", label: t("opsDash.days", { n: 7 }) }, { value: "30", label: t("opsDash.days", { n: 30 }) }, { value: "90", label: t("opsDash.days", { n: 90 }) }]} />
-        {d.areas.length > 0 && <Select w={240} aria-label={t("safe.area")} allowDeselect={false} value={area ?? d.department_id} onChange={(v) => { setArea(v); setMid(null); }}
+        <SegmentedControl value={days} onChange={(v) => go({ days: v }, true)} data={[{ value: "7", label: t("opsDash.days", { n: 7 }) }, { value: "30", label: t("opsDash.days", { n: 30 }) }, { value: "90", label: t("opsDash.days", { n: 90 }) }]} />
+        {d.areas.length > 0 && <Select w={240} aria-label={t("safe.area")} allowDeselect={false} value={area ?? d.department_id} onChange={(v) => setArea(v)}
           data={[...(d.areas.length > 1 ? [{ value: "mill", label: t("mill.title") }] : []), ...d.areas.map((a) => ({ value: a.id, label: `${a.code} – ${i18n.language === "ar" && a.name_ar ? a.name_ar : a.name}` }))]} />}
-        {d.machines.length > 1 && <Select w={220} allowDeselect={false} data={d.machines.map((m) => ({ value: m.id, label: `${m.code} – ${m.name}` }))} value={mid ?? d.machine_id} onChange={setMid} />}
+        {d.machines.length > 1 && <Select w={220} allowDeselect={false} data={d.machines.map((m) => ({ value: m.id, label: `${m.code} – ${m.name}` }))} value={mid ?? d.machine_id} onChange={(v) => go({ line: v })} />}
         {u && !isMill && <Switch label={t("gen.dash.perUnit", { u })} checked={perTon} onChange={(e) => setPerTon(e.currentTarget.checked)} />}
         {can("op.manage") && d.department_id && <Button size="xs" variant="light" leftSection={<IconAdjustments size={14} />} onClick={() => setEdit(true)}>{t("mill.customise")}</Button>}
       </Group>
       {edit && d.department_id && <LayoutModal key={d.department_id} scope={d.department_id} kind={isMill ? "mill" : "area"} layout={d.layout} defaultKpis={shownKpis} onClose={() => setEdit(false)} />}
-      {isMill && d.mill ? <MillDashboard m={d.mill} sections={d.layout.sections} colors={c} onArea={(id) => { setArea(id); setMid(null); }} /> :
+      {isMill && d.mill ? <MillDashboard m={d.mill} sections={d.layout.sections} colors={c} onArea={(id) => setArea(id)} /> :
       !p && d.logs.length === 0 && d.kpis.length === 0 ? <Alert color="blue">{t("ops.noMachine")}</Alert> : (
         <Stack>
           {on("kpis") && d.kpis.length > 0 && (
@@ -173,5 +188,5 @@ function View() {
 }
 
 export default function DashboardPage() {
-  return <Guard perm="op.view"><View /></Guard>;
+  return <Guard perm="op.view"><Suspense><View /></Suspense></Guard>;
 }
