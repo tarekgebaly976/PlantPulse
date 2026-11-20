@@ -18,7 +18,18 @@ const VIEWPORTS = {
 // Real company and person names that exist in the sample data (equipment makers, lubricants, one person's name).
 // A screen that shows any of them stops the capture, so it never reaches a video. Add more in VIDEO_BLOCKLIST_FILE
 // (one name per line, kept outside the repository).
-const BLOCKLIST = ["SKF", "ABB", "Flender", "Atlas Copco", "Mobil", "Mobilgear", "Valmet", "Andritz", "Kadant", "Imran Khan"];
+const BLOCKLIST = ["SKF", "ABB", "Flender", "Atlas Copco", "Mobil", "Mobilgear", "Valmet", "Andritz", "Kadant", "Bosch", "Rexroth",
+  "Aerzen", "LGEP", "Imran Khan"];
+
+// Sample data shows real makers on equipment, spare parts and lubricants. In the filming browser only (the app and its
+// data are not changed) they are shown as neutral sample names, in the style the demo already uses ("Line builder (sample)").
+// Longest first. The blocklist check still runs after this, so a name missing here stops the capture.
+const MASK = [
+  ["Mobilgear 600 XP 220", "Gear oil VG 220 (sample)"], ["LGEP 2", "EP2 grease (sample)"], ["Bosch Rexroth", "Hydraulics maker (sample)"],
+  ["Atlas Copco", "Compressor maker (sample)"], ["SKF-SA", "Bearing supplier (sample)"], ["SKF", "Bearing maker (sample)"],
+  ["Mobil", "Lubricant maker (sample)"], ["Flender", "Gearbox maker (sample)"], ["ABB", "Electrical maker (sample)"],
+  ["Aerzen", "Blower maker (sample)"], ["Imran Khan", "Imran K. (sample)"], ["Valmet", "Line builder (sample)"], ["Andritz", "Mill maker (sample)"], ["Kadant", "Equipment maker (sample)"],
+];
 
 function blocklist() {
   const extra = process.env.VIDEO_BLOCKLIST_FILE && fs.existsSync(process.env.VIDEO_BLOCKLIST_FILE)
@@ -55,7 +66,18 @@ class Session {
     for (const { w, re } of this.rec.block) if (re.test(text)) throw new Error(`Blocked name "${w}" is visible on ${this.page.url()} (scene ${this.rec.scene})`);
   }
 
+  async mask() {
+    await this.page.evaluate((pairs) => {
+      const rx = pairs.map(([a, b]) => [new RegExp(`(^|[^\\p{L}\\p{N}])${a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[^\\p{L}\\p{N}])`, "gu"), b]);
+      const fix = (v) => rx.reduce((x, [r, b]) => x.replace(r, (_m, p) => p + b), v);
+      const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let n = w.nextNode(); n; n = w.nextNode()) { const v = fix(n.nodeValue); if (v !== n.nodeValue) n.nodeValue = v; }
+      document.querySelectorAll("input, textarea").forEach((e) => { const v = fix(e.value); if (v !== e.value) e.value = v; });
+    }, MASK);
+  }
+
   async snap(tag) {
+    await this.mask();
     await this.check();
     const f = this.rec.file(tag);
     await this.page.screenshot({ path: f });
@@ -133,9 +155,9 @@ class Capture {
     await page.waitForURL(/\/$/);
     const csrf = (await ctx.cookies()).find((c) => c.name === "cmms_csrf")?.value ?? "";
     await page.request.post(BASE + "/api/v1/auth/locale", { data: { locale: "en" }, headers: { "X-CSRF-Token": csrf } });
-    // Film without the blinking text cursor and without the short "Saved" pop-ups that would cover the screen.
+    // Film without the blinking text cursor and without the short "Saved" pop-ups (error messages stay visible).
     await ctx.addInitScript(() => {
-      const css = "*{caret-color:transparent !important} .mantine-Notifications-root{display:none !important}";
+      const css = "*{caret-color:transparent !important} .mantine-Notification-root:not(:has(.mantine-Notification-title)){display:none !important}";
       document.addEventListener("DOMContentLoaded", () => { const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st); });
     });
     await page.reload();
