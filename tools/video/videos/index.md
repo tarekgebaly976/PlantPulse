@@ -4,6 +4,7 @@ Rendered files are in `tools/video/out/` (not in git). Rebuild: `node tools/vide
 
 | File | Length | Covers |
 |---|---|---|
+| `01-plantpulse-overview-ar.mp4` | 4:40 | What PlantPulse is, who uses it, the modules map, the colour code, and one breakdown from report to KPIs |
 | `01-plantpulse-overview.mp4` | 3:43 | What PlantPulse is, who uses it, the modules map, the colour code, and one breakdown from report to KPIs |
 | `02-work-requests-and-work-orders.mp4` | 3:30 | Work requests (report, accept, reject), the work order list and its tools, the status flow with approval, planning and assignment, execution tabs (checklist, labor, spare parts, attachments), review with failure codes, closing, PDF report, bulk close |
 | `03-technicians-on-the-phone.mp4` | 2:31 | My work on the phone, starting a job, Scan QR and the equipment page, the field round: prepare for offline, equipment card, work request and work order progress without internet, automatic sending when back online |

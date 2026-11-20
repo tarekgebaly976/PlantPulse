@@ -25,7 +25,7 @@ function buildTimeline(def, OUT) {
   if (fs.existsSync(path.join(OUT, "audio", "00-intro.wav"))) voice.push({ id: "00-intro", at: 0 }); // intro sound
   // Same opening in every video: heartbeat line, the app icon out of the pulse, name, subtitle, the video's topic.
   const INTRO = 6.0;
-  scenes.push({ id: "00-intro", layout: "intro", subtitle: "Maintenance management for industrial plants",
+  scenes.push({ id: "00-intro", layout: "intro", subtitle: def.lang === "ar" ? "إدارة الصيانة والإنتاج للمصانع" : "Maintenance management for industrial plants",
     credit: process.env.VIDEO_CREDIT ?? "BY ENG. TAREK ZEYAD ALGEBALY", pill: def.intro || def.title.replace(/^PlantPulse\s*[–-]\s*/, ""), t0: 0, t1: INTRO });
   let t = INTRO;
   for (const s0 of def.scenes) {
@@ -36,7 +36,8 @@ function buildTimeline(def, OUT) {
     if (s.layout === "app") {
       const beats = beatsAll[s.id];
       if (!beats || !beats.length) throw new Error(`no captures for ${s.id}: run capture`);
-      Object.assign(s, layoutBeats(s, beats, t, parts, voice, OUT));
+      const bb = s.captionsAr ? beats.map((b, i) => ({ ...b, caption: s.captionsAr[i] ?? b.caption })) : beats;
+      Object.assign(s, layoutBeats(s, bb, t, parts, voice, OUT));
       D = s.end - t;
     } else if ((s.layout === "cards" || s.layout === "modules") && parts.length && parts[0].key !== "all") {
       // each card appears as its sentence starts
@@ -59,7 +60,7 @@ function buildTimeline(def, OUT) {
     scenes.push(s);
     t += D;
   }
-  return { logo: url(logo), scenes, voice, total: t };
+  return { logo: url(logo), scenes, voice, total: t, lang: def.lang || "en" };
 }
 
 /** Times inside an app scene. Each step lasts as long as its own sentence (voice starts as the step starts), so the

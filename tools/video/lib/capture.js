@@ -133,8 +133,55 @@ class Session {
   async quiet(fn) { await fn(this.page); await this.settle(500); }
 }
 
+/** Arabic films: the capture steps are written with the English labels; they are translated to the app's own Arabic
+ *  labels (from its language files) wherever Playwright looks for a role name, label, text or placeholder. */
+let patched = false;
+function patchForArabic(page) {
+  if (patched) return;
+  patched = true;
+  const map = require("./i18n-map").build("ar");
+  const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const keys = [...map.keys()].sort((a, b) => a.length - b.length);
+  const tr = (v) => {
+    if (typeof v === "string") {
+      if (map.has(v)) return map.get(v);
+      if (/:$/.test(v) && map.has(v.slice(0, -1))) return map.get(v.slice(0, -1));
+      if (/[a-z]/.test(v) && v.length >= 4) {  // English matching is by substring: find the shortest UI text that contains it
+        const lv = v.toLowerCase(), wb = new RegExp(`(^|\\W)${esc(lv)}($|\\W)`);
+        const k = keys.find((x) => wb.test(x.toLowerCase())) || keys.find((x) => x.toLowerCase().includes(lv));
+        if (k) return map.get(k);
+      }
+      const m = v.match(/^(\+ |[^:]+: )(.+)$/);  // "Add: Lubrication points", "+ Work packages"
+      if (m) { const a = map.get(m[1].replace(/: $/, "")) , b = map.get(m[2]); if (b) return (m[1].startsWith("+") ? "+ " : (a ?? m[1].replace(/: $/, "")) + ": ") + b; }
+      return v;
+    }
+    if (v instanceof RegExp) {
+      if (/^\^?[\w\s\\.()&-]+\$?$/.test(v.source) && !/^\^?[A-Z0-9-]+\$?$/.test(v.source)) {
+        const k = keys.find((x) => v.test(x));
+        if (k) return new RegExp(esc(map.get(k)), v.flags.replace("i", ""));
+      }
+      return v;
+    }
+    return v;
+  };
+  const opts = (o) => (o && o.name !== undefined ? { ...o, name: tr(o.name) } : o);
+  const wrap = (proto) => {
+    for (const fn of ["getByRole", "getByLabel", "getByText", "getByPlaceholder", "getByTitle"]) {
+      const orig = proto[fn];
+      proto[fn] = function (a, o) { return fn === "getByRole" ? orig.call(this, a, opts(o)) : orig.call(this, tr(a), o); };
+    }
+    const loc = proto.locator;
+    proto.locator = function (sel, o) { return loc.call(this, typeof sel === "string" ? sel.replace(/has-text\("([^"]+)"\)/g, (m, x) => `has-text("${tr(x)}")`) : sel, o); };
+    const f = proto.filter;
+    proto.filter = function (o) { return f.call(this, o && o.hasText !== undefined ? { ...o, hasText: tr(o.hasText) } : o); };
+  };
+  wrap(Object.getPrototypeOf(page));
+  wrap(Object.getPrototypeOf(page.locator("body")));
+}
+
 class Capture {
-  constructor(outDir, password) {
+  constructor(outDir, password, lang = "en") {
+    this.lang = lang;
     this.rec = new Recorder(outDir);
     this.password = password;
     this.browser = null;
@@ -149,18 +196,19 @@ class Capture {
     const ctx = await this.browser.newContext({ ...VIEWPORTS[device], locale: "en-US", timezoneId: "Asia/Riyadh", colorScheme: "light" });
     const page = await ctx.newPage();
     await page.goto(BASE + "/login");
-    await page.getByLabel(/email/i).fill(who + DEMO_DOMAIN);
+    await page.locator('input[type="email"]').fill(who + DEMO_DOMAIN);
     await page.locator('input[name="password"]').fill(this.password);
-    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.locator('button[type="submit"]').click();
     await page.waitForURL(/\/$/);
     const csrf = (await ctx.cookies()).find((c) => c.name === "cmms_csrf")?.value ?? "";
-    await page.request.post(BASE + "/api/v1/auth/locale", { data: { locale: "en" }, headers: { "X-CSRF-Token": csrf } });
+    await page.request.post(BASE + "/api/v1/auth/locale", { data: { locale: this.lang }, headers: { "X-CSRF-Token": csrf } });
     // Film without the blinking text cursor and without the short "Saved" pop-ups (error messages stay visible).
     await ctx.addInitScript(() => {
       const css = "*{caret-color:transparent !important} .mantine-Notification-root:not(:has(.mantine-Notification-title)){display:none !important}";
       document.addEventListener("DOMContentLoaded", () => { const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st); });
     });
     await page.reload();
+    if (this.lang === "ar") patchForArabic(page);
     const s = new Session(this.rec, page, device);
     s.ctx = ctx;
     this.sessions.push(s);

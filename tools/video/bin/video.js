@@ -15,7 +15,26 @@ const { execFileSync } = require("child_process");
 const ROOT = path.resolve(__dirname, "..");
 const [video, cmd = "all", arg] = process.argv.slice(2);
 if (!video) { console.error("usage: video.js <video> [script|capture|audio|frames|render|all]"); process.exit(2); }
-const def = require(path.join(ROOT, "videos", video, "video.js"));
+// "<video>-ar" = the Arabic version: same filming steps, app shown in Arabic, Arabic screen text (videos/<video>/ar.js),
+// voice from voice/<video>-ar/ (your recordings) or the Arabic TTS voice.
+const LANG = /-ar$/.test(video) ? "ar" : "en";
+const BASE_ID = video.replace(/-ar$/, "");
+const def = LANG === "ar" ? arabic(require(path.join(ROOT, "videos", BASE_ID, "video.js"))) : require(path.join(ROOT, "videos", video, "video.js"));
+
+function arabic(en) {
+  const ar = require(path.join(ROOT, "videos", BASE_ID, "ar.js"));
+  const def = { ...en, lang: "ar", file: `${en.file || en.id}-ar`, intro: ar.ui.intro, arSay: ar.say };
+  def.scenes = en.scenes.map((s0) => {
+    const s = { ...s0 }, u = ar.ui.scenes[s.id] || {};
+    for (const k of ["title", "subtitle", "chapter", "step"]) if (u[k] !== undefined) s[k] = u[k];
+    if (u.cards) s.cards = s.cards.map((c, i) => ({ ...c, ...u.cards[i] }));
+    if (u.groups) s.groups = s.groups.map((g, i) => ({ ...g, ...u.groups[i] }));
+    if (u.captions) s.captionsAr = u.captions;
+    if (u.legend) s.legendAr = u.legend;
+    return s;
+  });
+  return def;
+}
 const OUT = path.join(ROOT, "out", video);
 
 /** The voice of each scene as parts, so every part is timed with what it describes:
@@ -45,7 +64,12 @@ function writeScript() {
   const lines = [`# ${def.title}`, "", "| Scene | Shown | Narration (one line per step) |", "|---|---|---|"];
   let words = 0;
   const all = def.scenes.map((s) => {
-    const parts = sceneParts(s, beats).map((p, k) => ({ ...p, id: `${s.id}~${k}` }));
+    let parts = sceneParts(s, beats).map((p, k) => ({ ...p, id: `${s.id}~${k}` }));
+    if (def.lang === "ar") {
+      const a = def.arSay[s.id];
+      if (!a || a.length !== parts.length) throw new Error(`${s.id}: ${a ? a.length : 0} Arabic lines for ${parts.length} parts`);
+      parts = parts.map((p, k) => ({ ...p, text: a[k] }));
+    }
     parts.forEach((p) => { words += p.text.split(/\s+/).length; });
     const shown = s.layout === "app" ? `App (${s.device})${s.step ? " – " + s.step : ""}` : s.layout;
     lines.push(`| ${s.id} | ${shown} | ${parts.map((p) => p.text).join("<br>")} |`);
@@ -53,7 +77,7 @@ function writeScript() {
   });
   lines.push("", `${words} words, about ${Math.round((words / 150) * 60)} s of voice at a calm pace.`, "",
     `Own recordings: voice/${video}/<scene>.wav (e.g. voice/${video}/${def.scenes[0].id}.wav) replace the voice of that scene.`);
-  fs.writeFileSync(path.join(ROOT, "videos", video, "script.md"), lines.join("\n") + "\n");
+  fs.writeFileSync(path.join(ROOT, "videos", BASE_ID, LANG === "ar" ? "script.ar.md" : "script.md"), lines.join("\n") + "\n");
   fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(path.join(OUT, "narration.json"), JSON.stringify(all, null, 1));
   console.log(`script: videos/${video}/script.md (${words} words)`);
@@ -64,7 +88,7 @@ async function capture() {
   const pw = process.env.CMMS_DEMO_PASSWORD;
   if (!pw) throw new Error("Set CMMS_DEMO_PASSWORD (your LOCAL demo password)");
   if (process.env.VIDEO_SKIP_RESET !== "1") execFileSync(path.join(ROOT, "scripts", "reset-demo.sh"), { stdio: "inherit" });
-  const cap = new Capture(path.join(OUT, "captures"), pw);
+  const cap = new Capture(path.join(OUT, "captures"), pw, LANG);
   await cap.start();
   try {
     for (const s of def.scenes) {

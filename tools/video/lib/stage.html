@@ -6,6 +6,19 @@
 <meta charset="utf-8">
 <style>
   @font-face { font-family: "PPInter"; src: local("Inter"), url("../../../frontend/node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "PPArabic"; src: url("../../../frontend/node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-400-normal.woff2") format("woff2"); font-weight: 400; }
+  @font-face { font-family: "PPArabic"; src: url("../../../frontend/node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-600-normal.woff2") format("woff2"); font-weight: 500 600; }
+  @font-face { font-family: "PPArabic"; src: url("../../../frontend/node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-700-normal.woff2") format("woff2"); font-weight: 700 900; }
+  html[dir="rtl"] body { font-family: "PPInter", "PPArabic", sans-serif; }
+  html[dir="rtl"] .cap { border-left: 1px solid var(--line); border-right: 6px solid var(--teal); }
+  html[dir="rtl"] .side ol { border-left: none; border-right: 3px solid var(--line); }
+  html[dir="rtl"] .side li { padding: 10px 26px 10px 0; }
+  html[dir="rtl"] .side li::before { left: auto; right: -9px; }
+  html[dir="rtl"] .brand .chap { padding-left: 0; padding-right: 14px; border-left: none; border-right: 2px solid var(--line); letter-spacing: 0; }
+  html[dir="rtl"] .brand { left: auto; right: 64px; }
+  html[dir="rtl"] .stepchip { right: auto; left: 64px; }
+  html[dir="rtl"] h2.head { left: auto; right: 110px; }
+  html[dir="rtl"] .credit, html[dir="rtl"] .nm { direction: ltr; }
   :root {
     --navy: #0B1C33; --navy2: #0F2744; --navy3: #16365C; --line: rgba(148, 178, 214, .18);
     --teal: #14B8A6; --teal2: #5EEAD4; --text: #EAF2FB; --muted: #9DB2CC;
@@ -130,7 +143,7 @@ function buildApp(sc, s) {
   const ring = el("div", "ring"), ptr = el("div", phone ? "tap" : "ptr"), rip = el("div", "ripple");
   if (!phone) ptr.innerHTML = `<svg viewBox="0 0 40 40" width="40" height="40"><path d="M8 4 L8 32 L15 25 L20 36 L25 34 L20 23 L30 23 Z" fill="#fff" stroke="#0B1C33" stroke-width="2.4" stroke-linejoin="round"/></svg>`;
   view.appendChild(ring); view.appendChild(rip); view.appendChild(ptr);
-  const demo = el("div", "demo", "<b></b>Demo data");
+  const demo = el("div", "demo", TL.lang === "ar" ? "<b></b>بيانات تجريبية" : "<b></b>Demo data");
   if (phone) { demo.style.left = (vx + vw + 30) + "px"; demo.style.top = (vy + 6) + "px"; } else { demo.style.right = (vx + 18) + "px"; demo.style.top = "60px"; }
   sc.appendChild(demo);
   // images (one element per image event)
@@ -140,7 +153,7 @@ function buildApp(sc, s) {
   if (s.legend) {
     const lg = el("div", "legend");
     [["--red", "Red · act now"], ["--amber", "Amber · attention / waiting"], ["--green", "Green · all clear"], ["--grey", "Grey · information"]]
-      .forEach(([c, t]) => { const d = el("div", "", `<span style="background:var(${c})"></span>${t}`); lg.appendChild(d); items.push(d); });
+      .map(([c, t], i) => [c, s.legendAr ? s.legendAr[i] : t]).forEach(([c, t]) => { const d = el("div", "", `<span style="background:var(${c})"></span>${t}`); lg.appendChild(d); items.push(d); });
     sc.appendChild(lg);
   } else if (phone) {
     const side = el("div", "side"); sideNow = el("div", "now"); side.appendChild(sideNow);
@@ -320,6 +333,7 @@ const RENDER = { intro: renderIntro, app: renderApp, title: renderTitle, cards: 
 
 window.setup = async (tl) => {
   TL = tl;
+  if (tl.lang === "ar") { document.documentElement.dir = "rtl"; document.documentElement.lang = "ar"; }
   const root = document.getElementById("root");
   SC = tl.scenes.map((s) => { const sc = el("div", "scene"); root.appendChild(sc); BUILD[s.layout](sc, s); s.el = sc; return s; });
   await document.fonts.ready;
