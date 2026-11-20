@@ -1,0 +1,4 @@
+# Generated: captures, audio, frames, rendered videos; downloaded voice model; local Python env
+out/
+cache/
+.venv/

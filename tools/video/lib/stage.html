@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<!-- Compositor: draws every frame of a video at 1920x1080 from the timeline (render.js calls renderAt(t) per frame).
+     Same look in every video: navy background, teal accent, the app's own colour code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: "PPInter"; src: local("Inter"), url("../../../frontend/node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; }
+  :root {
+    --navy: #0B1C33; --navy2: #0F2744; --navy3: #16365C; --line: rgba(148, 178, 214, .18);
+    --teal: #14B8A6; --teal2: #5EEAD4; --text: #EAF2FB; --muted: #9DB2CC;
+    --red: #E03131; --amber: #F08C00; --green: #2F9E44; --grey: #868E96;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--navy); font-family: "PPInter", Inter, "DejaVu Sans", sans-serif; color: var(--text); }
+  #bg { position: absolute; inset: 0; background:
+      radial-gradient(1200px 700px at 78% -10%, rgba(20, 184, 166, .16), transparent 60%),
+      radial-gradient(1000px 800px at -10% 110%, rgba(37, 99, 235, .14), transparent 60%),
+      linear-gradient(180deg, #0B1C33 0%, #081629 100%); }
+  .scene { position: absolute; inset: 0; opacity: 0; will-change: opacity, transform; }
+  /* header row */
+  .brand { position: absolute; left: 64px; top: 34px; display: flex; align-items: center; gap: 14px; font-size: 22px; font-weight: 700; letter-spacing: .2px; }
+  .brand img { width: 34px; height: 34px; border-radius: 8px; }
+  .brand .chap { color: var(--teal2); font-weight: 600; text-transform: uppercase; letter-spacing: 2.5px; font-size: 17px; padding-left: 14px; border-left: 2px solid var(--line); }
+  .stepchip { position: absolute; right: 64px; top: 30px; padding: 8px 18px; border-radius: 999px; background: rgba(20, 184, 166, .14); border: 1px solid rgba(20, 184, 166, .45); color: var(--teal2); font-size: 20px; font-weight: 700; }
+  /* desktop window */
+  .win { position: absolute; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 30px 80px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .08); }
+  .chrome { height: 34px; background: #E9EEF4; display: flex; align-items: center; gap: 8px; padding: 0 14px; }
+  .chrome i { width: 12px; height: 12px; border-radius: 50%; background: #C5CED9; display: block; }
+  .chrome .addr { margin-left: 18px; height: 20px; flex: 0 0 340px; border-radius: 6px; background: #fff; }
+  .view { position: relative; overflow: hidden; background: #F4F6F9; }
+  .cam { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+  .cam img { position: absolute; left: 0; top: 0; opacity: 0; display: block; }
+  /* phone */
+  .phone { position: absolute; border-radius: 62px; background: #05090F; padding: 16px; box-shadow: 0 30px 80px rgba(0, 0, 0, .5), 0 0 0 2px #2A3646 inset; }
+  .phone .view { border-radius: 46px; }
+  /* highlight + pointer */
+  .ring { position: absolute; border: 4px solid var(--teal); border-radius: 12px; box-shadow: 0 0 0 8px rgba(20, 184, 166, .22), 0 0 36px rgba(20, 184, 166, .55); opacity: 0; pointer-events: none; z-index: 20; }
+  .ptr { position: absolute; width: 40px; height: 40px; z-index: 22; opacity: 0; pointer-events: none; }
+  .tap { position: absolute; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(255, 255, 255, .55); border: 3px solid rgba(20, 184, 166, .95); z-index: 22; opacity: 0; }
+  .ripple { position: absolute; border-radius: 50%; border: 4px solid var(--teal2); z-index: 21; opacity: 0; }
+  .demo { position: absolute; z-index: 30; padding: 6px 14px 6px 12px; border-radius: 999px; background: rgba(52, 58, 64, .88); color: #fff; font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(0, 0, 0, .25); }
+  .demo b { width: 9px; height: 9px; border-radius: 50%; background: #ADB5BD; display: block; }
+  /* captions */
+  .cap { position: absolute; left: 50%; transform: translateX(-50%); bottom: 34px; max-width: 1500px; padding: 16px 30px 16px 26px; border-radius: 14px;
+         background: rgba(9, 22, 40, .92); border: 1px solid var(--line); border-left: 6px solid var(--teal); font-size: 34px; font-weight: 600; white-space: nowrap; }
+  .side { position: absolute; left: 860px; right: 110px; top: 200px; }
+  .side .now { font-size: 50px; font-weight: 700; line-height: 1.18; min-height: 180px; }
+  .side ol { list-style: none; margin-top: 40px; border-left: 3px solid var(--line); }
+  .side li { font-size: 27px; color: var(--muted); padding: 10px 0 10px 26px; position: relative; }
+  .side li::before { content: ""; position: absolute; left: -9px; top: 21px; width: 15px; height: 15px; border-radius: 50%; background: var(--navy3); border: 2px solid var(--muted); }
+  .side li.on { color: var(--text); font-weight: 700; }
+  .side li.on::before { background: var(--teal); border-color: var(--teal2); }
+  .side li.done::before { background: var(--teal); border-color: var(--teal); }
+  /* colour legend */
+  .legend { position: absolute; left: 50%; transform: translateX(-50%); bottom: 30px; display: flex; gap: 18px; }
+  .legend div { display: flex; align-items: center; gap: 12px; padding: 12px 22px; border-radius: 12px; background: rgba(9, 22, 40, .92); border: 1px solid var(--line); font-size: 27px; font-weight: 600; opacity: .35; white-space: nowrap; }
+  .legend span { width: 26px; height: 26px; border-radius: 7px; display: block; }
+  /* title */
+  .title { position: absolute; left: 0; right: 0; top: 330px; text-align: center; }
+  .title img { width: 120px; height: 120px; border-radius: 26px; box-shadow: 0 16px 40px rgba(0, 0, 0, .4); }
+  .title h1 { font-size: 120px; font-weight: 800; letter-spacing: -2px; margin-top: 30px; }
+  .title .bar { width: 160px; height: 8px; border-radius: 4px; background: var(--teal); margin: 26px auto 30px; }
+  .title p { font-size: 40px; color: var(--muted); font-weight: 500; }
+  /* cards + modules */
+  h2.head { position: absolute; left: 110px; top: 130px; font-size: 64px; font-weight: 800; letter-spacing: -1px; }
+  .cards { position: absolute; left: 110px; right: 110px; top: 300px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px; }
+  .card { background: linear-gradient(180deg, rgba(22, 54, 92, .9), rgba(15, 39, 68, .9)); border: 1px solid var(--line); border-top: 6px solid var(--teal); border-radius: 18px; padding: 28px 30px; min-height: 250px; opacity: 0; }
+  .card h3 { font-size: 40px; font-weight: 800; margin-bottom: 14px; }
+  .card p { font-size: 26px; color: var(--muted); line-height: 1.35; }
+  .mods { position: absolute; left: 90px; right: 90px; top: 270px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 24px; }
+  .col { opacity: 0; }
+  .col h3 { font-size: 30px; font-weight: 800; padding: 14px 20px; border-radius: 14px; background: var(--teal); color: #052A27; margin-bottom: 18px; }
+  .col div { font-size: 25px; padding: 13px 18px; margin-bottom: 12px; border-radius: 12px; background: rgba(22, 54, 92, .85); border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="root"></div>
+<script>
+"use strict";
+const W = 1920, H = 1080, XF = 0.6; // crossfade between scenes (s)
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ease = (x) => { x = clamp(x, 0, 1); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const lerp = (a, b, p) => a + (b - a) * p;
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+let TL = null, SC = [];
+
+function header(sc, s) {
+  const b = el("div", "brand", `<img src="${TL.logo}" alt="">PlantPulse${s.chapter ? `<span class="chap">${esc(s.chapter)}</span>` : ""}`);
+  sc.appendChild(b);
+  if (s.step) sc.appendChild(el("div", "stepchip", esc(s.step)));
+}
+
+// ---------- app scene (desktop window or phone) ----------
+function buildApp(sc, s) {
+  header(sc, s);
+  const phone = s.device === "phone";
+  let frame, view, vw, vh, vx, vy;
+  if (phone) {
+    vh = 900; vw = Math.round(vh * 390 / 844); // screen
+    frame = el("div", "phone"); frame.style.left = (480 - vw / 2 - 16) + "px"; frame.style.top = (122) + "px";
+    view = el("div", "view"); view.style.width = vw + "px"; view.style.height = vh + "px";
+    frame.appendChild(view);
+    vx = 480 - vw / 2; vy = 138;
+  } else {
+    vh = 812; vw = Math.round(vh * 1440 / 900);
+    frame = el("div", "win"); frame.style.left = ((W - vw) / 2) + "px"; frame.style.top = "96px";
+    frame.appendChild(el("div", "chrome", "<i></i><i></i><i></i><span class='addr'></span>"));
+    view = el("div", "view"); view.style.width = vw + "px"; view.style.height = vh + "px"; frame.appendChild(view);
+    vx = (W - vw) / 2; vy = 96 + 34;
+  }
+  sc.appendChild(frame);
+  const cam = el("div", "cam"); view.appendChild(cam);
+  const ring = el("div", "ring"), ptr = el("div", phone ? "tap" : "ptr"), rip = el("div", "ripple");
+  if (!phone) ptr.innerHTML = `<svg viewBox="0 0 40 40" width="40" height="40"><path d="M8 4 L8 32 L15 25 L20 36 L25 34 L20 23 L30 23 Z" fill="#fff" stroke="#0B1C33" stroke-width="2.4" stroke-linejoin="round"/></svg>`;
+  view.appendChild(ring); view.appendChild(rip); view.appendChild(ptr);
+  const demo = el("div", "demo", "<b></b>Demo data");
+  if (phone) { demo.style.left = (vx + vw + 30) + "px"; demo.style.top = (vy + 6) + "px"; } else { demo.style.right = (vx + 18) + "px"; demo.style.top = "60px"; }
+  sc.appendChild(demo);
+  // images (one element per image event)
+  const imgs = s.images.map((im) => { const i = new Image(); i.src = im.src; i.style.width = (s.vp.width * (vw / s.vp.width)) + "px"; cam.appendChild(i); return i; });
+  // captions
+  let capEl = null, sideNow = null, items = [];
+  if (s.legend) {
+    const lg = el("div", "legend");
+    [["--red", "Red · act now"], ["--amber", "Amber · attention / waiting"], ["--green", "Green · all clear"], ["--grey", "Grey · information"]]
+      .forEach(([c, t]) => { const d = el("div", "", `<span style="background:var(${c})"></span>${t}`); lg.appendChild(d); items.push(d); });
+    sc.appendChild(lg);
+  } else if (phone) {
+    const side = el("div", "side"); sideNow = el("div", "now"); side.appendChild(sideNow);
+    const ol = el("ol"); s.beats.forEach((b) => { const li = el("li", "", esc(b.caption)); ol.appendChild(li); items.push(li); });
+    side.appendChild(ol); sc.appendChild(side);
+  } else { capEl = el("div", "cap"); sc.appendChild(capEl); }
+  const k = vw / s.vp.width;
+  s._ = { imgs, cam, ring, ptr, rip, capEl, sideNow, items, vw, vh, k, phone, lastCap: null };
+}
+
+function camAt(s, t) {
+  const cams = s.cams; let i = 0;
+  while (i + 1 < cams.length && cams[i + 1].t <= t) i++;
+  const c = cams[i], p = i > 0 ? cams[i - 1] : c;
+  const a = ease((t - c.t) / 0.8);
+  return { s: lerp(p.s, c.s, a), cx: lerp(p.cx, c.cx, a), cy: lerp(p.cy, c.cy, a) };
+}
+
+function renderApp(s, t) {
+  const o = s._, vpw = s.vp.width, vph = s.vp.height;
+  // images: the newest image event fades in over the previous one
+  let cur = -1;
+  s.images.forEach((im, i) => { if (im.t <= t) cur = i; });
+  cur = Math.max(cur, 0);
+  o.imgs.forEach((img, i) => {
+    let op = 0;
+    if (i === cur) op = clamp((t - s.images[i].t) / (s.images[i].fade || 0.35), 0, 1);
+    if (i === cur && (s.images[i].t <= s.t0 + 0.001)) op = 1;
+    if (i < cur) { const prev = cur - 1; op = (i === prev) ? 1 : 0; }
+    img.style.opacity = op; img.style.zIndex = i === cur ? 2 : 1;
+  });
+  // camera
+  const c = camAt(s, t);
+  const sc = c.s, hw = vpw / (2 * sc), hh = vph / (2 * sc);
+  const cx = clamp(c.cx, hw, vpw - hw), cy = clamp(c.cy, hh, Math.max(hh, vph - hh));
+  const tx = (o.vw / 2) - cx * o.k * sc, ty = (o.vh / 2) - cy * o.k * sc;
+  o.cam.style.transform = `translate(${tx}px, ${ty}px) scale(${sc})`;
+  const map = (x, y) => [tx + x * o.k * sc, ty + y * o.k * sc];
+  // beat-level: highlight, pointer, caption
+  let bi = -1; s.beats.forEach((b, i) => { if (b.t <= t) bi = i; });
+  o.ring.style.opacity = 0; o.ptr.style.opacity = 0; o.rip.style.opacity = 0;
+  if (bi >= 0) {
+    const b = s.beats[bi];
+    if (b.box) {
+      const pad = 8, [x1, y1] = map(b.box.x, b.box.y), [x2, y2] = map(b.box.x + b.box.w, b.box.y + b.box.h);
+      const rin = ease((t - b.ringIn) / 0.35), rout = b.ringOut ? 1 - ease((t - b.ringOut) / 0.35) : 1;
+      const grow = 1 + 0.12 * (1 - rin);
+      const w = (x2 - x1 + 2 * pad) * grow, h = (y2 - y1 + 2 * pad) * grow;
+      o.ring.style.left = ((x1 + x2) / 2 - w / 2) + "px"; o.ring.style.top = ((y1 + y2) / 2 - h / 2) + "px";
+      o.ring.style.width = w + "px"; o.ring.style.height = h + "px";
+      o.ring.style.opacity = t >= b.ringIn ? rin * rout : 0;
+      if (b.kind === "click") {
+        const [tx2, ty2] = map(b.box.x + b.box.w * 0.5, b.box.y + b.box.h * 0.55);
+        const from = b.from ? map(b.from.x, b.from.y) : [o.vw * 0.62, o.vh * 0.78];
+        const mv = ease((t - b.t) / Math.max(0.4, b.click - b.t - 0.1));
+        const px = lerp(from[0], tx2, mv), py = lerp(from[1], ty2, mv);
+        const vis = clamp((t - b.t) / 0.2, 0, 1) * (1 - clamp((t - b.click - 0.6) / 0.3, 0, 1));
+        o.ptr.style.opacity = vis;
+        if (o.phone) { o.ptr.style.left = px + "px"; o.ptr.style.top = py + "px"; o.ptr.style.transform = `scale(${t > b.click && t < b.click + 0.25 ? 0.8 : 1})`; }
+        else { o.ptr.style.left = (px - 8) + "px"; o.ptr.style.top = (py - 4) + "px"; }
+        const rp = (t - b.click) / 0.55;
+        if (rp >= 0 && rp <= 1) { const r = 20 + 60 * ease(rp); o.rip.style.opacity = 1 - rp; o.rip.style.left = (tx2 - r) + "px"; o.rip.style.top = (ty2 - r) + "px"; o.rip.style.width = o.rip.style.height = (2 * r) + "px"; }
+      }
+    }
+    // caption
+    if (o.capEl) {
+      const a = clamp((t - b.t) / 0.3, 0, 1);
+      if (o.lastCap !== bi) { o.capEl.textContent = b.caption; o.lastCap = bi; }
+      o.capEl.style.opacity = a; o.capEl.style.transform = `translateX(-50%) translateY(${(1 - ease(a)) * 14}px)`;
+    }
+    if (o.sideNow) {
+      const a = clamp((t - b.t) / 0.3, 0, 1);
+      if (o.lastCap !== bi) { o.sideNow.textContent = b.caption; o.lastCap = bi; }
+      o.sideNow.style.opacity = a;
+      o.items.forEach((li, i) => { li.className = i === bi ? "on" : i < bi ? "done" : ""; });
+    }
+  }
+  if (s.legend) { // light up the four colours in turn, then all stay on
+    const span = (s.t1 - s.t0 - 1.2) / 4.6;
+    o.items.forEach((d, i) => { const st = s.t0 + 0.8 + span * (0.4 + i); d.style.opacity = 0.35 + 0.65 * clamp((t - st) / 0.4, 0, 1); d.style.transform = `scale(${1 + 0.06 * Math.max(0, 1 - Math.abs(t - st - 0.4) / 0.6)})`; });
+  }
+}
+
+// ---------- title / cards / modules ----------
+function buildTitle(sc, s) {
+  const d = el("div", "title", `<img src="${TL.logo}" alt=""><h1>${esc(s.title)}</h1><div class="bar"></div><p>${esc(s.subtitle || "")}</p>`);
+  sc.appendChild(d); s._ = { d };
+}
+function renderTitle(s, t) {
+  const a = ease((t - s.t0 - 0.1) / 0.9);
+  s._.d.style.transform = `translateY(${(1 - a) * 24}px)`; s._.d.style.opacity = a;
+}
+function buildCards(sc, s) {
+  header(sc, s); sc.appendChild(el("h2", "head", esc(s.title)));
+  const g = el("div", "cards"); const cs = s.cards.map((c) => { const d = el("div", "card", `<h3>${esc(c.t)}</h3><p>${esc(c.d)}</p>`); g.appendChild(d); return d; });
+  sc.appendChild(g); s._ = { cs };
+}
+function buildMods(sc, s) {
+  header(sc, s); sc.appendChild(el("h2", "head", esc(s.title)));
+  const g = el("div", "mods"); const cs = s.groups.map((c) => { const d = el("div", "col", `<h3>${esc(c.t)}</h3>${c.items.map((x) => `<div>${esc(x)}</div>`).join("")}`); g.appendChild(d); return d; });
+  sc.appendChild(g); s._ = { cs };
+}
+function renderStagger(s, t) {
+  const n = s._.cs.length, span = (s.t1 - s.t0 - 1.5) * 0.85;
+  s._.cs.forEach((d, i) => { const st = s.t0 + 0.5 + (span * i) / n; const a = ease((t - st) / 0.6); d.style.opacity = a; d.style.transform = `translateY(${(1 - a) * 30}px)`; });
+}
+
+const BUILD = { app: buildApp, title: buildTitle, cards: buildCards, modules: buildMods };
+const RENDER = { app: renderApp, title: renderTitle, cards: renderStagger, modules: renderStagger };
+
+window.setup = async (tl) => {
+  TL = tl;
+  const root = document.getElementById("root");
+  SC = tl.scenes.map((s) => { const sc = el("div", "scene"); root.appendChild(sc); BUILD[s.layout](sc, s); s.el = sc; return s; });
+  await document.fonts.ready;
+  await Promise.all([...document.images].map((i) => i.decode().catch(() => { throw new Error("image " + i.src); })));
+};
+
+window.renderAt = (t) => {
+  for (const s of SC) {
+    const on = t >= s.t0 - XF / 2 && t < s.t1 + XF / 2;
+    if (!on) { s.el.style.opacity = 0; s.el.style.display = "none"; continue; }
+    s.el.style.display = "block";
+    const fin = s.t0 <= 0 ? 1 : ease((t - (s.t0 - XF / 2)) / XF), fout = 1 - ease((t - (s.t1 - XF / 2)) / XF);
+    const isLast = s === SC[SC.length - 1];
+    s.el.style.opacity = Math.min(fin, isLast ? 1 : fout);
+    s.el.style.transform = `scale(${1.015 - 0.015 * fin})`;
+    RENDER[s.layout](s, clamp(t, s.t0, s.t1));
+  }
+};
+</script>
+</body>
+</html>
