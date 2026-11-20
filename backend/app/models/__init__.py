@@ -15,6 +15,7 @@ from app.models import (  # noqa: F401
     skills,
     system,
     tenancy,
+    weekly,
     workorders,
 )
 from app.models.base import Base  # noqa: F401

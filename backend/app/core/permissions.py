@@ -59,6 +59,9 @@ PERMISSIONS: dict[str, str] = {
     "rca.lead": "Can be chosen as RCA leader (engineering positions)",
     "rca.approve": "Decide which RCA candidates go ahead, approve analyses and close RCAs",
     "rca.settings": "Set the RCA rules (what counts as a major breakdown)",
+    "schedule.plan": "Propose the weekly maintenance schedule and edit it before approval",
+    "schedule.review": "Review and approve the weekly schedule (first step, the engineer)",
+    "schedule.approve": "Give the final approval of the weekly schedule (maintenance manager): writes assignments and planned dates",
     "op.view": "View operations: daily production reports, OEE, stops and sheet breaks",
     "op.enter": "Enter and submit the daily production report (runs, reels, stops, quality losses)",
     "op.confirm": "Confirm (lock) or reopen daily production reports",
@@ -115,6 +118,7 @@ ROLES: dict[str, tuple[str, set[str]]] = {
             "wo.bulk_close",
             "pm.manage",
             "pm.run_scheduler",
+            "schedule.plan",
             "pdm.prioritize",
             "lube.manage",
             "inventory.reserve",
@@ -155,11 +159,14 @@ ROLES: dict[str, tuple[str, set[str]]] = {
             "rca.lead",
         },
     ),
+    # The engineer also acts as the supervisor (assigns, approves, signs off and closes work orders).
     "engineer": (
         "Engineer",
-        _VIEW
+        _SUPERVISOR
         | {
             "skill.manage",
+            "schedule.plan",
+            "schedule.review",
             "request.create",
             "wo.create",
             "wo.edit",

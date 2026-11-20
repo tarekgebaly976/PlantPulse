@@ -33,6 +33,7 @@ from app.api.routers import (
     shifts,
     shutdowns,
     skills,
+    weekly,
     workorders,
 )
 from app.core.config import get_settings
@@ -181,6 +182,7 @@ def create_app() -> FastAPI:
         lubrication.router,
         shifts.router,
         skills.router,
+        weekly.router,
         inventory.router,
         pdm.router,
         pdm.gateway,
