@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useMediaQuery } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { Guard } from "@/components/AppFrame";
 import { Modal } from "@/components/Modal";
@@ -64,6 +65,7 @@ function Schedule() {
   const [place, setPlace] = useState<{ wo: WO; users: string[]; work_date: string } | null>(null);
   const [back, setBack] = useState<string | null>(null);
   const [applied, setApplied] = useState<string[] | null>(null);
+  const phone = useMediaQuery("(max-width: 48em)");
   const [win, setWin] = useState<{ asset_id: string | null; work_date: string; start_time: string; hours: number | string; note: string } | null>(null);
 
   const propose = useMut(() => post(`/schedule/weeks/${week}/propose`, { max_overtime_hours: Number(ot) || 0 }), { success: t("sched.proposed") });
@@ -148,7 +150,21 @@ function Schedule() {
               <Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => setWin({ asset_id: null, work_date: v.week_start, start_time: "08:00", hours: 4, note: "" })}>{t("sched.addWindow")}</Button>
             </Group>}
           </Group>
-          {v.windows.length === 0 ? <Text size="sm" c="dimmed">{t("sched.noWindows")}</Text> : (
+          {v.windows.length === 0 ? <Text size="sm" c="dimmed">{t("sched.noWindows")}</Text> : phone ? (
+            <Stack gap="xs">
+              {v.windows.map((w) => (
+                <Paper key={w.id} withBorder p="xs">
+                  <Group justify="space-between" wrap="nowrap" align="start">
+                    <div>
+                      <Text size="sm" fw={600}>{w.asset}</Text>
+                      <Text size="sm">{dayName(w.date)} {w.date} · <span dir="ltr">{w.start}–{w.end}</span> · {fmtNum(w.hours, 2)} h</Text>
+                      {w.note && <Text size="xs" c="dimmed">{w.note}</Text>}
+                    </div>
+                    {can("stop_window.manage") && <ActionIcon variant="subtle" color="red" aria-label={t("common.delete")} onClick={() => delWin.mutate(w.id)}><IconTrash size={16} /></ActionIcon>}
+                  </Group>
+                </Paper>))}
+            </Stack>
+          ) : (
             <Table fz="sm">
               <Table.Thead><Table.Tr><Table.Th>{t("sched.line")}</Table.Th><Table.Th>{t("sched.day")}</Table.Th><Table.Th>{t("sched.fromTime")}</Table.Th>
                 <Table.Th>{t("sched.hours")}</Table.Th><Table.Th>{t("sched.comment")}</Table.Th><Table.Th /></Table.Tr></Table.Thead>
@@ -219,7 +235,22 @@ function Schedule() {
 
         <Card withBorder>
           <Text fw={600} mb="xs">{t("sched.deferredTitle")} ({deferred.length})</Text>
-          {deferred.length === 0 ? <Text size="sm" c="dimmed">{t("sched.noDeferred")}</Text> : (
+          {deferred.length === 0 ? <Text size="sm" c="dimmed">{t("sched.noDeferred")}</Text> : phone ? (
+            <Stack gap="xs" data-testid="deferred">
+              {deferred.map((i) => i.work_order && (
+                <Paper key={i.id} withBorder p="xs">
+                  <Group gap={6} mb={4}>
+                    <Badge color={PRIO[i.work_order.priority]} variant="light">{i.work_order.priority}</Badge>
+                    <Link href={`/work-orders/${i.work_order.id}`}>{i.work_order.number}</Link>
+                  </Group>
+                  <Text size="sm" fw={600}>{i.work_order.title}</Text>
+                  <Text size="xs" c="dimmed">{i.work_order.asset}</Text>
+                  <Text size="xs" c="dimmed">{t("sched.hours")}: {i.work_order.hours ? fmtNum(i.work_order.hours, 1) : "—"} · {t("sched.due")}: {i.work_order.due_date ?? "—"}</Text>
+                  <Text size="sm" c="orange.8" mt={4}>{i.pinned && <IconPin size={12} />} {i.reason}</Text>
+                  {canPlan && <Button mt={6} size="xs" variant="light" onClick={() => setPlace({ wo: i.work_order as WO, users: [], work_date: v.week_start })}>{t("sched.placeBtn")}</Button>}
+                </Paper>))}
+            </Stack>
+          ) : (
             <Table fz="sm" data-testid="deferred">
               <Table.Thead><Table.Tr>
                 <Table.Th>{t("sched.wo")}</Table.Th><Table.Th>{t("sched.priority")}</Table.Th><Table.Th>{t("sched.hours")}</Table.Th>
