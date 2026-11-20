@@ -26,7 +26,7 @@ function buildTimeline(def, OUT) {
   // Same opening in every video: heartbeat line, the app icon out of the pulse, name, subtitle, the video's topic.
   const INTRO = 6.0;
   scenes.push({ id: "00-intro", layout: "intro", subtitle: "Maintenance management for industrial plants",
-    pill: def.intro || def.title.replace(/^PlantPulse\s*[–-]\s*/, ""), t0: 0, t1: INTRO });
+    credit: process.env.VIDEO_CREDIT ?? "BY ENG. TAREK ZEYAD ALGEBALY", pill: def.intro || def.title.replace(/^PlantPulse\s*[–-]\s*/, ""), t0: 0, t1: INTRO });
   let t = INTRO;
   for (const s0 of def.scenes) {
     const s = { ...s0 };
