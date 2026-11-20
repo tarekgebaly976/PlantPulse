@@ -12,6 +12,7 @@ import { RemovePlans } from "@/components/RemovePlans";
 import { AssetPicker, DataTable, PageHeader, Pager, StatusBadge, TradeInput } from "@/components/ui";
 import { download, post, put } from "@/lib/api";
 import { fmtDate, useAssetCodes, useMut, useQ } from "@/lib/hooks";
+import { RequiredSkills } from "@/components/Skills";
 import { useSession } from "@/lib/session";
 import { SearchBox, textMatch, useSearch } from "@/components/Search";
 import type { Page } from "@/lib/types";
@@ -202,6 +203,7 @@ function PM() {
   const [np, setNp] = useState(false);
   const [imp, setImp] = useState(false);
   const [woImp, setWoImp] = useState(false);
+  const [jpSkills, setJpSkills] = useState<JobPlan | null>(null);
   const [runRes, setRunRes] = useState<string | null>(null);
   const [search, setSearch, dq] = useSearch();
   const sq = dq || undefined;
@@ -267,10 +269,14 @@ function PM() {
           <DataTable rows={jobs.data?.filter((j) => textMatch(search, j.code, j.name, j.trade))} columns={[
             { key: "c", label: t("common.code"), render: (j) => j.code }, { key: "n", label: t("common.name"), render: (j) => j.name },
             { key: "t", label: t("pm.trade"), render: (j) => j.trade }, { key: "h", label: t("wo.estHours"), render: (j) => j.estimated_hours },
-            { key: "s", label: t("wo.safety"), render: (j) => [j.requires_loto && "LOTO", j.requires_permit && "Permit", j.requires_testing && "Test"].filter(Boolean).join(", ") }]} />
+            { key: "s", label: t("wo.safety"), render: (j) => [j.requires_loto && "LOTO", j.requires_permit && "Permit", j.requires_testing && "Test"].filter(Boolean).join(", ") },
+            { key: "k", label: t("skill.required"), render: (j) => <Button size="compact-xs" variant="light" onClick={() => setJpSkills(j)}>{t("skill.skillsBtn")}</Button> }]} />
         </Tabs.Panel>
       </Tabs>
       <NewJobPlan opened={jp} onClose={() => setJp(false)} />
+      <Modal opened={!!jpSkills} onClose={() => setJpSkills(null)} title={jpSkills ? `${jpSkills.code} · ${t("skill.required")}` : ""}>
+        {jpSkills && <RequiredSkills path={`/pm/job-plans/${jpSkills.id}/skills`} canEdit={can("pm.manage") || can("skill.manage")} />}
+      </Modal>
       <NewPlan opened={np} onClose={() => setNp(false)} jobPlans={jobs.data ?? []} />
     </>
   );

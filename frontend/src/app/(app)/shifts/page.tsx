@@ -11,6 +11,7 @@ import { api, download, patch, post, put } from "@/lib/api";
 import { useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { SearchBox, textMatch } from "@/components/Search";
+import { SkillMatrix } from "@/components/Skills";
 
 interface ShiftDef { id: string; code: string; name: string; kind: string; start_time: string; end_time: string; paid_hours: number }
 interface Entry { id: string; user_id: string; name: string; trade: string | null; work_date: string; shift: string | null; kind: string; hours: number; overtime_hours: number; callout_hours: number }
@@ -144,7 +145,8 @@ function Shifts() {
       <Tabs defaultValue="roster">
         <Tabs.List><Tabs.Tab value="roster">{t("shift.roster")}</Tabs.Tab><Tabs.Tab value="manpower">{t("shift.manpower")}</Tabs.Tab>
           <Tabs.Tab value="handovers">{t("shift.handovers")}</Tabs.Tab><Tabs.Tab value="teams">{t("shift.teams")}</Tabs.Tab>
-          <Tabs.Tab value="types">{t("shift.types")}</Tabs.Tab></Tabs.List>
+          <Tabs.Tab value="types">{t("shift.types")}</Tabs.Tab><Tabs.Tab value="skills">{t("skill.tab")}</Tabs.Tab></Tabs.List>
+        <Tabs.Panel value="skills" pt="md"><SkillMatrix /></Tabs.Panel>
         <Tabs.Panel value="roster" pt="md">
           <ScrollArea type="auto">
             <Table withTableBorder withColumnBorders miw={900} fz="xs">

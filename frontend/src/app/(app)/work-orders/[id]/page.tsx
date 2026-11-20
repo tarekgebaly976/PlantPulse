@@ -13,6 +13,7 @@ import { LotoRegister, PermitSignoff } from "@/components/Safety";
 import { KV, Loading, PageHeader, Section, StatusBadge, UserPicker } from "@/components/ui";
 import { del, download, patch, post } from "@/lib/api";
 import { fmtDate, fmtMoney, fmtNum, fromLocalInput, toLocalInput, useMut, useQ } from "@/lib/hooks";
+import { RequiredSkills } from "@/components/Skills";
 import { useSession } from "@/lib/session";
 import type { ChecklistItem, FailureCode, Page, Part, WODetail, Warehouse } from "@/lib/types";
 
@@ -298,6 +299,9 @@ export default function WODetailPage() {
                   <Button disabled={!assignee} loading={assign.isPending} onClick={() => assign.mutate(undefined)}>{t("wo.assign")}</Button>
                 </Group>
               )}
+            </Section>
+            <Section title={t("skill.required")}>
+              <RequiredSkills path={`/work-orders/${w.id}/skills`} canEdit={(can("wo.edit") || can("skill.manage")) && !finished} />
             </Section>
             {can("wo.edit") && !finished && w.status !== "completed" && (
               <Section title={t("common.edit")} actions={<Button size="xs" loading={savePlan.isPending} onClick={() => savePlan.mutate(undefined)}>{t("common.save")}</Button>}>

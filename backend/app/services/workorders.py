@@ -24,6 +24,7 @@ from app.models.pm import JobPlan, JobPlanTask, PMOccurrence
 from app.models.shifts import RosterEntry
 from app.models.tenancy import Plant
 from app.models.workorders import LotoIsolation, WOAssignment, WOChecklistItem, WOLabor, WorkOrder, WOStatusHistory
+from app.services import skills as skills_svc
 from app.services.common import audit, next_number, plant_today, utcnow
 from app.services.notifications import notify, notify_permission
 from app.services.workflow import get_transition
@@ -79,6 +80,7 @@ def create_work_order(
     db.add(wo)
     db.flush()
     if job_plan is not None:
+        skills_svc.copy_from_job_plan(db, job_plan.id, wo.id)
         tasks = db.execute(select(JobPlanTask).where(JobPlanTask.job_plan_id == job_plan.id).order_by(JobPlanTask.seq)).scalars()
         for t in tasks:
             db.add(
@@ -437,6 +439,9 @@ def assign(db: Session, ctx: Ctx, wo: WorkOrder, user_ids: list[uuid.UUID], lead
             )
             if clash:
                 warnings.append(f"{user.full_name} already assigned to overlapping {', '.join(clash)}")
+        lacking = skills_svc.gaps(db, wo.id, user, work_day)
+        if lacking:
+            warnings.append(f"{user.full_name} does not meet the required skills: {', '.join(lacking)}")
     if warnings and not force:
         raise DomainError(
             "Assignment conflicts: " + "; ".join(warnings) + " (resubmit with force=true to override)", "assignment_conflict", 409

@@ -33,6 +33,7 @@ PERMISSIONS: dict[str, str] = {
     "lube.execute": "Record lubrication tasks",
     "shift.view": "View shifts and rosters",
     "shift.manage": "Manage shift patterns, teams and rosters",
+    "skill.manage": "Keep the skill matrix: the plant's skills, technicians' levels and certificates, skills a job needs",
     "handover.create": "Write shift handovers",
     "handover.confirm": "Confirm shift handovers",
     "inventory.view": "View spare parts and stock",
@@ -158,6 +159,7 @@ ROLES: dict[str, tuple[str, set[str]]] = {
         "Engineer",
         _VIEW
         | {
+            "skill.manage",
             "request.create",
             "wo.create",
             "wo.edit",

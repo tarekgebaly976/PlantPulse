@@ -12,6 +12,7 @@ from app.models import (  # noqa: F401
     rca,
     shifts,
     shutdowns,
+    skills,
     system,
     tenancy,
     workorders,
