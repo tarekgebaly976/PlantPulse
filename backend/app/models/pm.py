@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -46,6 +47,7 @@ class JobPlan(Base, PlantScoped, Timestamped, Attributed):
     safety_precautions: Mapped[str | None] = mapped_column(Text)
     requires_loto: Mapped[bool] = mapped_column(Boolean, default=False)
     requires_permit: Mapped[bool] = mapped_column(Boolean, default=False)
+    requires_stop: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))  # copied to work orders
     permit_types: Mapped[str | None] = mapped_column(String(200))  # comma-separated, copied to generated work orders
     requires_testing: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

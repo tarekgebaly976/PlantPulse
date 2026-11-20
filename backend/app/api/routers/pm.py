@@ -59,6 +59,7 @@ class JobPlanIn(In):
     safety_precautions: str | None = None
     requires_loto: bool = False
     requires_permit: bool = False
+    requires_stop: bool = False
     requires_testing: bool = False
     permit_types: str | None = None
     tasks: list[TaskIn] = Field(default_factory=list)
@@ -77,6 +78,7 @@ class JobPlanOut(ORM):
     safety_precautions: str | None
     requires_loto: bool
     requires_permit: bool
+    requires_stop: bool
     requires_testing: bool
     permit_types: str | None
 

@@ -30,7 +30,7 @@ from app.models.identity import Membership, MembershipDepartment, User
 from app.models.pm import JobPlan, PMOccurrence, PMPlan
 from app.models.shifts import RosterEntry, ShiftDefinition
 from app.models.skills import SkillDefinition, TechnicianSkill, WORequiredSkill
-from app.models.weekly import ScheduleItem, WeeklySchedule
+from app.models.weekly import ScheduleItem, StopWindow, WeeklySchedule
 from app.models.workorders import WorkOrder
 from app.services import skills as skills_svc
 from app.services import workorders as wo_svc
@@ -71,6 +71,7 @@ class Job:
     due: date | None
     pm_deadline: date | None  # due + tolerance, for preventive work
     need: list[tuple[WORequiredSkill, SkillDefinition]] = field(default_factory=list)
+    windows: list[tuple[datetime, datetime]] = field(default_factory=list)  # stop windows of its line (if it needs one)
 
     @property
     def per_person(self) -> Decimal:
@@ -87,6 +88,8 @@ class Day:
     regular: Decimal
     overtime: Decimal  # most overtime allowed
     shift_id: uuid.UUID | None
+    start: datetime  # the shift, in plant time
+    end: datetime
 
 
 @dataclass
@@ -106,6 +109,7 @@ class Week:
     people: dict[uuid.UUID, Person]
     signers: set[tuple[date, uuid.UUID | None]]  # (day, shift) with someone who may sign LOTO / permits at work
     shifts: dict[uuid.UUID, ShiftDefinition]
+    windows: list[StopWindow] = field(default_factory=list)
 
 
 def _holders(db: Session, plant_id: uuid.UUID, perm: str) -> set[uuid.UUID]:
@@ -142,10 +146,19 @@ def load_week(db: Session, plant_id: uuid.UUID, tz: ZoneInfo, week_start: date, 
             .where(WorkOrder.id.in_(ids))
         ).all()
     }
-    crit = {
-        a.id: (a.criticality.value if a.criticality else "C")
-        for a in db.execute(select(Asset).where(Asset.id.in_([w.asset_id for w in wos]))).scalars()
-    }
+    assets = {a.id: a for a in db.execute(select(Asset).where(Asset.id.in_([w.asset_id for w in wos]))).scalars()}
+    crit = {a.id: (a.criticality.value if a.criticality else "C") for a in assets.values()}
+    windows = list(
+        db.execute(
+            select(StopWindow)
+            .where(
+                StopWindow.plant_id == plant_id,
+                StopWindow.starts_at < after_week,
+                StopWindow.ends_at > datetime.combine(days[0], time(0), tzinfo=tz),
+            )
+            .order_by(StopWindow.starts_at)
+        ).scalars()
+    )
     need: dict[uuid.UUID, list] = defaultdict(list)
     for rs, sk in db.execute(
         select(WORequiredSkill, SkillDefinition)
@@ -167,7 +180,10 @@ def load_week(db: Session, plant_id: uuid.UUID, tz: ZoneInfo, week_start: date, 
             due=w.due_date or (occ.due_date if occ else None),
             pm_deadline=(occ.due_date + timedelta(days=plan.tolerance_days or 0)) if occ and plan else None,
             need=need.get(w.id, []),
-        )
+            # a window on the line, or on any asset above (or at) the one the work is on
+            windows=[(x.starts_at.astimezone(tz), x.ends_at.astimezone(tz)) for x in windows if w.requires_stop and w.asset_id in assets
+                     and f"/{x.asset_id}/" in assets[w.asset_id].path],
+        )  # fmt: skip
 
     # People who do the work: they may execute work orders but not sign off LOTO / permits (that is the supervisor's,
     # the engineer's). Those who may sign off decide which shifts can take LOTO / permit work.
@@ -195,6 +211,14 @@ def load_week(db: Session, plant_id: uuid.UUID, tz: ZoneInfo, week_start: date, 
     ).all():
         extra[mid].add(did)
     users = {u.id: u for u in db.execute(select(User).where(User.id.in_(doers), User.is_active.is_(True))).scalars()}
+    shifts = {s.id: s for s in db.execute(select(ShiftDefinition).where(ShiftDefinition.plant_id == plant_id)).scalars()}
+
+    def span(d: date, shift_id: uuid.UUID | None, hours: Decimal) -> tuple[datetime, datetime]:
+        sh = shifts.get(shift_id) if shift_id else None
+        start = datetime.combine(d, sh.start_time if sh else DEFAULT_SHIFT_START, tzinfo=tz)
+        end = datetime.combine(d, sh.end_time, tzinfo=tz) if sh else start + timedelta(hours=float(hours))
+        return start, end if end > start else end + timedelta(days=1)  # overnight shift
+
     people: dict[uuid.UUID, Person] = {}
     signers: set[tuple[date, uuid.UUID | None]] = set()
     for r in roster:
@@ -211,13 +235,16 @@ def load_week(db: Session, plant_id: uuid.UUID, tz: ZoneInfo, week_start: date, 
             p = people[u.id] = Person(user=u, departments=({m.department_id} if m.department_id else set()) | extra[m.id])
         hours, ot = Decimal(r.hours or 0), Decimal(r.overtime_hours or 0)
         if r.kind == RosterKind.WORK:
-            p.days[r.work_date] = Day(regular=hours, overtime=max(max_overtime, ot), shift_id=r.shift_id)
+            regular, extra_h = hours, max(max_overtime, ot)
         else:  # an overtime / call-out day: every hour is overtime
-            p.days[r.work_date] = Day(regular=Decimal(0), overtime=hours + ot, shift_id=r.shift_id)
+            regular, extra_h = Decimal(0), hours + ot
+        st, en = span(r.work_date, r.shift_id, regular + extra_h)
+        p.days[r.work_date] = Day(
+            regular=regular, overtime=extra_h, shift_id=r.shift_id, start=st, end=en + timedelta(hours=float(extra_h))
+        )
     for t in db.execute(select(TechnicianSkill).where(TechnicianSkill.user_id.in_(list(people)))).scalars():
         people[t.user_id].skills[t.skill_id] = t
-    shifts = {s.id: s for s in db.execute(select(ShiftDefinition).where(ShiftDefinition.plant_id == plant_id)).scalars()}
-    return Week(week_start, days, [d for d in days if d >= today], jobs, people, signers, shifts)
+    return Week(week_start, days, [d for d in days if d >= today], jobs, people, signers, shifts, windows)
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -253,6 +280,25 @@ def _signer_ok(week: Week, job: Job, day: Day, d: date) -> bool:
     return not (job.wo.requires_loto or job.wo.requires_permit) or (d, day.shift_id) in week.signers
 
 
+def stop_hours(job: Job, day: Day) -> Decimal:
+    """Longest stretch of one stop window of the job's line inside the person's working day."""
+    best = 0.0
+    for ws, we in job.windows:
+        best = max(best, (min(we, day.end) - max(ws, day.start)).total_seconds() / 3600)
+    return Decimal(str(round(best, 2)))
+
+
+def _covered(spans: list[tuple[datetime, datetime]], start: datetime, end: datetime) -> float:
+    """Hours of [start, end) covered by the union of the spans (sorted by start)."""
+    total, cur = 0.0, start
+    for ws, we in spans:
+        lo, hi = max(ws, cur), min(we, end)
+        if hi > lo:
+            total += (hi - lo).total_seconds() / 3600
+            cur = hi
+    return total
+
+
 def problems(week: Week, job: Job, p: Person, d: date) -> list[str]:
     """Why this person cannot take this job on this day (empty = they can)."""
     day = p.days.get(d)
@@ -266,6 +312,12 @@ def problems(week: Week, job: Job, p: Person, d: date) -> list[str]:
     out += [f"{p.user.full_name}: {g}" for g in skill_gaps(job, p, d)]
     if not _signer_ok(week, job, day, d):
         out.append("no supervisor or engineer on that shift to sign off LOTO / permit")
+    if job.wo.requires_stop and job.hours is not None:
+        h = stop_hours(job, day)
+        if h <= 0:
+            out.append(f"the line is not stopped during {p.user.full_name}'s shift on {d}")
+        elif h < job.per_person:
+            out.append(f"the stop window in the shift is {h} h, the job needs {job.per_person} h")
     return out
 
 
@@ -281,6 +333,12 @@ def _why_not(week: Week, job: Job) -> str:
     pp = job.per_person
     if all(pp > d.regular + d.overtime for p in people for d in p.days.values()):
         return f"longer than one shift ({pp} h per person)"
+    if job.wo.requires_stop:
+        open_windows = [(ws, we) for ws, we in job.windows if we.date() >= week.open_days[0]]
+        if not open_windows:
+            return "needs the line stopped: no stop window of its line this week"
+        if all(Decimal(str((we - ws).total_seconds() / 3600)) < pp for ws, we in open_windows):
+            return f"needs the line stopped: every stop window is shorter than the job ({pp} h per person)"
     traded = [p for p in people if _trade_ok(job, p) and _dept_ok(job, p)]
     if not traded:
         return f"no {job.trade or ''} technician for this department on the roster".replace("  ", " ")
@@ -300,12 +358,17 @@ def _why_not(week: Week, job: Job) -> str:
         return f"nobody at work has the required skills ({codes})"
     if not any(_signer_ok(week, job, p.days[d], d) for p, d in skilled):
         return "no supervisor or engineer on shift to sign off LOTO / permit"
+    if job.wo.requires_stop and not any(stop_hours(job, p.days[d]) >= pp for p, d in skilled):
+        return "needs the line stopped: nobody qualified is at work during a long enough stop window"
     per_day: dict[date, int] = defaultdict(int)
     for p, d in skilled:
         if pp <= p.days[d].regular + p.days[d].overtime and _signer_ok(week, job, p.days[d], d):
-            per_day[d] += 1
+            if not job.wo.requires_stop or stop_hours(job, p.days[d]) >= pp:
+                per_day[d] += 1
     if max(per_day.values(), default=0) < job.crew:
         return f"a crew of {job.crew} is not available on one day"
+    if job.wo.requires_stop:
+        return "needs the line stopped: the stop windows of its line are already full"
     return "not enough technician hours this week"
 
 
@@ -392,6 +455,12 @@ def solve(
             m.add(ot <= max(0, int((day.regular + day.overtime) * Q) - used[(uid, d)] - reg))
             cost.append(OVERTIME_PER_QUARTER * ot)
             week_load += terms
+            # work that needs the line stopped fits in the stopped time of that day's shift
+            stop_terms = [int(week.jobs[wid].per_person * Q) * v for (wid, u, dd), v in x.items()
+                          if u == uid and dd == d and week.jobs[wid].wo.requires_stop]  # fmt: skip
+            if stop_terms:
+                spans = sorted({w for wid, u, dd in x if u == uid and dd == d for w in week.jobs[wid].windows})
+                m.add(sum(stop_terms) <= int(_covered(spans, day.start, day.end) * Q))
         if week_load:
             lv = m.new_int_var(0, 7 * 24 * Q, "")
             m.add(lv == sum(week_load) + sum(used[(uid, d)] for d in p.days))
@@ -481,9 +550,19 @@ def propose(db: Session, ctx: Ctx, week_start: date, max_overtime: Decimal, seco
         elif it.user_id and it.work_date:
             fixed.append(Placement(it.work_order_id, it.user_id, it.work_date, it.hours, it.is_lead))
     pinned_jobs = {f.wo_id for f in fixed} | fixed_deferred
+    # Work scheduled by hand outside this plan keeps its day and people; work this plan scheduled before (a reopened
+    # week) is planned again.
+    planned_here = {it.work_order_id for it in s.items}
     for wid, job in week.jobs.items():
         w = job.wo
-        if wid in pinned_jobs or w.status != WOStatus.SCHEDULED or not w.planned_start or not w.assignments or job.hours is None:
+        if (
+            wid in pinned_jobs
+            or wid in planned_here
+            or w.status != WOStatus.SCHEDULED
+            or not w.planned_start
+            or not w.assignments
+            or job.hours is None
+        ):
             continue
         d = w.planned_start.astimezone(tz).date()
         if week.days[0] <= d <= week.days[-1]:
@@ -607,13 +686,25 @@ def send_back(db: Session, ctx: Ctx, s: WeeklySchedule, comment: str) -> None:
                body=comment, link=f"/schedule?week={s.week_start}", dedupe_key=f"schedule:{s.id}:return")  # fmt: skip
 
 
+def _first_free(busy: list[tuple[datetime, datetime]], earliest: datetime, hours: float, latest_end: datetime | None) -> datetime | None:
+    """Earliest start ≥ earliest where `hours` fit between the busy spans (and end by latest_end, if given)."""
+    need = timedelta(hours=hours)
+    for t in sorted({earliest} | {e for _, e in busy if e > earliest}):
+        if latest_end is not None and t + need > latest_end:
+            return None
+        if all(t + need <= bs or t >= be for bs, be in busy):
+            return t
+    return None
+
+
 def approve(db: Session, ctx: Ctx, s: WeeklySchedule) -> list[str]:
     """The manager's approval: each placed work order gets its people (lead first) and planned start / end, and becomes
-    scheduled. Jobs of one person on one day follow each other from the start of their shift, most urgent first."""
+    scheduled. Work that needs the line stopped is timed first, inside a stop window; the rest of a person's day follows
+    from the start of their shift, most urgent first, in the free time around it."""
     if s.status != "engineer_approved":
         raise DomainError("The engineer approves the week first", "schedule_state", 409)
     tz = ZoneInfo(ctx.plant.timezone)
-    shifts = {sh.id: sh for sh in db.execute(select(ShiftDefinition).where(ShiftDefinition.plant_id == ctx.plant_id)).scalars()}
+    week = load_week(db, ctx.plant_id, tz, s.week_start, date.min, s.max_overtime_hours)
     by_wo: dict[uuid.UUID, list[ScheduleItem]] = defaultdict(list)
     for it in s.items:
         if not it.deferred and it.user_id and it.work_date:
@@ -625,12 +716,17 @@ def approve(db: Session, ctx: Ctx, s: WeeklySchedule) -> list[str]:
         w = wos.get(wid)
         return (
             min(i.work_date or date.max for i in by_wo[wid]),
+            not (w and w.requires_stop),  # the stop windows are fixed: their work first
             rank.get(w.priority, 9) if w else 9,
             w.due_date or date.max if w else date.max,
             w.number if w else "",
         )
 
-    free_at: dict[tuple[uuid.UUID, date], datetime] = {}
+    def shift_start(uid: uuid.UUID, d: date) -> datetime:
+        p = week.people.get(uid)
+        return p.days[d].start if p and d in p.days else datetime.combine(d, DEFAULT_SHIFT_START, tzinfo=tz)
+
+    busy: dict[tuple[uuid.UUID, date], list[tuple[datetime, datetime]]] = defaultdict(list)
     warnings: list[str] = []
     for wid in sorted(by_wo, key=order):
         w = wos.get(wid)
@@ -640,20 +736,41 @@ def approve(db: Session, ctx: Ctx, s: WeeklySchedule) -> list[str]:
         team = sorted(by_wo[wid], key=lambda i: not i.is_lead)
         d = team[0].work_date
         assert d is not None
-        start = max(
-            free_at.get((i.user_id, d))  # type: ignore[arg-type]
-            or datetime.combine(d, shifts[i.shift_id].start_time if i.shift_id in shifts else DEFAULT_SHIFT_START, tzinfo=tz)
-            for i in team
-        )
-        hours = max(i.hours for i in team)
-        end = start + timedelta(hours=float(hours))
-        for i in team:
-            free_at[(i.user_id, d)] = end  # type: ignore[index]
-        w.planned_start, w.planned_end = start, end
         uids = [i.user_id for i in team if i.user_id]
+        spans = [b for u in uids for b in busy[(u, d)]]
+        hours = float(max(i.hours for i in team))
+        from_shift = max(shift_start(u, d) for u in uids)
+        day_end = min(
+            (week.people[u].days[d].end for u in uids if u in week.people and d in week.people[u].days),
+            default=from_shift + timedelta(hours=24),
+        )
+        start = None
+        job = week.jobs.get(wid)
+        if w.requires_stop and job:
+            for ws, we in job.windows:
+                if ws < day_end and we > from_shift:  # the window falls in the team's working day
+                    start = _first_free(spans, max(ws, from_shift), hours, we)
+                    if start:
+                        break
+            if start is None:
+                warnings.append(f"{w.number}: does not fit in a stop window of its line on {d}")
+        if start is None:
+            start = _first_free(spans, from_shift, hours, None) or from_shift
+        end = start + timedelta(hours=hours)
+        for u in uids:
+            busy[(u, d)].append((start, end))
+        w.planned_start, w.planned_end = start, end
         warnings += [f"{w.number}: {x}" for x in wo_svc.assign(db, ctx, w, uids, uids[0] if uids else None, force=True)]
         if w.status in (WOStatus.APPROVED, WOStatus.PLANNED):
             wo_svc.change_status(db, ctx, w, WOStatus.SCHEDULED, "Weekly schedule approved")
+    # Deferred now but still scheduled in this week (e.g. by an earlier approval of a reopened week): off the schedule.
+    lo, hi = datetime.combine(week.days[0], time(0), tzinfo=tz), datetime.combine(week.days[-1] + timedelta(days=1), time(0), tzinfo=tz)
+    for it in s.items:
+        w = db.get(WorkOrder, it.work_order_id) if it.deferred else None
+        if w and w.status == WOStatus.SCHEDULED and w.planned_start and lo <= w.planned_start < hi:
+            wo_svc.change_status(db, ctx, w, WOStatus.PLANNED, f"Deferred in the weekly schedule: {it.reason}")
+            w.planned_start = w.planned_end = None
+            warnings.append(f"{w.number}: deferred, taken off the schedule")
     s.status, s.manager_by_id, s.manager_at = "approved", ctx.user.id, utcnow()
     audit(db, "schedule.approve", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="weekly_schedule", entity_id=s.id,
           data={"week": str(s.week_start), "work_orders": len(by_wo), "warnings": warnings})  # fmt: skip

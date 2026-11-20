@@ -249,6 +249,7 @@ class WOCreate(In):
     estimated_cost: float | None = Field(None, ge=0)
     requires_loto: bool = False
     requires_permit: bool = False
+    requires_stop: bool = False
     requires_testing: bool = False
     safety_requirements: str | None = None
     supervisor_id: uuid.UUID | None = None
@@ -282,6 +283,7 @@ class WOUpdate(In):
     estimated_cost: float | None = Field(None, ge=0)
     requires_loto: bool | None = None
     requires_permit: bool | None = None
+    requires_stop: bool | None = None
     requires_testing: bool | None = None
     permit_reference: str | None = None
     safety_requirements: str | None = None
@@ -366,6 +368,7 @@ class WOOut(ORM):
     production_loss_tons: float | None
     requires_loto: bool
     requires_permit: bool
+    requires_stop: bool
     permit_reference: str | None
     permit_types: str | None
     permit_valid_until: datetime | None

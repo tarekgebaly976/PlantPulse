@@ -105,6 +105,8 @@ class WorkOrder(Base, PlantScoped, Timestamped, Attributed):
 
     requires_loto: Mapped[bool] = mapped_column(Boolean, default=False)
     requires_permit: Mapped[bool] = mapped_column(Boolean, default=False)
+    # The line (or machine) must be stopped: the weekly schedule only places it in a stop window of that line.
+    requires_stop: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     permit_reference: Mapped[str | None] = mapped_column(String(80))
     permit_types: Mapped[str | None] = mapped_column(String(200))  # comma-separated PERMIT_TYPES codes
     permit_valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

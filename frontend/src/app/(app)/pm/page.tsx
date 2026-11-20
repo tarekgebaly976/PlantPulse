@@ -19,13 +19,13 @@ import type { Page } from "@/lib/types";
 
 interface Plan { id: string; code: string; name: string; asset_id: string; job_plan_id: string; trigger: string; frequency_unit: string | null; frequency_interval: number | null;
   schedule_basis: string; meter_interval: number | null; next_due_date: string | null; last_completed_date: string | null; is_active: boolean; lead_days: number; horizon_days: number }
-interface JobPlan { id: string; code: string; name: string; estimated_hours: number; trade: string | null; requires_loto: boolean; requires_permit: boolean; requires_testing: boolean }
+interface JobPlan { id: string; code: string; name: string; estimated_hours: number; trade: string | null; requires_loto: boolean; requires_permit: boolean; requires_testing: boolean; requires_stop: boolean }
 interface Occ { id: string; pm_plan_id: string; plan_code: string | null; asset_id: string | null; due_date: string; original_due_date: string; status: string; work_order_id: string | null; request_reason: string | null; requested_new_date: string | null }
 
 function NewJobPlan({ opened, onClose }: { opened: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const [f, setF] = useState({ code: "", name: "", description: "", trade: "Mechanical", estimated_hours: 1 as number | string, safety_precautions: "", tools: "",
-    requires_loto: false, requires_permit: false, requires_testing: false });
+    requires_loto: false, requires_permit: false, requires_testing: false, requires_stop: false });
   const [tasks, setTasks] = useState<{ description: string; kind: string; unit: string; max_value: string }[]>([{ description: "", kind: "check", unit: "", max_value: "" }]);
   const m = useMut(() => post("/pm/job-plans", { ...f, estimated_hours: Number(f.estimated_hours), description: f.description || null, tools: f.tools || null,
     safety_precautions: f.safety_precautions || null,
@@ -46,6 +46,7 @@ function NewJobPlan({ opened, onClose }: { opened: boolean; onClose: () => void 
           <Checkbox label={t("wo.loto")} checked={f.requires_loto} onChange={(e) => setF({ ...f, requires_loto: e.currentTarget.checked })} />
           <Checkbox label={t("wo.permit")} checked={f.requires_permit} onChange={(e) => setF({ ...f, requires_permit: e.currentTarget.checked })} />
           <Checkbox label={t("wo.testing")} checked={f.requires_testing} onChange={(e) => setF({ ...f, requires_testing: e.currentTarget.checked })} />
+          <Checkbox label={t("wo.lineStop")} checked={f.requires_stop} onChange={(e) => setF({ ...f, requires_stop: e.currentTarget.checked })} />
         </Group>
         <Table><Table.Tbody>{tasks.map((x, i) => (
           <Table.Tr key={i}>
@@ -269,7 +270,7 @@ function PM() {
           <DataTable rows={jobs.data?.filter((j) => textMatch(search, j.code, j.name, j.trade))} columns={[
             { key: "c", label: t("common.code"), render: (j) => j.code }, { key: "n", label: t("common.name"), render: (j) => j.name },
             { key: "t", label: t("pm.trade"), render: (j) => j.trade }, { key: "h", label: t("wo.estHours"), render: (j) => j.estimated_hours },
-            { key: "s", label: t("wo.safety"), render: (j) => [j.requires_loto && "LOTO", j.requires_permit && "Permit", j.requires_testing && "Test"].filter(Boolean).join(", ") },
+            { key: "s", label: t("wo.safety"), render: (j) => [j.requires_loto && "LOTO", j.requires_permit && "Permit", j.requires_testing && "Test", j.requires_stop && t("wo.lineStopShort")].filter(Boolean).join(", ") },
             { key: "k", label: t("skill.required"), render: (j) => <Button size="compact-xs" variant="light" onClick={() => setJpSkills(j)}>{t("skill.skillsBtn")}</Button> }]} />
         </Tabs.Panel>
       </Tabs>

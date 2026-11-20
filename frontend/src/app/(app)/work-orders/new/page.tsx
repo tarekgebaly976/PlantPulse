@@ -18,13 +18,13 @@ function Form() {
   const sp = useSearchParams();
   const [f, setF] = useState({ asset_id: sp.get("asset"), type: "corrective", title: "", priority: "P3", description: "", symptoms: "",
     due_date: "", planned_start: "", planned_end: "", estimated_hours: "" as number | string, requires_loto: false, requires_permit: false,
-    requires_testing: false, safety_requirements: "" });
+    requires_testing: false, requires_stop: false, safety_requirements: "" });
   const set = (k: keyof typeof f, v: unknown) => setF((x) => ({ ...x, [k]: v }));
   const m = useMut(() => post<WorkOrder>("/work-orders", {
     asset_id: f.asset_id, type: f.type, title: f.title, priority: f.priority, description: f.description || null, symptoms: f.symptoms || null,
     due_date: f.due_date || null, planned_start: fromLocalInput(f.planned_start), planned_end: fromLocalInput(f.planned_end),
     estimated_hours: f.estimated_hours === "" ? null : Number(f.estimated_hours), requires_loto: f.requires_loto, requires_permit: f.requires_permit,
-    requires_testing: f.requires_testing, safety_requirements: f.safety_requirements || null,
+    requires_testing: f.requires_testing, requires_stop: f.requires_stop, safety_requirements: f.safety_requirements || null,
   }), { onDone: (w) => router.push(`/work-orders/${w.id}`) });
   return (
     <>
@@ -48,6 +48,7 @@ function Form() {
               <Checkbox label={t("wo.loto")} checked={f.requires_loto} onChange={(e) => set("requires_loto", e.currentTarget.checked)} />
               <Checkbox label={t("wo.permit")} checked={f.requires_permit} onChange={(e) => set("requires_permit", e.currentTarget.checked)} />
               <Checkbox label={t("wo.testing")} checked={f.requires_testing} onChange={(e) => set("requires_testing", e.currentTarget.checked)} />
+              <Checkbox label={t("wo.lineStop")} checked={f.requires_stop} onChange={(e) => set("requires_stop", e.currentTarget.checked)} />
             </Group>
             <Textarea label={t("wo.safety")} value={f.safety_requirements} onChange={(e) => set("safety_requirements", e.currentTarget.value)} autosize />
             <Group><Button type="submit" loading={m.isPending} disabled={!f.asset_id || f.title.length < 3}>{t("common.create")}</Button></Group>

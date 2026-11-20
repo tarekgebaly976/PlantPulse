@@ -142,7 +142,7 @@ export default function WODetailPage() {
       symptom_code_id: w.symptom_code_id, problem_code_id: w.problem_code_id, cause_code_id: w.cause_code_id, remedy_code_id: w.remedy_code_id, downtime_hours: w.downtime_hours ?? "",
       production_loss_tons: w.production_loss_tons ?? "", safety_event: w.safety_event });
     setPlan({ planned_start: toLocalInput(w.planned_start), planned_end: toLocalInput(w.planned_end), due_date: w.due_date ?? "", estimated_hours: w.estimated_hours ?? "",
-      priority: w.priority, requires_loto: w.requires_loto, requires_permit: w.requires_permit, requires_testing: w.requires_testing, supervisor_id: w.supervisor_id });
+      priority: w.priority, requires_loto: w.requires_loto, requires_permit: w.requires_permit, requires_testing: w.requires_testing, requires_stop: w.requires_stop, supervisor_id: w.supervisor_id });
   }
 
   const saveExec = useMut(() => patch(`/work-orders/${id}`, {
@@ -317,6 +317,7 @@ export default function WODetailPage() {
                   <Checkbox label={t("wo.loto")} checked={!!plan.requires_loto} onChange={(e) => setPlan({ ...plan, requires_loto: e.currentTarget.checked })} />
                   <Checkbox label={t("wo.permit")} checked={!!plan.requires_permit} onChange={(e) => setPlan({ ...plan, requires_permit: e.currentTarget.checked })} />
                   <Checkbox label={t("wo.testing")} checked={!!plan.requires_testing} onChange={(e) => setPlan({ ...plan, requires_testing: e.currentTarget.checked })} />
+                  <Checkbox label={t("wo.lineStop")} checked={!!plan.requires_stop} onChange={(e) => setPlan({ ...plan, requires_stop: e.currentTarget.checked })} />
                 </Group>
               </Section>
             )}

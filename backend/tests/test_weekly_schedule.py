@@ -152,3 +152,91 @@ def test_week_view_for_everyone_who_sees_work_orders(world):
     assert v["schedule"] is None and len(v["days"]) == 7 and v["days"][0] == ws.isoformat()
     names = {p["name"] for p in v["people"]}
     assert {"Tech", "Tech2"} <= names and "Mech_Sup" not in names  # supervisors sign off, they are not in the grid
+
+
+def test_work_that_needs_the_line_stopped_goes_in_a_stop_window(world):
+    ws, ids = _setup(world)
+    planner, sup, eng, mgr = world.api("planner"), world.api("mech_sup"), world.api("engineer"), world.api("manager")
+    line = next(a for a in planner.ok("get", "/assets", params={"q": "PM1"})["items"] if a["code"] == "PM1")
+    unit = planner.ok("post", "/assets", {"code": "PM1-PRESS", "name": "Press", "department_id": str(world.depts["PM"].id),
+                                          "parent_id": line["id"], "level": "unit", "criticality": "A"}, status=201)  # fmt: skip
+    other = mk_asset(planner, world, "SH1", crit="B")
+    mon = (ws + timedelta(days=1)).isoformat()
+    # Who may enter stop windows
+    assert (
+        world.api("tech")
+        .post("/schedule/stop-windows", {"asset_id": line["id"], "work_date": mon, "start_time": "09:00", "hours": 4})
+        .status_code
+        == 403
+    )
+    planner.ok(
+        "post",
+        "/schedule/stop-windows",
+        {"asset_id": line["id"], "work_date": mon, "start_time": "09:00", "hours": 4, "note": "Wash-up"},
+        status=201,
+    )
+
+    def wo(asset, title, hours, prio="P2"):
+        w = planner.ok("post", "/work-orders", {"asset_id": asset["id"], "type": "corrective", "title": title, "priority": prio,
+                                                "estimated_hours": hours, "requires_stop": True}, status=201)  # fmt: skip
+        assert w["requires_stop"] is True
+        sup.ok("post", f"/work-orders/{w['id']}/status", {"to": "approved"})
+        return w["id"]
+
+    fits, too_long, no_window = wo(unit, "Felt change", 3), wo(unit, "Roll change", 6), wo(other, "Knife change", 2)
+    v = planner.ok("post", f"/schedule/weeks/{ws.isoformat()}/propose", {})
+    items = _by_wo(v)
+    assert [(i["work_date"], i["deferred"]) for i in items[fits]] == [(mon, False)]  # a window on the line above the unit
+    assert "every stop window is shorter" in items[too_long][0]["reason"]
+    assert "no stop window" in items[no_window][0]["reason"]
+    assert [w["asset_code"] for w in v["windows"]] == ["PM1"] and v["windows"][0]["start"] == "09:00"
+    # Approved: the stop work is timed inside the window, the rest of the day around it.
+    sid = v["schedule"]["id"]
+    eng.ok("post", f"/schedule/{sid}/review")
+    mgr.ok("post", f"/schedule/{sid}/approve")
+    tech = str(world.users["tech"].id)
+    w = planner.ok("get", f"/work-orders/{fits}")
+    w = w.get("work_order", w)
+    assert w["planned_start"] == f"{mon}T06:00:00Z", w["planned_start"]  # 09:00 in the plant (UTC+3): the window start
+    spans = []
+    for it in v["items"]:
+        if not it["deferred"] and it["user_id"] == tech and it["work_date"] == mon:
+            x = planner.ok("get", f"/work-orders/{it['work_order']['id']}")
+            x = x.get("work_order", x)
+            spans.append((x["planned_start"], x["planned_end"]))
+    spans.sort()
+    for (_, end), (start, _) in zip(spans, spans[1:], strict=False):
+        assert start >= end
+    # Copy the week's windows to the next week, once.
+    nxt = (ws + timedelta(days=7)).isoformat()
+    assert planner.ok("post", "/schedule/stop-windows/copy", {"from_week": ws.isoformat(), "to_week": nxt})["copied"] == 1
+    assert planner.ok("post", "/schedule/stop-windows/copy", {"from_week": ws.isoformat(), "to_week": nxt})["copied"] == 0
+    win = planner.ok("get", f"/schedule/weeks/{nxt}")["windows"][0]
+    assert planner.delete(f"/schedule/stop-windows/{win['id']}").status_code == 204
+
+
+def test_reopened_week_is_planned_again(world):
+    ws, ids = _setup(world)
+    planner, eng, mgr = world.api("planner"), world.api("engineer"), world.api("manager")
+    v = planner.ok("post", f"/schedule/weeks/{ws.isoformat()}/propose", {})
+    sid = v["schedule"]["id"]
+    eng.ok("post", f"/schedule/{sid}/review")
+    mgr.ok("post", f"/schedule/{sid}/approve")
+    mgr.ok("post", f"/schedule/{sid}/reopen")
+    # The plain job (no skills, no LOTO) now must wait for a stop of its line that only comes on Saturday.
+    w = planner.ok("get", f"/work-orders/{ids['plain']}")
+    w = w.get("work_order", w)
+    planner.ok("patch", f"/work-orders/{ids['plain']}", {"requires_stop": True, "version": w["version"]})
+    line = next(a for a in planner.ok("get", "/assets", params={"q": "PM1"})["items"] if a["code"] == "PM1")
+    sat = (ws + timedelta(days=6)).isoformat()
+    planner.ok("post", "/schedule/stop-windows", {"asset_id": line["id"], "work_date": sat, "start_time": "08:00", "hours": 5}, status=201)
+    v = planner.ok("post", f"/schedule/weeks/{ws.isoformat()}/propose", {})
+    assert [i["work_date"] for i in _by_wo(v)[ids["plain"]]] == [sat]
+    # Approved again: the work order it now defers comes off the schedule.
+    hyd = ids["hyd"]
+    v = planner.ok("post", f"/schedule/{sid}/work-orders/{hyd}/defer", {"reason": "Parts late"})
+    eng.ok("post", f"/schedule/{sid}/review")
+    assert any("taken off the schedule" in x for x in mgr.ok("post", f"/schedule/{sid}/approve")["apply_warnings"])
+    w = planner.ok("get", f"/work-orders/{hyd}")
+    w = w.get("work_order", w)
+    assert w["status"] == "planned" and w["planned_start"] is None

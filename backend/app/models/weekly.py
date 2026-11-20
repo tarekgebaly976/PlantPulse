@@ -54,3 +54,17 @@ class ScheduleItem(Base):
     deferred: Mapped[bool] = mapped_column(Boolean, default=False)
     reason: Mapped[str | None] = mapped_column(String(300))
     pinned: Mapped[bool] = mapped_column(Boolean, default=False)  # set by hand: kept when the week is proposed again
+
+
+class StopWindow(Base, PlantScoped, Timestamped):
+    """A time the production line (or machine) is stopped and maintenance may work on it, e.g. a wash-up or a planned
+    stop agreed with production. Work orders that need the stop are only scheduled inside a window of their line."""
+
+    __tablename__ = "line_stop_windows"
+    __table_args__ = (CheckConstraint("ends_at > starts_at", name="ends_after_start"),)
+    id: Mapped[uuid.UUID] = uuid_pk()
+    asset_id: Mapped[uuid.UUID] = fk("assets.id", ondelete="CASCADE")  # the line, or any asset above the work
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    note: Mapped[str | None] = mapped_column(String(300))
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))

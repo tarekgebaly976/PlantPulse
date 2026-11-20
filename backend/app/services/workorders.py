@@ -72,6 +72,7 @@ def create_work_order(
         wo.estimated_hours = job_plan.estimated_hours
         wo.requires_loto = wo.requires_loto or job_plan.requires_loto
         wo.requires_permit = wo.requires_permit or job_plan.requires_permit
+        wo.requires_stop = wo.requires_stop or job_plan.requires_stop
         wo.permit_types = wo.permit_types or job_plan.permit_types
         wo.requires_testing = wo.requires_testing or job_plan.requires_testing
         wo.safety_requirements = job_plan.safety_precautions

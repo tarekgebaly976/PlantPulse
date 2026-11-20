@@ -4,22 +4,23 @@
  *  day from the roster (any of the 7 days), the planner edits by hand, the engineer approves, then the maintenance
  *  manager gives the final approval that writes assignments and planned dates to the work orders. */
 
-import { ActionIcon, Alert, Badge, Button, Card, Group, MultiSelect, NumberInput, Paper, ScrollArea, Select, SimpleGrid, Stack, Stepper, Table, Text, Textarea, Tooltip } from "@mantine/core";
-import { IconAlertTriangle, IconChevronLeft, IconChevronRight, IconLock, IconPin, IconSparkles } from "@tabler/icons-react";
+import { ActionIcon, Alert, Badge, Button, Card, Group, MultiSelect, NumberInput, Paper, ScrollArea, Select, SimpleGrid, Stack, Stepper, Table, Text, TextInput, Textarea, Tooltip } from "@mantine/core";
+import { IconAlertTriangle, IconChevronLeft, IconChevronRight, IconCopy, IconHandStop, IconLock, IconPin, IconPlus, IconSparkles, IconTrash } from "@tabler/icons-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { notifications } from "@mantine/notifications";
 import { Guard } from "@/components/AppFrame";
 import { Modal } from "@/components/Modal";
-import { ConfirmButton, Loading, PageHeader } from "@/components/ui";
-import { patch, post } from "@/lib/api";
+import { AssetPicker, ConfirmButton, Loading, PageHeader } from "@/components/ui";
+import { del, patch, post } from "@/lib/api";
 import { fmtDate, fmtNum, useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 
 interface WO {
   id: string; number: string; title: string; type: string; status: string; priority: string; asset: string | null; criticality: string | null;
-  due_date: string | null; pm_deadline: string | null; hours: number | null; crew: number; trade: string | null; safety: boolean; skills: string[];
+  due_date: string | null; pm_deadline: string | null; hours: number | null; crew: number; trade: string | null; safety: boolean; stop: boolean; skills: string[];
 }
 interface Item {
   id: string; work_order: WO | null; user_id: string | null; work_date: string | null; hours: number; overtime: boolean; is_lead: boolean;
@@ -34,8 +35,9 @@ interface Sched {
 }
 interface WeekView {
   week_start: string; days: string[]; today: string; schedule: Sched | null; people: Person[]; items: Item[];
-  over_capacity: { user_id: string; date: string; hours: number; capacity: number }[]; apply_warnings?: string[];
+  over_capacity: { user_id: string; date: string; hours: number; capacity: number }[]; apply_warnings?: string[]; windows: Win[];
 }
+interface Win { id: string; asset_id: string; asset: string; asset_code: string; date: string; start: string; end: string; hours: number; note: string | null }
 
 const PRIO: Record<string, string> = { P1: "red", P2: "orange", P3: "blue", P4: "gray" };
 const STATUS_COLOR: Record<string, string> = { draft: "gray", engineer_approved: "yellow", approved: "teal" };
@@ -62,6 +64,7 @@ function Schedule() {
   const [place, setPlace] = useState<{ wo: WO; users: string[]; work_date: string } | null>(null);
   const [back, setBack] = useState<string | null>(null);
   const [applied, setApplied] = useState<string[] | null>(null);
+  const [win, setWin] = useState<{ asset_id: string | null; work_date: string; start_time: string; hours: number | string; note: string } | null>(null);
 
   const propose = useMut(() => post(`/schedule/weeks/${week}/propose`, { max_overtime_hours: Number(ot) || 0 }), { success: t("sched.proposed") });
   const review = useMut(() => post(`/schedule/${s?.id}/review`));
@@ -70,6 +73,10 @@ function Schedule() {
   const reopen = useMut(() => post(`/schedule/${s?.id}/reopen`));
   const saveMove = useMut(() => patch(`/schedule/items/${move?.item.id}`, { user_id: move?.user_id, work_date: move?.work_date }), { onDone: () => setMove(null) });
   const saveDefer = useMut(() => post(`/schedule/${s?.id}/work-orders/${defer?.wo.id}/defer`, { reason: defer?.reason }), { onDone: () => { setDefer(null); setMove(null); } });
+  const saveWin = useMut(() => post("/schedule/stop-windows", { ...win, hours: Number(win?.hours), note: win?.note || null }), { onDone: () => setWin(null) });
+  const delWin = useMut((id: string) => del(`/schedule/stop-windows/${id}`));
+  const copyWin = useMut(() => post<{ copied: number }>("/schedule/stop-windows/copy", { from_week: addDays(week, -7), to_week: week }), { success: false,
+    onDone: (r) => notifications.show({ color: "teal", message: t("sched.copied", { n: r.copied }) }) });
   const savePlace = useMut(() => post(`/schedule/${s?.id}/work-orders/${place?.wo.id}/place`, { user_ids: place?.users, work_date: place?.work_date }), { onDone: () => setPlace(null) });
 
   if (!v) return <Loading />;
@@ -133,6 +140,29 @@ function Schedule() {
           </SimpleGrid>
         )}
 
+        <Card withBorder data-testid="stop-windows">
+          <Group justify="space-between" mb="xs">
+            <div><Text fw={600}>{t("sched.windowsTitle")}</Text><Text size="xs" c="dimmed">{t("sched.windowsHint")}</Text></div>
+            {can("stop_window.manage") && <Group gap="xs">
+              <Button size="xs" variant="default" leftSection={<IconCopy size={14} />} loading={copyWin.isPending} onClick={() => copyWin.mutate(undefined)}>{t("sched.copyWindows")}</Button>
+              <Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => setWin({ asset_id: null, work_date: v.week_start, start_time: "08:00", hours: 4, note: "" })}>{t("sched.addWindow")}</Button>
+            </Group>}
+          </Group>
+          {v.windows.length === 0 ? <Text size="sm" c="dimmed">{t("sched.noWindows")}</Text> : (
+            <Table fz="sm">
+              <Table.Thead><Table.Tr><Table.Th>{t("sched.line")}</Table.Th><Table.Th>{t("sched.day")}</Table.Th><Table.Th>{t("sched.fromTime")}</Table.Th>
+                <Table.Th>{t("sched.hours")}</Table.Th><Table.Th>{t("sched.comment")}</Table.Th><Table.Th /></Table.Tr></Table.Thead>
+              <Table.Tbody>
+                {v.windows.map((w) => (
+                  <Table.Tr key={w.id}>
+                    <Table.Td>{w.asset}</Table.Td><Table.Td>{dayName(w.date)} {w.date}</Table.Td>
+                    <Table.Td dir="ltr" style={{ textAlign: "start" }}>{w.start} – {w.end}</Table.Td><Table.Td>{fmtNum(w.hours, 2)}</Table.Td><Table.Td>{w.note ?? ""}</Table.Td>
+                    <Table.Td>{can("stop_window.manage") && <ActionIcon variant="subtle" color="red" aria-label={t("common.delete")} onClick={() => delWin.mutate(w.id)}><IconTrash size={16} /></ActionIcon>}</Table.Td>
+                  </Table.Tr>))}
+              </Table.Tbody>
+            </Table>)}
+        </Card>
+
         {v.people.length === 0 && <Alert color="gray">{t("sched.noRoster")}</Alert>}
         <ScrollArea type="auto">
           <Table withTableBorder withColumnBorders fz="xs" miw={1100} data-testid="schedule-grid" style={{ tableLayout: "fixed" }}>
@@ -141,6 +171,10 @@ function Schedule() {
               {v.days.map((d) => (
                 <Table.Th key={d} style={{ textAlign: "center", background: d === v.today ? "var(--mantine-color-teal-light)" : undefined }}>
                   {dayName(d)}<Text size="xs" c="dimmed">{d.slice(5)}</Text>
+                  {v.windows.filter((w) => w.date === d).map((w) => (
+                    <Tooltip key={w.id} label={`${w.asset} · ${w.start}–${w.end}${w.note ? ` · ${w.note}` : ""}`}>
+                      <Badge size="xs" color="orange" variant="light" tt="none" leftSection={<IconHandStop size={10} />}>{w.asset_code} {w.start}</Badge>
+                    </Tooltip>))}
                 </Table.Th>))}
             </Table.Tr></Table.Thead>
             <Table.Tbody>
@@ -169,7 +203,7 @@ function Schedule() {
                             </>}>
                               <Badge fullWidth size="sm" radius="sm" tt="none" color={PRIO[i.work_order.priority] ?? "blue"} variant={i.warnings.length ? "outline" : "light"}
                                 style={{ cursor: canPlan ? "pointer" : "default", borderColor: i.warnings.length ? "var(--mantine-color-red-6)" : undefined }}
-                                leftSection={i.warnings.length ? <IconAlertTriangle size={11} color="var(--mantine-color-red-6)" /> : i.pinned ? <IconPin size={11} /> : undefined}
+                                leftSection={i.warnings.length ? <IconAlertTriangle size={11} color="var(--mantine-color-red-6)" /> : i.pinned ? <IconPin size={11} /> : i.work_order.stop ? <IconHandStop size={11} /> : undefined}
                                 rightSection={i.overtime ? <Text span size="9px" fw={700} c="orange">OT</Text> : undefined}
                                 onClick={() => canPlan && setMove({ item: i, user_id: i.user_id ?? "", work_date: i.work_date ?? "" })} data-testid={`chip-${i.work_order.number}`}>
                                 {i.work_order.number.split("-").pop()} · {fmtNum(i.hours, 1)}h
@@ -237,6 +271,19 @@ function Schedule() {
           <MultiSelect label={t("sched.people")} data={peopleOpts} value={place.users} onChange={(x) => setPlace({ ...place, users: x })} searchable />
           <Text size="xs" c="dimmed">{t("sched.moveHint")}</Text>
           <Group justify="end"><Button disabled={!place.users.length || !place.wo.hours} loading={savePlace.isPending} onClick={() => savePlace.mutate(undefined)}>{t("common.save")}</Button></Group>
+        </Stack>}
+      </Modal>
+
+      <Modal opened={!!win} onClose={() => setWin(null)} title={t("sched.addWindow")}>
+        {win && <Stack>
+          <AssetPicker label={t("sched.line")} value={win.asset_id} onChange={(x) => setWin({ ...win, asset_id: x })} required />
+          <Select label={t("sched.day")} data={dayOpts} value={win.work_date} onChange={(x) => x && setWin({ ...win, work_date: x })} />
+          <Group grow>
+            <TextInput type="time" label={t("sched.fromTime")} value={win.start_time} onChange={(e) => setWin({ ...win, start_time: e.currentTarget.value })} />
+            <NumberInput label={t("sched.hours")} value={win.hours} onChange={(x) => setWin({ ...win, hours: x })} min={0.5} max={168} step={0.5} />
+          </Group>
+          <TextInput label={t("sched.comment")} value={win.note} onChange={(e) => setWin({ ...win, note: e.currentTarget.value })} placeholder={t("sched.windowNoteHint")} />
+          <Group justify="end"><Button disabled={!win.asset_id || !win.start_time || !Number(win.hours)} loading={saveWin.isPending} onClick={() => saveWin.mutate(undefined)}>{t("common.save")}</Button></Group>
         </Stack>}
       </Modal>
 

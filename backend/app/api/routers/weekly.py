@@ -3,7 +3,7 @@
 
 import uuid
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -19,7 +19,7 @@ from app.models.assets import Asset
 from app.models.enums import RosterKind
 from app.models.identity import User
 from app.models.shifts import RosterEntry, ShiftDefinition
-from app.models.weekly import ScheduleItem, WeeklySchedule
+from app.models.weekly import ScheduleItem, StopWindow, WeeklySchedule
 from app.models.workorders import WorkOrder
 from app.schemas.common import In
 from app.services import weekly as svc
@@ -102,6 +102,7 @@ def view(db: Session, ctx: Ctx, week_start: date) -> dict:
             "crew": job.crew if job else 1,
             "trade": job.trade if job else None,
             "safety": bool(w.requires_loto or w.requires_permit),
+            "stop": w.requires_stop,
             "skills": [f"{sk.code} ≥ {r.min_level}" for r, sk in job.need] if job else [],
         }
 
@@ -144,7 +145,35 @@ def view(db: Session, ctx: Ctx, week_start: date) -> dict:
         "people": people,
         "items": out_items,
         "over_capacity": [{**o, "hours": float(o["hours"]), "capacity": float(o["capacity"])} for o in chk["over_capacity"]],
+        "windows": windows_of(db, ctx, week_start),
     }
+
+
+def windows_of(db: Session, ctx: Ctx, week_start: date) -> list[dict]:
+    tz = ZoneInfo(ctx.plant.timezone)
+    lo = datetime.combine(week_start, time(0), tzinfo=tz)
+    rows = db.execute(
+        select(StopWindow, Asset)
+        .join(Asset, Asset.id == StopWindow.asset_id)
+        .where(StopWindow.plant_id == ctx.plant_id, StopWindow.starts_at < lo + timedelta(days=7), StopWindow.ends_at > lo)
+        .order_by(StopWindow.starts_at, Asset.code)
+    ).all()
+    return [
+        {
+            "id": w.id,
+            "asset_id": a.id,
+            "asset": f"{a.code} · {a.name}",
+            "asset_code": a.code,
+            "date": w.starts_at.astimezone(tz).date(),
+            "starts_at": w.starts_at,
+            "ends_at": w.ends_at,
+            "start": w.starts_at.astimezone(tz).strftime("%H:%M"),
+            "end": w.ends_at.astimezone(tz).strftime("%H:%M"),
+            "hours": round((w.ends_at - w.starts_at).total_seconds() / 3600, 2),
+            "note": w.note,
+        }
+        for w, a in rows
+    ]
 
 
 @router.get("/weeks/{week_start}")
@@ -321,3 +350,71 @@ def reopen(sid: uuid.UUID, ctx: Ctx = Depends(require("schedule.approve")), db: 
     svc.reopen(db, ctx, s)
     db.flush()
     return view(db, ctx, s.week_start)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Line stop windows: when each line is stopped for maintenance (entered by the planner, engineer or production manager)
+
+
+class WindowIn(In):
+    asset_id: uuid.UUID
+    work_date: date
+    start_time: time
+    hours: Decimal = Field(gt=0, le=168)
+    note: str | None = Field(None, max_length=300)
+
+
+@router.post("/stop-windows", status_code=201)
+def add_window(body: WindowIn, ctx: Ctx = Depends(require("stop_window.manage")), db: Session = Depends(get_db, scope="function")) -> dict:
+    a = db.get(Asset, body.asset_id)
+    if a is None or a.plant_id != ctx.plant_id:
+        raise HTTPException(404, "Asset not found")
+    start = datetime.combine(body.work_date, body.start_time, tzinfo=ZoneInfo(ctx.plant.timezone))
+    w = StopWindow(plant_id=ctx.plant_id, asset_id=a.id, starts_at=start, ends_at=start + timedelta(hours=float(body.hours)),
+                   note=body.note, created_by_id=ctx.user.id)  # fmt: skip
+    db.add(w)
+    db.flush()
+    audit(db, "stop_window.add", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="stop_window", entity_id=w.id,
+          data={"asset": a.code, "start": start.isoformat(), "hours": str(body.hours)})  # fmt: skip
+    return {"id": w.id}
+
+
+@router.delete("/stop-windows/{window_id}", status_code=204)
+def delete_window(
+    window_id: uuid.UUID, ctx: Ctx = Depends(require("stop_window.manage")), db: Session = Depends(get_db, scope="function")
+) -> None:
+    w = db.get(StopWindow, window_id)
+    if w is None or w.plant_id != ctx.plant_id:
+        raise HTTPException(404, "Stop window not found")
+    audit(db, "stop_window.delete", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="stop_window", entity_id=w.id,
+          data={"start": w.starts_at.isoformat()})  # fmt: skip
+    db.delete(w)
+
+
+class CopyIn(In):
+    from_week: date
+    to_week: date
+
+
+@router.post("/stop-windows/copy")
+def copy_windows(body: CopyIn, ctx: Ctx = Depends(require("stop_window.manage")), db: Session = Depends(get_db, scope="function")) -> dict:
+    """Repeat one week's stop windows in another week (same weekday and time); windows already there are not doubled."""
+    svc.check_sunday(body.from_week)
+    svc.check_sunday(body.to_week)
+    shift = timedelta(days=(body.to_week - body.from_week).days)
+    have = {(w["asset_id"], w["starts_at"], w["ends_at"]) for w in windows_of(db, ctx, body.to_week)}
+    n = 0
+    for w in windows_of(db, ctx, body.from_week):
+        key = (w["asset_id"], w["starts_at"] + shift, w["ends_at"] + shift)
+        if key in have:
+            continue
+        db.add(
+            StopWindow(
+                plant_id=ctx.plant_id, asset_id=w["asset_id"], starts_at=key[1], ends_at=key[2], note=w["note"], created_by_id=ctx.user.id
+            )
+        )
+        n += 1
+    db.flush()
+    audit(db, "stop_window.copy", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="stop_window", entity_id=None,
+          data={"from": str(body.from_week), "to": str(body.to_week), "copied": n})  # fmt: skip
+    return {"copied": n}

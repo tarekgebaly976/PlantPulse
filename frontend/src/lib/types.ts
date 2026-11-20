@@ -23,7 +23,7 @@ export interface WorkOrder {
   actual_end: string | null; completed_at: string | null; closed_at: string | null; estimated_hours: number | null; estimated_cost: number | null;
   actual_labor_hours: number; actual_labor_cost: number; actual_material_cost: number; actual_service_cost: number; actual_cost: number;
   currency: string; downtime_hours: number | null; production_impact: string | null; production_loss_tons: number | null;
-  requires_loto: boolean; requires_permit: boolean; permit_reference: string | null; safety_requirements: string | null;
+  requires_loto: boolean; requires_permit: boolean; requires_stop: boolean; permit_reference: string | null; safety_requirements: string | null;
   permit_types: string | null; permit_valid_until: string | null;
   source: string; external_ref: string | null;
   safety_signed_by_id: UUID | null; safety_signed_at: string | null; requires_testing: boolean; test_result: string | null;
