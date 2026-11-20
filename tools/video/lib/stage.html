@@ -72,6 +72,19 @@
   .col { opacity: 0; }
   .col h3 { font-size: 30px; font-weight: 800; padding: 14px 20px; border-radius: 14px; background: var(--teal); color: #052A27; margin-bottom: 18px; }
   .col div { font-size: 25px; padding: 13px 18px; margin-bottom: 12px; border-radius: 12px; background: rgba(22, 54, 92, .85); border: 1px solid var(--line); }
+  /* intro: heartbeat line, name, subtitle, play button that gets clicked */
+  .intro svg { position: absolute; left: 0; top: 0; }
+  .intro .nm { position: absolute; left: 0; right: 0; top: 600px; text-align: center; font-size: 104px; font-weight: 800; letter-spacing: -1.5px; opacity: 0; }
+  .intro .sub { position: absolute; left: 0; right: 0; top: 740px; text-align: center; font-size: 34px; color: var(--muted); opacity: 0; }
+  .intro .pill { position: absolute; left: 50%; top: 840px; transform: translateX(-50%); padding: 20px 46px 20px 38px; border-radius: 999px; background: var(--teal); color: #052A27;
+         font-size: 34px; font-weight: 800; white-space: nowrap; display: flex; align-items: center; gap: 18px; opacity: 0; box-shadow: 0 10px 40px rgba(20, 184, 166, .35); }
+  .intro .pill i { width: 0; height: 0; border-left: 22px solid #052A27; border-top: 14px solid transparent; border-bottom: 14px solid transparent; display: block; }
+  .intro .icon { position: absolute; left: 0; top: 0; width: 180px; height: 180px; border-radius: 40px; overflow: hidden; opacity: 0; z-index: 3;
+         box-shadow: 0 0 0 6px rgba(20, 184, 166, .35), 0 0 60px rgba(20, 184, 166, .55), 0 20px 50px rgba(0, 0, 0, .5); transform-origin: 90px 90px; }
+  .intro .icon img { width: 180px; height: 180px; display: block; }
+  .intro .ring2 { position: absolute; border-radius: 50%; border: 4px solid var(--teal); opacity: 0; z-index: 2; box-shadow: 0 0 30px rgba(20, 184, 166, .5); }
+  .intro .ptr { position: absolute; width: 44px; height: 44px; z-index: 5; opacity: 0; }
+  .intro .ripple { position: absolute; border-radius: 50%; border: 4px solid var(--teal2); opacity: 0; }
 </style>
 </head>
 <body>
@@ -205,8 +218,8 @@ function renderApp(s, t) {
     }
   }
   if (s.legend) { // light up the four colours in turn, then all stay on
-    const span = (s.t1 - s.t0 - 1.2) / 4.6;
-    o.items.forEach((d, i) => { const st = s.t0 + 0.8 + span * (0.4 + i); d.style.opacity = 0.35 + 0.65 * clamp((t - st) / 0.4, 0, 1); d.style.transform = `scale(${1 + 0.06 * Math.max(0, 1 - Math.abs(t - st - 0.4) / 0.6)})`; });
+    const from = s.beats.length > 1 ? s.beats[1].t + 0.3 : s.t0 + 0.8, span = (s.t1 - from - 0.6) / 4.2;
+    o.items.forEach((d, i) => { const st = from + span * i; d.style.opacity = 0.35 + 0.65 * clamp((t - st) / 0.4, 0, 1); d.style.transform = `scale(${1 + 0.06 * Math.max(0, 1 - Math.abs(t - st - 0.4) / 0.6)})`; });
   }
 }
 
@@ -230,12 +243,77 @@ function buildMods(sc, s) {
   sc.appendChild(g); s._ = { cs };
 }
 function renderStagger(s, t) {
+  // cards appear as the voice names them (itemTimes), otherwise evenly over the scene
   const n = s._.cs.length, span = (s.t1 - s.t0 - 1.5) * 0.85;
-  s._.cs.forEach((d, i) => { const st = s.t0 + 0.5 + (span * i) / n; const a = ease((t - st) / 0.6); d.style.opacity = a; d.style.transform = `translateY(${(1 - a) * 30}px)`; });
+  s._.cs.forEach((d, i) => {
+    const st = s.itemTimes ? s.itemTimes[i] : s.t0 + 0.5 + (span * i) / n;
+    const a = ease((t - st) / 0.5); d.style.opacity = a; d.style.transform = `translateY(${(1 - a) * 30}px)`;
+    const cur = s.itemTimes && t >= st && (i === n - 1 || t < s.itemTimes[i + 1]);
+    d.style.boxShadow = cur ? "0 0 0 3px rgba(94, 234, 212, .65), 0 10px 40px rgba(20, 184, 166, .25)" : "none";
+  });
 }
 
-const BUILD = { app: buildApp, title: buildTitle, cards: buildCards, modules: buildMods };
-const RENDER = { app: renderApp, title: renderTitle, cards: renderStagger, modules: renderStagger };
+
+// ---------- intro (same opening in every video) ----------
+function buildIntro(sc, s) {
+  sc.classList.add("intro");
+  const Y = 440, cx = W / 2;
+  // flat line, a small dip, the heartbeat spike, a small echo, flat again
+  const d = `M0 ${Y} L${cx - 150} ${Y} C${cx - 120} ${Y} ${cx - 100} ${Y - 14} ${cx - 80} ${Y + 6} L${cx - 52} ${Y + 40} L${cx - 22} ${Y - 150} L${cx + 10} ${Y + 90}`
+    + ` L${cx + 36} ${Y - 46} L${cx + 58} ${Y + 18} C${cx + 74} ${Y + 4} ${cx + 92} ${Y} ${cx + 120} ${Y} L${W} ${Y}`;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", W); svg.setAttribute("height", H);
+  svg.innerHTML = `<defs><filter id="glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`
+    + `<radialGradient id="dot"><stop offset="0" stop-color="#E6FFFA"/><stop offset=".35" stop-color="#5EEAD4"/><stop offset="1" stop-color="#14B8A6" stop-opacity="0"/></radialGradient></defs>`
+    + `<path d="${d}" fill="none" stroke="#14B8A6" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" filter="url(#glow)"/>`
+    + `<circle r="22" fill="url(#dot)"/>`;
+  sc.appendChild(svg);
+  const path = svg.querySelector("path"), dot = svg.querySelector("circle");
+  // the app icon comes out of the heartbeat spike, with two pulse rings
+  const ring1 = el("div", "ring2"), ring2 = el("div", "ring2");
+  const icon = el("div", "icon", `<img src="${TL.logo}" alt="">`);
+  const nm = el("div", "nm", "PlantPulse"), sub = el("div", "sub", esc(s.subtitle)), pill = el("div", "pill", `<i></i>${esc(s.pill)}`);
+  const ptr = el("div", "ptr", `<svg viewBox="0 0 40 40" width="44" height="44"><path d="M8 4 L8 32 L15 25 L20 36 L25 34 L20 23 L30 23 Z" fill="#fff" stroke="#0B1C33" stroke-width="2.4" stroke-linejoin="round"/></svg>`);
+  const rip = el("div", "ripple");
+  [ring1, ring2, icon, nm, sub, pill, rip, ptr].forEach((x) => sc.appendChild(x));
+  s._ = { path, dot, len: 0, Y, cx, peak: [cx - 22, Y - 150], ring1, ring2, icon, nm, sub, pill, ptr, rip };
+}
+function renderIntro(s, t) {
+  const o = s._, r = t - s.t0;
+  if (!o.len) { o.len = o.path.getTotalLength(); o.path.style.strokeDasharray = `${o.len} ${o.len}`; }
+  const draw = ease(r / 1.6);
+  o.path.style.strokeDashoffset = o.len * (1 - draw);
+  const tip = o.path.getPointAtLength(o.len * draw);
+  o.dot.setAttribute("cx", tip.x); o.dot.setAttribute("cy", tip.y);
+  o.dot.style.opacity = r < 1.6 ? 1 : Math.max(0, 1 - (r - 1.6) / 0.3);
+  // icon: from the spike's peak to the centre of the line, small to full size with a little overshoot
+  const e = clamp((r - 1.15) / 0.75, 0, 1), k = e < 0.75 ? ease(e / 0.75) * 1.08 : 1.08 - 0.08 * ease((e - 0.75) / 0.25);
+  const ix = lerp(o.peak[0], o.cx, ease(e)), iy = lerp(o.peak[1], o.Y, ease(e));
+  o.icon.style.opacity = clamp(e * 3, 0, 1);
+  o.icon.style.transform = `translate(${ix - 90}px, ${iy - 90}px) scale(${0.15 + 0.85 * k})`;
+  [[o.ring1, 1.55], [o.ring2, 1.95]].forEach(([g, at]) => {
+    const p = (r - at) / 0.9;
+    if (p < 0 || p > 1) { g.style.opacity = 0; return; }
+    const rr = 95 + 170 * ease(p);
+    g.style.opacity = 0.9 * (1 - p); g.style.left = (o.cx - rr) + "px"; g.style.top = (o.Y - rr) + "px"; g.style.width = g.style.height = 2 * rr + "px";
+  });
+  const fade = (el2, a, b) => { const x = ease((r - a) / (b - a)); el2.style.opacity = x; return x; };
+  const a1 = fade(o.nm, 2.1, 2.6); o.nm.style.transform = `translateY(${(1 - a1) * 18}px)`;
+  fade(o.sub, 2.6, 3.0);
+  const a3 = fade(o.pill, 3.0, 3.4);
+  const click = 4.4, press = r > click && r < click + 0.25 ? 0.94 : 1;
+  o.pill.style.transform = `translateX(-50%) translateY(${(1 - a3) * 14}px) scale(${press})`;
+  const pr = o.pill.getBoundingClientRect(), tx = pr.left + pr.width * 0.62, ty = pr.top + pr.height * 0.62;
+  const mv = ease((r - 3.4) / 0.9);
+  o.ptr.style.opacity = clamp((r - 3.3) / 0.2, 0, 1);
+  o.ptr.style.left = lerp(W * 0.68, tx, mv) + "px"; o.ptr.style.top = lerp(H * 0.97, ty, mv) + "px";
+  const rp = (r - click) / 0.6;
+  if (rp >= 0 && rp <= 1) { const rr = 24 + 90 * ease(rp); o.rip.style.opacity = 1 - rp; o.rip.style.left = (tx - rr) + "px"; o.rip.style.top = (ty - rr) + "px"; o.rip.style.width = o.rip.style.height = 2 * rr + "px"; }
+  else o.rip.style.opacity = 0;
+}
+
+const BUILD = { intro: buildIntro, app: buildApp, title: buildTitle, cards: buildCards, modules: buildMods };
+const RENDER = { intro: renderIntro, app: renderApp, title: renderTitle, cards: renderStagger, modules: renderStagger };
 
 window.setup = async (tl) => {
   TL = tl;

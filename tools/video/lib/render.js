@@ -14,45 +14,79 @@ const TAIL = 0.75;   // and the scene holds this long after the voice ends
 const MIN_BEAT = { view: 2.2, click: 2.4, type: 2.6 };
 const url = (p) => "file://" + p;
 
+const GAP = 0.3;      // pause between two spoken parts
+const SHORT = { view: 1.6, click: 1.9, type: 2.1 };  // a step without its own sentence
+
 function buildTimeline(def, OUT) {
   const beatsAll = JSON.parse(fs.readFileSync(path.join(OUT, "captures", "beats.json"), "utf8"));
   const dur = JSON.parse(fs.readFileSync(path.join(OUT, "audio", "durations.json"), "utf8"));
   const logo = path.join(ROOT, "..", "..", "frontend", "public", "icons", "icon.svg");
-  let t = 0;
   const scenes = [], voice = [];
+  if (fs.existsSync(path.join(OUT, "audio", "00-intro.wav"))) voice.push({ id: "00-intro", at: 0 }); // intro sound
+  // Same opening in every video: heartbeat line, the app icon out of the pulse, name, subtitle, the video's topic.
+  const INTRO = 6.0;
+  scenes.push({ id: "00-intro", layout: "intro", subtitle: "Maintenance management for industrial plants",
+    pill: def.intro || def.title.replace(/^PlantPulse\s*[–-]\s*/, ""), t0: 0, t1: INTRO });
+  let t = INTRO;
   for (const s0 of def.scenes) {
     const s = { ...s0 };
     delete s.capture;
-    const voiceLen = dur[s.id]?.seconds ?? 0;
-    let D = LEAD + voiceLen + TAIL;
+    const parts = dur[s.id]?.parts ?? [];
+    let D;
     if (s.layout === "app") {
       const beats = beatsAll[s.id];
       if (!beats || !beats.length) throw new Error(`no captures for ${s.id}: run capture`);
-      const minLen = 0.4 + beats.reduce((a, b) => a + MIN_BEAT[b.kind], 0);
-      D = Math.max(D, minLen);
-      Object.assign(s, layoutBeats(s, beats, t, D, OUT));
+      Object.assign(s, layoutBeats(s, beats, t, parts, voice, OUT));
+      D = s.end - t;
+    } else if ((s.layout === "cards" || s.layout === "modules") && parts.length && parts[0].key !== "all") {
+      // each card appears as its sentence starts
+      const n = (s.cards || s.groups).length, at = new Array(n).fill(null);
+      let x = t + LEAD;
+      for (const p of parts) {
+        if (p.key !== "lead") at[p.key] = x - 0.15;
+        voice.push({ id: p.id, at: x });
+        x += p.seconds + GAP;
+      }
+      for (let k = 0; k < n; k++) if (at[k] === null) at[k] = k ? at[k - 1] : t + 0.5;
+      s.itemTimes = at;
+      D = x - GAP - t + TAIL;
+    } else {
+      let x = t + LEAD;
+      for (const p of parts) { voice.push({ id: p.id, at: x }); x += p.seconds + GAP; }
+      D = Math.max(x - GAP - t + TAIL, 3);
     }
     s.t0 = t; s.t1 = t + D;
-    voice.push({ id: s.id, at: t + LEAD });
     scenes.push(s);
     t += D;
   }
   return { logo: url(logo), scenes, voice, total: t };
 }
 
-/** Times inside an app scene: beats share the scene by weight; per beat the image events, highlight, click and camera. */
-function layoutBeats(s, beats, t0, D, OUT) {
+/** Times inside an app scene. Each step lasts as long as its own sentence (voice starts as the step starts), so the
+ *  picture always shows what is being said. With one recording for the whole scene, steps share it by weight. */
+function layoutBeats(s, beats, t0, parts, voice, OUT) {
   const cap = path.join(OUT, "captures");
   const vp = beats[0].vp, phone = s.device === "phone";
-  const W = beats.map((b) => (b.weight || 1) * MIN_BEAT[b.kind]);
-  const sum = W.reduce((a, b) => a + b, 0), avail = D - 0.3;
+  const byBeat = new Map(parts.filter((p) => typeof p.key === "number").map((p) => [p.key, p]));
+  const whole = parts.find((p) => p.key === "all");
+  let T;
+  if (whole) {
+    const W = beats.map((b) => (b.weight || 1) * MIN_BEAT[b.kind]);
+    const sum = W.reduce((a, b) => a + b, 0), D = Math.max(LEAD + whole.seconds + TAIL, 0.4 + beats.reduce((a, b) => a + MIN_BEAT[b.kind], 0));
+    voice.push({ id: whole.id, at: t0 + LEAD });
+    T = W.map((w) => ((D - 0.3) * w) / sum);
+  } else {
+    T = beats.map((b, i) => { const p = byBeat.get(i); return p ? Math.max(SHORT[b.kind], 0.35 + p.seconds + GAP) : SHORT[b.kind]; });
+  }
   const images = [], cams = [], out = [];
   let t = t0 + 0.15, lastPt = null;
   beats.forEach((b, i) => {
-    const T = (avail * W[i]) / sum;
+    const Ti = T[i];
+    const p = byBeat.get(i);
+    if (p && !whole) voice.push({ id: p.id, at: t + 0.3 });
     const ob = { kind: b.kind, caption: b.caption, box: b.box, t };
     // camera: desktop zooms toward the element it talks about; the phone screen is already big enough
-    let z = b.zoom ?? (b.box ? (phone ? 1 : b.kind === "view" ? 1.3 : 1.5) : 1);
+    const z = b.zoom ?? (b.box ? (phone ? 1 : b.kind === "view" ? 1.3 : 1.5) : 1);
     const cx = b.box ? b.box.x + b.box.w / 2 : vp.width / 2, cy = b.box ? b.box.y + b.box.h / 2 : vp.height / 2;
     cams.push({ t: i === 0 ? t0 - 1 : t, s: z, cx, cy });
     if (b.kind === "view") {
@@ -60,22 +94,22 @@ function layoutBeats(s, beats, t0, D, OUT) {
       ob.ringIn = b.box ? t + 0.7 : 1e9;
     } else if (b.kind === "click") {
       images.push({ t: i === 0 ? t0 : t, src: url(path.join(cap, b.imgs[0])) });
-      ob.click = t + Math.min(1.3, Math.max(0.8, T * 0.42));
+      ob.click = t + Math.min(1.2, Math.max(0.8, Ti * 0.4));
       ob.ringIn = t + 0.25; ob.ringOut = ob.click + 0.25;
       ob.from = lastPt;
       images.push({ t: ob.click + 0.2, src: url(path.join(cap, b.imgs[1])), fade: 0.3 });
       lastPt = { x: cx, y: cy };
     } else { // type
       images.push({ t: i === 0 ? t0 : t, src: url(path.join(cap, b.imgs[0])) });
-      ob.ringIn = t + 0.25; ob.ringOut = t + T - 0.45;
-      const n = b.imgs.length - 1, tt = Math.min(1.6, T * 0.5);
+      ob.ringIn = t + 0.25; ob.ringOut = t + Ti - 0.45;
+      const n = b.imgs.length - 1, tt = Math.min(1.6, Ti * 0.5);
       b.imgs.slice(1).forEach((im, j) => images.push({ t: t + 0.6 + (tt * (j + 1)) / n, src: url(path.join(cap, im)), fade: 0.08 }));
       lastPt = { x: cx, y: cy };
     }
     out.push(ob);
-    t += T;
+    t += Ti;
   });
-  return { vp, images, cams, beats: out };
+  return { vp, images, cams, beats: out, end: t + 0.45 };
 }
 
 async function openStage(tl) {

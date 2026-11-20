@@ -198,3 +198,39 @@ module.exports = {
     },
   ],
 };
+
+// ---- Voice, one sentence per filmed step (app scenes) or per card, so the picture follows the voice ----
+const SAYS = {
+  "02-what": ["PlantPulse is a web app for the whole plant: on a computer, a tablet or a phone, in English, Arabic or Bengali.",
+    "Everyone signs in and starts on the dashboard. Each counter opens the list it counts."],
+  "05-colours": ["One colour code runs through every screen, and the dashboard shows it as a key.",
+    "Red: act now. Amber: needs attention, or waiting for someone. Green: all clear, or target met. Grey: information."],
+  "06-report": ["Now one quick story. On line one, the press has stopped. The shift leader taps the plus button to report it.",
+    "First, the equipment: the press hydraulic unit.", "Then what is wrong: a hydraulic oil leak.",
+    "The machine is stopped, so Breakdown is ticked.", "Submit, and the supervisors are alerted at once."],
+  "07-accept": ["The mechanical supervisor opens the new request, marked as a breakdown.", "They accept it as an emergency breakdown.",
+    "And the work order is created."],
+  "08-safety": ["Before anyone touches the machine: lock-out tag-out. Each isolation point is written in the register.",
+    "The lock is applied, and zero energy is verified.",
+    "Then the supervisor signs off the lock-out and the work permit. Until then, the work cannot start."],
+  "09-work": ["On the phone, the technician finds the job in My work.", "They start the work.", "They write what they found.",
+    "When the job is finished, the lock is removed.", "And the work is sent for review."],
+  "10-close": ["The supervisor reviews the work.", "With the failure codes in, the work order is completed.", "And closed.",
+    "Every step is kept in the history, with who did it and when."],
+  "11-kpis": ["And it counts. Breakdown downtime, repair time and emergency work are calculated from these records.",
+    "Every KPI is shown against its target, in the same colours: met, close or missed."],
+};
+const CARDS = {
+  "03-who": { lead: "One system, for every role.", says: [
+    "Technicians do their work on the phone: checklists, hours and spare parts.",
+    "Supervisors accept requests, assign the work, sign off lock-out and permits, and close the jobs.",
+    "Planners plan preventive work, schedules and shutdowns.", "Engineers follow condition monitoring and root cause analysis.",
+    "The store looks after the spare parts.", "Production records its shift reports, daily logs and KPIs.",
+    "And managers follow the KPIs and reports, and give the approvals."] },
+  "04-modules": { lead: "The modules follow the menu.", says: [
+    "Daily work: my work, scan QR, the offline field round, work requests and work orders.",
+    "Production: the dashboard, reports, daily logs, KPIs, insights and safety incidents.",
+    "Maintenance: preventive plans, lubrication, condition monitoring, shutdowns and root cause analysis.",
+    "Then assets, spare parts, and shifts with their handover.", "And finally: KPIs, reports, and administration."] },
+};
+require("../_common").applySays(module.exports, SAYS, CARDS);

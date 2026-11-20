@@ -21,3 +21,14 @@ const confirm = (s) => async () => { await s.page.getByTestId("transition-confir
 const title = (id, t, sub, narration) => ({ id, layout: "title", title: t, subtitle: sub, narration });
 
 module.exports = { pick, choose, confirm, title };
+
+/** Attach the voice to a video: SAYS[scene] = one sentence per filmed step; CARDS[scene] = { lead, says: one per card }. */
+function applySays(def, SAYS, CARDS = {}) {
+  for (const s of def.scenes) {
+    if (SAYS[s.id]) { s.says = SAYS[s.id]; delete s.narration; }
+    const c = CARDS[s.id];
+    if (c) { s.lead = c.lead; (s.cards || s.groups).forEach((x, k) => { x.say = c.says[k]; }); delete s.narration; }
+  }
+  return def;
+}
+module.exports.applySays = applySays;

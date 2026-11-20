@@ -25,7 +25,7 @@ const BLOCKLIST = ["SKF", "ABB", "Flender", "Atlas Copco", "Mobil", "Mobilgear",
 // data are not changed) they are shown as neutral sample names, in the style the demo already uses ("Line builder (sample)").
 // Longest first. The blocklist check still runs after this, so a name missing here stops the capture.
 const MASK = [
-  ["Mobilgear 600 XP 220", "Gear oil VG 220 (sample)"], ["LGEP 2", "EP2 grease (sample)"], ["Bosch Rexroth", "Hydraulics maker (sample)"],
+  ["Mobilgear 600 XP 220", "Gear oil VG 220 (sample)"], ["LGEP 2", "grease (sample)"], ["Bosch Rexroth", "Hydraulics maker (sample)"],
   ["Atlas Copco", "Compressor maker (sample)"], ["SKF-SA", "Bearing supplier (sample)"], ["SKF", "Bearing maker (sample)"],
   ["Mobil", "Lubricant maker (sample)"], ["Flender", "Gearbox maker (sample)"], ["ABB", "Electrical maker (sample)"],
   ["Aerzen", "Blower maker (sample)"], ["Imran Khan", "Imran K. (sample)"], ["Valmet", "Line builder (sample)"], ["Andritz", "Mill maker (sample)"], ["Kadant", "Equipment maker (sample)"],
@@ -100,7 +100,7 @@ class Session {
   async view(caption, opts = {}) {
     const box = opts.focus ? await this.box(opts.focus) : null;
     await this.settle(opts.wait ?? 300);
-    this.rec.add({ kind: "view", device: this.device, vp: this.vp(), imgs: [await this.snap("view")], box, caption, zoom: opts.zoom ?? null, weight: opts.weight ?? 1 });
+    this.rec.add({ kind: "view", device: this.device, vp: this.vp(), imgs: [await this.snap("view")], box, caption, zoom: opts.zoom ?? null, weight: opts.weight ?? 1, say: opts.say ?? null });
   }
 
   /** Click an element: the "before" screen with its box, then the screen after the click. */
@@ -111,7 +111,7 @@ class Session {
     await this.settle(opts.wait ?? 900);
     if (opts.after) await opts.after();
     const after = await this.snap("after");
-    this.rec.add({ kind: "click", device: this.device, vp: this.vp(), imgs: [before, after], box, caption, zoom: opts.zoom ?? null, weight: opts.weight ?? 1 });
+    this.rec.add({ kind: "click", device: this.device, vp: this.vp(), imgs: [before, after], box, caption, zoom: opts.zoom ?? null, weight: opts.weight ?? 1, say: opts.say ?? null });
   }
 
   /** Type into a field; a few in-between screenshots show the text appearing. */
@@ -126,7 +126,7 @@ class Session {
       imgs.push(await this.snap(`type${i}`));
     }
     if (opts.after) { await opts.after(); await this.settle(500); imgs.push(await this.snap("typed")); }
-    this.rec.add({ kind: "type", device: this.device, vp: this.vp(), imgs, box, caption, zoom: opts.zoom ?? null, weight: opts.weight ?? 1 });
+    this.rec.add({ kind: "type", device: this.device, vp: this.vp(), imgs, box, caption, zoom: opts.zoom ?? null, weight: opts.weight ?? 1, say: opts.say ?? null });
   }
 
   /** Do something without filming it (e.g. fill fields already shown, or prepare data). */

@@ -167,3 +167,34 @@ module.exports = {
       "That is the full life of a work order. Next: how technicians do the same work on the phone, even without internet."),
   ],
 };
+
+// ---- Voice, one sentence per filmed step or card ----
+require("../_common").applySays(module.exports, {
+  "03-requests": ["Work requests are how anyone reports a problem. The supervisor sees the new ones first, with breakdowns marked.",
+    "Open a request to see the equipment and what was reported.",
+    "Choose the type and the priority, and accept it. A request can also be rejected, with a reason.",
+    "Accepting creates the work order."],
+  "04-list": ["The work order list is the planner's desk.", "Search by number, title or equipment.",
+    "Filter by status and type, or show only open or overdue work.",
+    "Tick several work orders to assign, close or cancel them together.",
+    "From here you also import a work plan from Excel, and export the list."],
+  "05-triage": ["A new work order starts in triage.", "On the details tab, the planner sets dates, estimated hours, priority and supervisor.",
+    "And the safety needs: lock-out tag-out, a permit, or a test after the work.", "Then it is sent for approval."],
+  "06-approve": ["The supervisor approves it.", "Then chooses the technician.",
+    "If the technician is on leave, or already booked at the same time, the app says so before assigning."],
+  "07-execute": ["With the lock-out signed off, the technician starts the work.", "On the labor tab, they book their own hours.",
+    "The hours are costed at once.", "On the materials tab, they record the spare parts fitted.",
+    "Search the part by code or description.", "The part and its cost are on the work order.",
+    "Then the findings, the root cause and the downtime.", "The lock is removed, and the work is sent for review."],
+  "08-review": ["The supervisor tries to complete it. Refused: the message says exactly what is missing, here the failure codes.",
+    "So the problem, cause and remedy codes are added.", "Now it can be completed.", "And closed.",
+    "The history keeps every step, with who and when.", "Details shows the hours, the parts and the total cost.",
+    "And the PDF report gives the whole work order on one document."],
+}, {
+  "02-flow": { lead: "Every job follows the same path, and the app only shows the buttons your role may use.", says: [
+    "A request is reported, and the supervisor accepts or rejects it.", "The new work order starts in triage, where it is checked and planned.",
+    "The supervisor approves it and assigns the technicians.", "The planner sets dates, hours and parts.",
+    "Work starts, but only after lock-out and the permit are signed off, when they are required.",
+    "When the technician is done, it waits for review.", "Completed means codes, root cause and tests are in place.",
+    "Closed is final, and the job counts in the KPIs."] },
+});
