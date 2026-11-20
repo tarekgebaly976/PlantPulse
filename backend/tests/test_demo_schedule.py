@@ -29,7 +29,7 @@ def test_demo_has_a_week_to_schedule():
     assert reasons["Safety guard inspection"] == "no estimated hours"
     assert "longer than one shift" in reasons["Pump overhaul"]
     assert "HV certificate" in reasons["Medium-voltage breaker test"]
-    assert len(v["windows"]) == 1
+    assert len(v["windows"]) == 1 and not v["windows"][0]["asset_code"].startswith("ELE-")  # on a real line
     # Line-stop work sits on the day of the window; Friday and Saturday are work days for some.
     stop_day = (nxt + timedelta(days=2)).isoformat()
     assert all(i["work_date"] == stop_day for i in placed if i["work_order"]["stop"])

@@ -107,7 +107,12 @@ def add_demo_schedule(db: Session, plant: Plant, users: dict[str, User]) -> dict
     )
     if not lines:
         return {"skills": len(skills), "roster": entries, "work_orders": 0}
-    main = lines[0]
+    # The main line: the one with the most equipment under it (not e.g. a control system that is also a top-level line).
+    children = {a.id: 0 for a in lines}
+    for pid in db.execute(select(Asset.parent_id).where(Asset.plant_id == plant.id, Asset.parent_id.in_(list(children)))).scalars():
+        if pid is not None:
+            children[pid] += 1
+    main = max(lines, key=lambda a: (children[a.id], a.criticality.value == "A", a.code))
     units = list(
         db.execute(select(Asset).where(Asset.plant_id == plant.id, Asset.parent_id == main.id).order_by(Asset.code)).scalars()
     ) or [main]
