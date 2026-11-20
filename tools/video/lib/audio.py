@@ -59,7 +59,13 @@ def loudnorm(src: Path, dst: Path, pre: str) -> None:
     """Two-pass EBU R128 loudness normalisation to -16 LUFS, true peak -1.5 dBTP."""
     target = f"loudnorm=I={LUFS}:TP=-1.5:LRA=11"
     log = ffmpeg("-i", str(src), "-af", f"{pre},{target}:print_format=json", "-f", "null", "-")
-    m = json.loads(log[log.rindex("{"): log.rindex("}") + 1])
+    try:
+        m = json.loads(log[log.rindex("{"): log.rindex("}") + 1])
+        if "inf" in str(m["input_i"]):
+            raise ValueError
+    except (ValueError, KeyError):  # very short clip: one-pass normalisation
+        ffmpeg("-i", str(src), "-af", f"{pre},apad=pad_dur=0.2,{target}", "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le", str(dst))
+        return
     second = (f"{target}:measured_I={m['input_i']}:measured_TP={m['input_tp']}:measured_LRA={m['input_lra']}"
               f":measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true")
     ffmpeg("-i", str(src), "-af", f"{pre},{second}", "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le", str(dst))
