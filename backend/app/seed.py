@@ -418,11 +418,14 @@ def seed_demo(password: str, profile: str = "paper") -> None:
         from app.demo_rca import add_demo_rcas
 
         add_demo_rcas(db, plant)
+        from app.demo_schedule import add_demo_schedule
+
+        sched = add_demo_schedule(db, plant, users)
         from app.services.kpi_targets import add_demo_targets
 
         add_demo_targets(db, plant)
     print(
         f"Demo activity: {activity['history']} past work orders, {activity['open']} open, {activity['requests']} new requests, "
-        f"{activity['lube_overdue']} overdue lubrication tasks"
+        f"{activity['lube_overdue']} overdue lubrication tasks; weekly schedule: {sched['skills']} skills, {sched['roster']} roster days, {sched['work_orders']} work orders for next week"
     )
     print(f"Demo data loaded ({profile} plant): organization DEMO, plant DMO. Users: " + ", ".join(e for e, *_ in USERS))
