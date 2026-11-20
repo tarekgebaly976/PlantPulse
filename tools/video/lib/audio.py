@@ -39,14 +39,13 @@ SAY = [
 CLEAN_REC = ("highpass=f=80,afftdn=nf=-25,"
              "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.15,"
              "areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.25,areverse")
-CLEAN_TTS = ("silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.1,"
-             "areverse,silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.2,areverse")
+CLEAN_TTS = "anull"  # the TTS voice has almost no leading or trailing silence
 
 
 def ffmpeg(*args: str) -> str:
     for attempt in range(3):  # a rare ffmpeg hang is retried rather than blocking the whole run
         try:
-            r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", *args], capture_output=True, text=True, timeout=40)
+            r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", *args], capture_output=True, text=True, timeout=300)
         except subprocess.TimeoutExpired:
             continue
         if r.returncode != 0:

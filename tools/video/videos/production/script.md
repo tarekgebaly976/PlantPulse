@@ -1,0 +1,16 @@
+# PlantPulse – The production module
+
+| Scene | Shown | Narration (one line per step) |
+|---|---|---|
+| 01-title | title | The production module. Production records its days, stops, quality and safety in the same system as maintenance, so both sides see the same truth. |
+| 02-how | cards | From a production day to an action.<br>Setup describes the plant: areas, lines, products, loss categories, KPIs and alert rules.<br>Each day, each line gets a report: shifts, runs, stops, reels and quality.<br>A breakdown stop can raise a maintenance work request directly.<br>The supervisor submits the day, and the manager confirms and locks it.<br>Utilities and stock preparation keep their own daily logs.<br>KPIs like OEE, production and quality are calculated against targets.<br>Insights spot drifts and repeated losses, and turn them into actions.<br>And safety incidents and safety rates are kept in one register. |
+| 03-dashboard | App (desktop) – 1 · Dashboard | The production dashboard shows every area of the mill: its status, what is off target, and its incidents.<br>Every KPI tile shows the result, the target and the trend. The production manager can customise the layout for everyone.<br>Choose the period: seven, thirty or ninety days, for the whole mill or one area. |
+| 04-report | App (desktop) – 2 · Daily report | The daily report keeps one line per production day: output, quality, run time, OEE, breaks and downtime, with the month to date on top.<br>Open a day. The supervisor fills it in during the day: shift production and machine runs.<br>Every stop and sheet break, with its time, section and responsible discipline. A breakdown stop can raise a maintenance work request with one click.<br>The reels, with gross, net, reject and grades.<br>And the quality lines: rejects and downgrades with their defect. Totals and OEE are calculated. |
+| 05-confirm | App (desktop) – 3 · Submit & confirm | When the day is over, the supervisor submits it to the manager, who can still correct it.<br>The manager confirms and locks it, or returns it to draft. Reopening a confirmed day makes a new revision, with the reason kept.<br>Utilities, stock preparation and checks have their own daily log forms, with totals and warnings calculated. |
+| 06-kpis | App (desktop) – 4 · KPIs & insights | Production KPIs are worked out from the reports and logs, each against its target, for yesterday, the last seven days or the month.<br>Production insights compare the last week with the weeks before, using alert rules.<br>Each insight, like a rising reject rate or a repeated loss, comes with an action and an owner. |
+| 08-safety | App (desktop) – 5 · Safety | One safety register for the whole plant: days without a lost-time incident, and the rates per million hours worked.<br>Incidents are reported here or from the shift logs, and followed up with actions.<br>And production setup guides the configuration step by step: areas, lines, products, loss categories, KPIs, quality defects and daily log forms. |
+| 09-end | title | That is the production module. To finish: how PlantPulse closes the loop, with Plan, Do, Check, Act. |
+
+441 words, about 176 s of voice at a calm pace.
+
+Own recordings: voice/production/<scene>.wav (e.g. voice/production/01-title.wav) replace the voice of that scene.
