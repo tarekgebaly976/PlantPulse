@@ -46,7 +46,7 @@ CLEAN_TTS = ("silenceremove=start_periods=1:start_threshold=-50dB:start_silence=
 def ffmpeg(*args: str) -> str:
     for attempt in range(3):  # a rare ffmpeg hang is retried rather than blocking the whole run
         try:
-            r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", *args], capture_output=True, text=True, timeout=120)
+            r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", *args], capture_output=True, text=True, timeout=40)
         except subprocess.TimeoutExpired:
             continue
         if r.returncode != 0:
@@ -68,7 +68,10 @@ def loudnorm(src: Path, dst: Path, pre: str) -> None:
         return
     second = (f"{target}:measured_I={m['input_i']}:measured_TP={m['input_tp']}:measured_LRA={m['input_lra']}"
               f":measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true")
-    ffmpeg("-i", str(src), "-af", f"{pre},{second}", "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le", str(dst))
+    try:
+        ffmpeg("-i", str(src), "-af", f"{pre},{second}", "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le", str(dst))
+    except RuntimeError:  # rare hang of the linear pass on a short clip: one-pass instead
+        ffmpeg("-i", str(src), "-af", f"{pre},apad=pad_dur=0.2,{target}", "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le", str(dst))
 
 
 def duration(p: Path) -> float:
