@@ -29,7 +29,7 @@ export function textMatch(q: string, ...fields: (string | number | null | undefi
 export function SearchBox({ value, onChange, placeholder, w = 260 }: { value: string; onChange: (v: string) => void; placeholder?: string; w?: number | string }) {
   const { t } = useTranslation();
   return (
-    <TextInput w={w} value={value} onChange={(e) => onChange(e.currentTarget.value)} placeholder={placeholder ?? t("common.search")} aria-label={t("common.search")}
+    <TextInput w={w} maw="100%" value={value} onChange={(e) => onChange(e.currentTarget.value)} placeholder={placeholder ?? t("common.search")} aria-label={t("common.search")}
       leftSection={<IconSearch size={16} />} rightSection={value ? <CloseButton size="sm" aria-label="clear" onClick={() => onChange("")} /> : null} />
   );
 }

@@ -68,7 +68,8 @@ body { background: var(--mantine-color-body); -webkit-font-smoothing: antialiase
 .pp-bottom-nav .pp-fab span.pp-fab-circle { width: 56px; height: 56px; border-radius: 50%; background: var(--mantine-color-red-6); color: #fff; display: flex; align-items: center; justify-content: center;
   box-shadow: 0 6px 16px rgba(224, 49, 49, .35); border: 4px solid var(--pp-surface); }
 @media (max-width: 61.99em) {
-  .pp-main.pp-has-bottom-nav { padding-bottom: calc(84px + env(safe-area-inset-bottom)) !important; }
+  /* room for the bottom bar and its raised + button (82 px), plus a clear gap so the last control is not next to it */
+  .pp-main.pp-has-bottom-nav { padding-bottom: calc(104px + env(safe-area-inset-bottom)) !important; }
   body:has(.pp-bottom-nav) [data-testid="instance-banner"] { bottom: calc(76px + env(safe-area-inset-bottom)) !important; }
   /* Work order actions stay at hand above the bottom bar */
   .pp-actions { position: fixed; inset-inline: 0; bottom: calc(64px + env(safe-area-inset-bottom)); z-index: 99; background: var(--pp-actions-bg); backdrop-filter: blur(6px);
@@ -104,3 +105,36 @@ body { background: var(--mantine-color-body); -webkit-font-smoothing: antialiase
 @page ops { size: A4 landscape; margin: 8mm; }
 @media print { .ops-sheet { page: ops; font-size: 9.5px; } }
 
+
+/* ---- Phones and tablets: no page wider than the screen, 44 px touch targets, text from 12 px ---- */
+/* Label around a row checkbox: no box of its own on a computer (the table looks as before), 44 px touch area below. */
+.pp-hit44 { display: contents; }
+/* Card view (phones): a value never widens its column; long words break inside the card. */
+.pp-card-grid > div { min-width: 0; overflow-wrap: anywhere; }
+.pp-card-grid > div > * { max-width: 100%; }
+@media (max-width: 61.99em) {
+  /* Top bar: menu, search, notifications and account get a 44 x 44 touch area; the icons keep their size. */
+  .pp-header .mantine-Burger-root { min-width: 44px; min-height: 44px; }
+  .pp-header .mantine-ActionIcon-root { --ai-size-md: 44px; --ai-size-sm: 44px; }
+  /* Room for the 44 px targets and the plant selector at 360 px: tighter side padding and gaps in the top bar only. */
+  .pp-header > .mantine-Group-root { padding-inline: 8px !important; }
+  .pp-header .pp-hdr-left { gap: 6px !important; }
+  .pp-header .pp-hdr-right { gap: 2px !important; }
+  .pp-header .pp-hdr-right .mantine-Select-root { flex: none; }
+  /* A row of controls that cannot wrap scrolls inside its own box instead of widening the page. */
+  .pp-scroll-x { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+  /* Invisible 44 px touch area around a small control (negative margin: the layout does not move). */
+  .pp-hit44 { display: inline-flex; cursor: pointer; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; margin: -10px; flex: none; }
+  .pp-hit44 .mantine-Checkbox-root { --checkbox-size-sm: 24px; }
+  /* Buttons and page numbers keep their look; an invisible strip above and below makes the touch area 44 px high. */
+  .mantine-Button-root::after, .mantine-Pagination-control::after, .mantine-Tabs-tab::after { content: ""; position: absolute; inset-inline: 0; top: min(0px, calc((100% - 44px) / 2)); bottom: min(0px, calc((100% - 44px) / 2)); }
+  .mantine-Button-root { overflow: visible; } /* the label keeps its own ellipsis */
+  .mantine-Pagination-control, .mantine-Switch-track, .mantine-Switch-label { position: relative; }
+  .mantine-Switch-track::after, .mantine-Switch-label::after { content: ""; position: absolute; inset-inline: 0; top: -12px; bottom: -12px; }
+  /* Badges (status, priority, codes) readable on a phone: 12 px text; the menu and the bottom bar keep their own style. */
+  body .mantine-Badge-root:not(.pp-nav *, .pp-bottom-nav *) {
+    --badge-fz-xs: 12px; --badge-fz-sm: 12px; --badge-fz-md: 12px;
+    --badge-height-xs: 20px; --badge-height-sm: 22px; --badge-height-md: 22px;
+  }
+  body .mantine-Pill-root { --pill-fz-xs: 12px; --pill-height-xs: 22px; }
+}

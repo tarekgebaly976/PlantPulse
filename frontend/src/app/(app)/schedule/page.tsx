@@ -150,7 +150,7 @@ function Schedule() {
               data={[{ value: "", label: t("sched.wholePlant") }, ...depts.map((d) => ({ value: d.id, label: deptName(d.id) }))]} />
             <TextInput type="date" label={t("sched.planStart")} value={week} w={170}
               onChange={(e) => /^\d{4}-\d{2}-\d{2}$/.test(e.currentTarget.value) && setWeek(e.currentTarget.value, askDays)} />
-            <div>
+            <div className="pp-scroll-x">
               <Text size="sm" fw={500} mb={2}>{t("sched.planDays")}</Text>
               <SegmentedControl value={PRESETS.includes(want) ? String(want) : "x"} onChange={(x) => x !== "x" && setWeek(week, Number(x))}
                 data={[...PRESETS.map((d) => ({ value: String(d), label: d === 7 ? t("sched.week7") : t("sched.daysN", { n: d }) })), { value: "x", label: t("sched.custom") }]} />

@@ -112,7 +112,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
     <AppShell header={{ height: 60 }} navbar={{ width: 260, breakpoint: "md", collapsed: { mobile: !opened } }} padding="md">
       <AppShell.Header className="pp-header">
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-          <Group gap="sm" wrap="nowrap">
+          <Group gap="sm" wrap="nowrap" className="pp-hdr-left">
             <Burger opened={opened} onClick={toggle} hiddenFrom="md" size="sm" aria-label="menu" />
             <Link href="/" style={{ textDecoration: "none", color: "inherit" }}><Group gap={10} wrap="nowrap">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -123,7 +123,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
               </Stack>
             </Group></Link>
           </Group>
-          <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+          <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }} className="pp-hdr-right">
             <Tooltip label={net.online ? t("app.online") : t("field.offlineHint")}>
               {net.online ? (
                 <Badge data-testid="net-status" color="teal" variant="light" leftSection={<IconWifi size={14} />}>

@@ -142,7 +142,7 @@ function Users() {
           <Text size="sm" fw={500}>{m.user.full_name}</Text><Text size="xs" c="dimmed">{m.user.email}</Text>
           <Button size="compact-xs" variant="light" mt={4} onClick={() => setEdit(m)}>{t("common.edit")}</Button></div> },
         { key: "r", label: t("common.role"), render: (m) => <Select size="xs" w={190} data={roleOpts} value={m.role_code} onChange={(v) => v && setRole.mutate({ id: m.user.id, role: v })} /> },
-        { key: "d", label: t("admin.departments"), render: (m) => <div style={{ width: 190 }}><DeptMultiSelect label="" compact value={deptIds(m)}
+        { key: "d", label: t("admin.departments"), render: (m) => <div style={{ width: 190, maxWidth: "100%" }}><DeptMultiSelect label="" compact value={deptIds(m)}
           onChange={(v) => setDept.mutate({ id: m.user.id, depts: v })} placeholder={t("admin.allDepts")} /></div> },
         { key: "t", label: t("trade.label"), render: (m) => <TradeCell key={`${m.user.id}:${m.user.trade ?? ""}`} m={m} /> },
         { key: "a", label: t("common.active"), render: (m) => <Switch checked={m.is_active} onChange={() => toggle.mutate(m)} aria-label="active" /> },

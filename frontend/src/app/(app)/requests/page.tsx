@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
-import { AssetPicker, DataTable, PageHeader, Pager, StatusBadge } from "@/components/ui";
+import { AssetPicker, DataTable, PageHeader, Pager, StatusBadge, TapCheckbox } from "@/components/ui";
 import { post } from "@/lib/api";
 import { fmtDate, useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
@@ -88,7 +88,7 @@ function List() {
       <DataTable rows={q.data?.items} onRow={(r) => router.push(`/requests/${r.id}`)} columns={[
         ...(canBulk ? [{ key: "sel", label: <Checkbox aria-label="select all" checked={items.some((r) => r.status === "submitted") && items.filter((r) => r.status === "submitted").every((r) => sel.includes(r.id))}
           onChange={(e) => { const ids = items.filter((r) => r.status === "submitted").map((r) => r.id); setSel(e.currentTarget.checked ? [...new Set([...sel, ...ids])] : sel.filter((x) => !ids.includes(x))); }} />,
-          render: (r: WReq) => r.status === "submitted" ? <Checkbox aria-label="select" checked={sel.includes(r.id)} onClick={(e) => e.stopPropagation()}
+          render: (r: WReq) => r.status === "submitted" ? <TapCheckbox aria-label="select" checked={sel.includes(r.id)} onClick={(e) => e.stopPropagation()}
             onChange={(e) => setSel(e.currentTarget.checked ? [...sel, r.id] : sel.filter((x) => x !== r.id))} /> : null }] : []),
         { key: "n", label: "#", render: (r) => <span className="mono">{r.number}</span> },
         { key: "t", label: t("wo.title"), render: (r) => <>{r.is_breakdown && "🛑 "}{r.title}</> },

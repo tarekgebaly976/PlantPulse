@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
 import { PlanImport } from "@/components/PlanImport";
 import { RemovePlans } from "@/components/RemovePlans";
-import { AssetPicker, DataTable, PageHeader, Pager, StatusBadge, TradeInput } from "@/components/ui";
+import { AssetPicker, DataTable, PageHeader, Pager, StatusBadge, TradeInput, TapCheckbox } from "@/components/ui";
 import { download, post, put } from "@/lib/api";
 import { fmtDate, useAssetCodes, useMut, useQ } from "@/lib/hooks";
 import { RequiredSkills } from "@/components/Skills";
@@ -186,7 +186,7 @@ function Waiting({ amap, search }: { amap: Map<string, string>; search?: string 
       <DataTable rows={items} rowKey={(o) => o.id} columns={[
         ...(canRel ? [{ key: "sel", label: <Checkbox aria-label="select all" checked={!!items.length && items.every((o) => sel.includes(o.id))}
           onChange={(e) => { const ids = items.map((o) => o.id); setSel(e.currentTarget.checked ? [...new Set([...sel, ...ids])] : sel.filter((x) => !ids.includes(x))); }} />,
-          render: (o: Occ) => <Checkbox aria-label="select" checked={sel.includes(o.id)} onChange={(e) => setSel(e.currentTarget.checked ? [...sel, o.id] : sel.filter((x) => x !== o.id))} /> }] : []),
+          render: (o: Occ) => <TapCheckbox aria-label="select" checked={sel.includes(o.id)} onChange={(e) => setSel(e.currentTarget.checked ? [...sel, o.id] : sel.filter((x) => x !== o.id))} /> }] : []),
         { key: "p", label: t("pm.plans"), render: (o) => o.plan_code },
         { key: "a", label: t("common.asset"), render: (o) => (o.asset_id ? codes.get(o.asset_id) ?? amap.get(o.asset_id) : "") },
         { key: "d", label: t("common.dueDate"), render: (o) => o.due_date },

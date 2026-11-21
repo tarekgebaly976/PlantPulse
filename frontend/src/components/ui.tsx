@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionIcon, Autocomplete, Badge, Button, Center, Checkbox, CloseButton, Group, Loader, MultiSelect, Pagination, Paper, ScrollArea, Select, Skeleton, Stack, Table, Text, ThemeIcon, Title, Tooltip, UnstyledButton, type BadgeProps } from "@mantine/core";
+import { ActionIcon, Autocomplete, Badge, Button, Center, Checkbox, CloseButton, Group, Loader, MultiSelect, Pagination, Paper, ScrollArea, Select, Skeleton, Stack, Table, Text, ThemeIcon, Title, Tooltip, UnstyledButton, type BadgeProps, type CheckboxProps } from "@mantine/core";
 import { Modal } from "@/components/Modal";
 import { useDebouncedValue, useMediaQuery } from "@mantine/hooks";
 import { IconChevronDown, IconChevronRight, IconInbox, IconSitemap } from "@tabler/icons-react";
@@ -85,6 +85,16 @@ export function ErrorText({ error }: { error: unknown }) {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}/;
 const keepTogether = (v: ReactNode) => (typeof v === "string" && DATE_RE.test(v) ? <span className="nowrap">{v}</span> : v);
 
+/** Row checkbox. On phones and tablets it gets a 44 px touch area (gloves) and a larger box; the tap selects the row
+ * and does not open it. Desktop: an ordinary checkbox. */
+export function TapCheckbox(props: CheckboxProps) {
+  return (
+    <label className="pp-hit44" onClick={(e) => e.stopPropagation()}>
+      <Checkbox {...props} onClick={(e) => { e.stopPropagation(); props.onClick?.(e); }} />
+    </label>
+  );
+}
+
 export interface Column<T> { key: string; label: ReactNode; render: (row: T) => ReactNode; hideOnMobile?: boolean }
 
 export function DataTable<T extends object>({ rows, columns, onRow, empty, rowKey, selected, onSelect }: {
@@ -112,7 +122,7 @@ export function DataTable<T extends object>({ rows, columns, onRow, empty, rowKe
             <Paper key={id} withBorder p="sm" className={onRow ? "pp-card-row pp-clickable" : "pp-card-row"} onClick={onRow ? () => onRow(r) : undefined}>
               <Group justify="space-between" wrap="nowrap" gap="xs" mb={rest.length ? 6 : 0}>
                 <Text fw={700} size="sm" style={{ minWidth: 0 }} component="div">{head ? keepTogether(head.render(r)) : null}</Text>
-                {onSelect && <Checkbox aria-label="select" checked={sel.has(id)} onChange={() => toggle(id)} onClick={(e) => e.stopPropagation()} />}
+                {onSelect && <TapCheckbox aria-label="select" checked={sel.has(id)} onChange={() => toggle(id)} />}
               </Group>
               <div className="pp-card-grid">
                 {rest.map((c) => (

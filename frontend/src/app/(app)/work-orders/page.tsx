@@ -8,7 +8,7 @@ import { Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
 import { PlanImport } from "@/components/PlanImport";
-import { DataTable, PageHeader, Pager, StatusBadge, UserPicker } from "@/components/ui";
+import { DataTable, PageHeader, Pager, StatusBadge, UserPicker, TapCheckbox } from "@/components/ui";
 import { download, post } from "@/lib/api";
 import { fmtDate, fmtMoney, useAssetCodes, useMut, useQ } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
@@ -64,7 +64,7 @@ function List() {
         ...(canSelect ? [{ key: "sel", label: <Checkbox aria-label="select all" checked={!!data.data?.items.length && data.data.items.every((w) => sel.includes(w.id))}
           onChange={(e) => { const ids = (data.data?.items ?? []).map((w) => w.id); setSel(e.currentTarget.checked ? [...new Set([...sel, ...ids])] : sel.filter((x) => !ids.includes(x))); }} />,
           render: (w: WorkOrder) => (
-          <Checkbox aria-label="select" checked={sel.includes(w.id)} onClick={(e) => e.stopPropagation()}
+          <TapCheckbox aria-label="select" checked={sel.includes(w.id)} onClick={(e) => e.stopPropagation()}
             onChange={(e) => setSel(e.currentTarget.checked ? [...sel, w.id] : sel.filter((x) => x !== w.id))} />) }] : []),
         { key: "n", label: t("wo.number"), render: (w) => <span className="mono">{w.number}</span> },
         { key: "t", label: t("wo.title"), render: (w) => w.title },
