@@ -43,10 +43,18 @@ for (const lang of ["en", "ar"] as const) {
               header: ['.pp-header button[aria-label="menu"]', '[data-testid="global-search"]', '.pp-header a[href="/notifications"]', '[data-testid="account-menu"]'].map(box),
               bottomNav: box('[data-testid="bottom-nav"]'),
               rowCheckbox: box('[data-testid="table-cards"] label.pp-hit44'),
+              // card view: a field (input, select) that sticks out of its column and covers the next one
+              cardFieldOut: [...document.querySelectorAll(".pp-card-grid > div")].flatMap((cell) => {
+                const c = cell.getBoundingClientRect();
+                return [...cell.querySelectorAll(".mantine-InputWrapper-root, .mantine-Switch-root")]
+                  .filter((f) => { const r = f.getBoundingClientRect(); return r.width > 0 && (r.right > c.right + 1 || r.left < c.left - 1); })
+                  .map((f) => (cell.previousElementSibling?.textContent ?? f.className).slice(0, 30));
+              }),
             };
           });
           // No page wider than the screen (mobile browsers would zoom out and push the bars off screen).
           expect(m.pageWidth, `${path} page width`).toBeLessThanOrEqual(w);
+          expect(m.cardFieldOut, `${path} card fields inside their column`).toEqual([]);
           for (const b of m.header.filter((x) => x !== null)) {
             expect(b.left, `${path} header control on screen`).toBeGreaterThanOrEqual(0);
             expect(b.right, `${path} header control on screen`).toBeLessThanOrEqual(w);

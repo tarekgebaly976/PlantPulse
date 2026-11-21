@@ -111,7 +111,7 @@ body { background: var(--mantine-color-body); -webkit-font-smoothing: antialiase
 .pp-hit44 { display: contents; }
 /* Card view (phones): a value never widens its column; long words break inside the card. */
 .pp-card-grid > div { min-width: 0; overflow-wrap: anywhere; }
-.pp-card-grid > div > * { max-width: 100%; }
+.pp-card-grid > div > *, .pp-card-grid .mantine-InputWrapper-root { max-width: 100%; }
 @media (max-width: 61.99em) {
   /* Top bar: menu, search, notifications and account get a 44 x 44 touch area; the icons keep their size. */
   .pp-header .mantine-Burger-root { min-width: 44px; min-height: 44px; }
