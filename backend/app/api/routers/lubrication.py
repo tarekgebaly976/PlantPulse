@@ -24,7 +24,7 @@ router = APIRouter(prefix="/lubrication", tags=["lubrication"])
 
 
 class LubricantIn(In):
-    code: str
+    code: str = ""  # blank: made from the name
     manufacturer: str
     product: str
     kind: str = Field(pattern="^(oil|grease)$")
@@ -128,7 +128,7 @@ def list_alternatives(
 
 
 class RouteIn(In):
-    code: str
+    code: str = ""  # blank: made from the name
     name: str
     department_id: uuid.UUID
     lead_days: int = Field(2, ge=0, le=60)
@@ -186,7 +186,7 @@ def generate(
 
 
 class PointIn(In):
-    code: str
+    code: str = ""  # blank: made from the name
     asset_id: uuid.UUID
     component: str | None = None
     location: str | None = None

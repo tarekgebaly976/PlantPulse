@@ -141,7 +141,7 @@ def preview_daily_summary(
 
 
 class DepartmentIn(In):
-    code: str = Field(min_length=1, max_length=32)
+    code: str = Field("", max_length=32)  # blank: made from the name
     name: str
     name_ar: str | None = None
     type: DepartmentType
@@ -825,7 +825,7 @@ def new_plant(body: PlantCreate, ctx: Ctx = Depends(require("plant.admin")), db:
 # ---------- failure codes ----------
 class FailureCodeIn(In):
     kind: FailureCodeKind
-    code: str = Field(min_length=1, max_length=32)
+    code: str = Field("", max_length=32)  # blank: made from the name
     description: str
     description_ar: str | None = None
     equipment_type: str | None = Field(None, max_length=60)

@@ -110,7 +110,7 @@ function Inventory() {
       </Tabs>
       <Modal opened={modal === "part"} onClose={close} title={t("inv.newPart")} size="lg">
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          <TextInput label={t("common.code")} value={pf.code} onChange={(e) => setPf({ ...pf, code: e.currentTarget.value })} />
+          <TextInput label={t("common.code")} placeholder={t("common.autoCode")} value={pf.code} onChange={(e) => setPf({ ...pf, code: e.currentTarget.value })} />
           <TextInput label={t("common.description")} value={pf.description} onChange={(e) => setPf({ ...pf, description: e.currentTarget.value })} />
           <TextInput label="OEM P/N" value={pf.oem_part_number} onChange={(e) => setPf({ ...pf, oem_part_number: e.currentTarget.value })} />
           <TextInput label="Manufacturer" value={pf.manufacturer} onChange={(e) => setPf({ ...pf, manufacturer: e.currentTarget.value })} />
@@ -123,7 +123,7 @@ function Inventory() {
           <NumberInput label="Lead time (days)" min={0} value={pf.lead_time_days} onChange={(v) => setPf({ ...pf, lead_time_days: v })} />
           <Checkbox mt="lg" label={t("inv.critical")} checked={pf.is_critical_spare} onChange={(e) => setPf({ ...pf, is_critical_spare: e.currentTarget.checked })} />
         </SimpleGrid>
-        <Button mt="md" disabled={!pf.code || !pf.description} onClick={() => createPart.mutate(undefined)}>{t("common.create")}</Button>
+        <Button mt="md" disabled={!pf.description} onClick={() => createPart.mutate(undefined)}>{t("common.create")}</Button>
       </Modal>
       <Modal opened={modal === "import"} onClose={close} title={t("inv.importTitle")} size="lg">
         <PartsImport onDone={close} />
@@ -157,9 +157,9 @@ function Inventory() {
       </Modal>
       <Modal opened={modal === "wh"} onClose={close} title={t("wo.warehouse")}>
         <Stack>
-          <TextInput label={t("common.code")} value={wh.code} onChange={(e) => setWh({ ...wh, code: e.currentTarget.value })} />
+          <TextInput label={t("common.code")} placeholder={t("common.autoCode")} value={wh.code} onChange={(e) => setWh({ ...wh, code: e.currentTarget.value })} />
           <TextInput label={t("common.name")} value={wh.name} onChange={(e) => setWh({ ...wh, name: e.currentTarget.value })} />
-          <Button disabled={!wh.code || !wh.name} onClick={() => createWh.mutate(undefined)}>{t("common.create")}</Button>
+          <Button disabled={!wh.name} onClick={() => createWh.mutate(undefined)}>{t("common.create")}</Button>
         </Stack>
       </Modal>
     </>

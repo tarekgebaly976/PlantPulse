@@ -36,7 +36,7 @@ function MachineModal({ form, onClose }: { form: MForm | null; onClose: () => vo
     <Modal opened onClose={onClose} title={f.id ? f.code : t("ops.set.newMachine")} size="lg">
       <Stack>
         <SimpleGrid cols={2}>
-          <TextInput label={t("ops.set.code")} required value={f.code} onChange={(e) => set({ code: e.currentTarget.value })} />
+          <TextInput label={t("ops.set.code")} placeholder={t("common.autoCode")} value={f.code} onChange={(e) => set({ code: e.currentTarget.value })} />
           <TextInput label={t("ops.set.name")} required value={f.name} onChange={(e) => set({ name: e.currentTarget.value })} />
         </SimpleGrid>
         <DeptSelect label={t("ops.set.dept")} value={f.department_id} onChange={(v) => set({ department_id: v })} />
@@ -65,7 +65,7 @@ function MachineModal({ form, onClose }: { form: MForm | null; onClose: () => vo
         ))}
         {f.shifts.length < 4 && <Button size="xs" variant="subtle" leftSection={<IconPlus size={14} />} onClick={() => set({ shifts: [...f.shifts, { code: "", name: "", start: "" }] })}>{t("ops.set.addShift")}</Button>}
         <Checkbox label={t("ops.set.active")} checked={f.is_active} onChange={(e) => set({ is_active: e.currentTarget.checked })} />
-        <Button loading={save.isPending} disabled={!f.code || !f.name || !f.department_id || !f.asset_id || f.shifts.some((s) => !s.code || !s.name || !s.start)} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
+        <Button loading={save.isPending} disabled={!f.name || !f.department_id || !f.asset_id || f.shifts.some((s) => !s.code || !s.name || !s.start)} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
       </Stack>
     </Modal>
   );
@@ -148,13 +148,13 @@ function DisciplineModal({ form, onClose }: { form: DForm | null; onClose: () =>
     <Modal opened onClose={onClose} title={t("ops.set.disciplines")}>
       <Stack>
         <SimpleGrid cols={2}>
-          <TextInput label={t("ops.set.code")} required value={f.code} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
+          <TextInput label={t("ops.set.code")} placeholder={t("common.autoCode")} value={f.code} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
           <NumberInput label={t("ops.set.sort")} min={0} value={f.sort} onChange={(v) => setF({ ...f, sort: v })} />
         </SimpleGrid>
         <TextInput label={t("ops.set.name")} required value={f.name} onChange={(e) => setF({ ...f, name: e.currentTarget.value })} />
         <Checkbox label={t("ops.set.maint")} description={t("ops.set.maintHint")} checked={f.maintenance} onChange={(e) => setF({ ...f, maintenance: e.currentTarget.checked })} />
         <Checkbox label={t("ops.set.active")} checked={f.is_active} onChange={(e) => setF({ ...f, is_active: e.currentTarget.checked })} />
-        <Button loading={save.isPending} disabled={!f.code || !f.name} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
+        <Button loading={save.isPending} disabled={!f.name} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
       </Stack>
     </Modal>
   );
@@ -202,7 +202,7 @@ function TemplateModal({ form, onClose }: { form: TForm | null; onClose: () => v
     <Modal opened onClose={onClose} title={t("logs.set.form")} size="lg">
       <Stack>
         <SimpleGrid cols={2}>
-          <TextInput label={t("ops.set.code")} required value={f.code} onChange={(e) => set({ code: e.currentTarget.value })} />
+          <TextInput label={t("ops.set.code")} placeholder={t("common.autoCode")} value={f.code} onChange={(e) => set({ code: e.currentTarget.value })} />
           <TextInput label={t("ops.set.name")} required value={f.name} onChange={(e) => set({ name: e.currentTarget.value })} />
         </SimpleGrid>
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
@@ -230,7 +230,7 @@ function TemplateModal({ form, onClose }: { form: TForm | null; onClose: () => v
         <Checkbox label={t("inc.formSetting")} checked={f.incidents} onChange={(e) => set({ incidents: e.currentTarget.checked })} />
         <Checkbox label={t("logs.set.inPm")} checked={f.in_pm_report} onChange={(e) => set({ in_pm_report: e.currentTarget.checked })} />
         <Checkbox label={t("ops.set.active")} checked={f.is_active} onChange={(e) => set({ is_active: e.currentTarget.checked })} />
-        <Button loading={save.isPending} disabled={!f.code || !f.name || !f.department_id || (f.frequency === "shift" && (!f.shifts.length || f.shifts.some((s) => !s.code || !s.name || !s.start)))} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
+        <Button loading={save.isPending} disabled={!f.name || !f.department_id || (f.frequency === "shift" && (!f.shifts.length || f.shifts.some((s) => !s.code || !s.name || !s.start)))} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
       </Stack>
     </Modal>
   );
@@ -290,7 +290,7 @@ function FieldModal({ tpl, form, onClose }: { tpl: LogTemplate; form: FForm | nu
           <NumberInput label={t("ops.set.sort")} min={0} value={f.sort} onChange={(v) => set({ sort: v })} />
           <Checkbox mt="lg" label={t("ops.set.active")} checked={f.is_active} onChange={(e) => set({ is_active: e.currentTarget.checked })} />
         </SimpleGrid>
-        <Button loading={save.isPending} disabled={!f.section || !f.code || !f.label || (f.kind === "calc" && !f.formula)} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
+        <Button loading={save.isPending} disabled={!f.section || !f.label || (f.kind === "calc" && !f.formula)} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
       </Stack>
     </Modal>
   );

@@ -40,12 +40,12 @@ function List() {
         { key: "st", label: t("common.status"), render: (s) => <StatusBadge value={s.status} /> }]} />
       <Modal opened={open} onClose={() => setOpen(false)} title={t("sd.new")}>
         <Stack>
-          <TextInput label={t("common.code")} value={f.code} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
+          <TextInput label={t("common.code")} placeholder={t("common.autoCode")} value={f.code} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
           <TextInput label={t("common.name")} value={f.name} onChange={(e) => setF({ ...f, name: e.currentTarget.value })} />
           <Textarea label="Scope" value={f.scope} onChange={(e) => setF({ ...f, scope: e.currentTarget.value })} />
           <TextInput type="datetime-local" label={t("common.start")} value={f.planned_start} onChange={(e) => setF({ ...f, planned_start: e.currentTarget.value })} />
           <TextInput type="datetime-local" label={t("common.end")} value={f.planned_end} onChange={(e) => setF({ ...f, planned_end: e.currentTarget.value })} />
-          <Button disabled={!f.code || !f.name || !f.planned_start || !f.planned_end} onClick={() => m.mutate(undefined)}>{t("common.create")}</Button>
+          <Button disabled={!f.name || !f.planned_start || !f.planned_end} onClick={() => m.mutate(undefined)}>{t("common.create")}</Button>
         </Stack>
       </Modal>
     </>

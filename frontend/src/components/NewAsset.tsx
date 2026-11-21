@@ -26,7 +26,7 @@ export function NewAsset({ opened, onClose, onCreated, parent }: { opened: boole
     <Modal opened={opened} onClose={onClose} title={t("asset.new")} size="lg">
       <Stack>
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          <TextInput label={t("common.code")} required value={f.code} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
+          <TextInput label={t("common.code")} placeholder={t("common.autoCode")} value={f.code} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
           <TextInput label={t("common.name")} required value={f.name} onChange={(e) => setF({ ...f, name: e.currentTarget.value })} />
           <TextInput label={`${t("common.name")} (AR)`} dir="rtl" value={f.name_ar} onChange={(e) => setF({ ...f, name_ar: e.currentTarget.value })} />
           <DeptSelect value={f.department_id} onChange={(v) => setF({ ...f, department_id: v, parent_id: null })} />
@@ -40,7 +40,7 @@ export function NewAsset({ opened, onClose, onCreated, parent }: { opened: boole
           <TextInput type="date" label={t("asset.installDate")} value={f.install_date} onChange={(e) => setF({ ...f, install_date: e.currentTarget.value })} />
           <TextInput label={t("common.location")} value={f.location} onChange={(e) => setF({ ...f, location: e.currentTarget.value })} />
         </SimpleGrid>
-        <Button onClick={() => m.mutate(undefined)} loading={m.isPending} disabled={!f.code || !f.name || !f.department_id}>{t("common.create")}</Button>
+        <Button onClick={() => m.mutate(undefined)} loading={m.isPending} disabled={!f.name || !f.department_id}>{t("common.create")}</Button>
       </Stack>
     </Modal>
   );

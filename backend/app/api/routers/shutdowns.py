@@ -28,7 +28,7 @@ router = APIRouter(prefix="/shutdowns", tags=["shutdowns"])
 
 
 class ShutdownIn(In):
-    code: str
+    code: str = ""  # blank: made from the name
     name: str
     scope: str | None = None
     department_id: uuid.UUID | None = None
@@ -140,7 +140,7 @@ def update_sd(
 
 
 class PackageIn(In):
-    code: str
+    code: str = ""  # blank: made from the name
     name: str
     asset_id: uuid.UUID | None = None
     contractor_id: uuid.UUID | None = None

@@ -107,13 +107,13 @@ export default function ShutdownDetail() {
       </Tabs>
       <Modal opened={!!pkg} onClose={() => setPkg(null)} title={t("sd.packages")}>
         {pkg && <Stack>
-          <TextInput label={t("common.code")} value={pkg.code} onChange={(e) => setPkg({ ...pkg, code: e.currentTarget.value })} />
+          <TextInput label={t("common.code")} placeholder={t("common.autoCode")} value={pkg.code} onChange={(e) => setPkg({ ...pkg, code: e.currentTarget.value })} />
           <TextInput label={t("common.name")} value={pkg.name} onChange={(e) => setPkg({ ...pkg, name: e.currentTarget.value })} />
           <NumberInput label={t("sd.duration")} min={0.5} value={pkg.duration_hours} onChange={(v) => setPkg({ ...pkg, duration_hours: v })} />
           <SimpleGrid cols={2}><NumberInput label={t("sd.manpower")} min={0} value={pkg.planned_manpower} onChange={(v) => setPkg({ ...pkg, planned_manpower: v })} />
             <NumberInput label="Contractor" min={0} value={pkg.contractor_manpower} onChange={(v) => setPkg({ ...pkg, contractor_manpower: v })} /></SimpleGrid>
           <MultiSelect label={t("sd.predecessors")} data={d.packages.map((p) => ({ value: p.id, label: p.code }))} value={pkg.predecessor_ids} onChange={(v) => setPkg({ ...pkg, predecessor_ids: v })} />
-          <Button disabled={!pkg.code || !pkg.name} onClick={() => addPkg.mutate(undefined)}>{t("common.create")}</Button>
+          <Button disabled={!pkg.name} onClick={() => addPkg.mutate(undefined)}>{t("common.create")}</Button>
         </Stack>}
       </Modal>
       <Modal opened={!!prog} onClose={() => setProg(null)} title={t("sd.progress")}>

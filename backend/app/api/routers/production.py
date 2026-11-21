@@ -182,7 +182,7 @@ def setup_status(ctx: Ctx = Depends(require("op.view")), db: Session = DB) -> di
 
 # ================================================================ products
 class ProductIn(In):
-    code: str = Field(min_length=1, max_length=40, pattern=r"^[A-Za-z0-9][A-Za-z0-9 ._/&-]*$")
+    code: str = Field("", max_length=40, pattern=r"^$|^[A-Za-z0-9][A-Za-z0-9 ._/&-]*$")  # blank: made from the name
     name: str = Field(min_length=1, max_length=160)
     category: str | None = Field(None, max_length=80)
     machine_id: uuid.UUID | None = None
@@ -234,7 +234,7 @@ def update_product(pid: uuid.UUID, body: ProductIn, ctx: Ctx = Depends(require("
 
 # ================================================================ loss categories
 class LossCategoryIn(In):
-    code: str = Field(min_length=1, max_length=30, pattern=CODE)
+    code: str = Field("", max_length=30, pattern="^$|" + CODE)  # blank: made from the name
     name: str = Field(min_length=1, max_length=120)
     parent_id: uuid.UUID | None = None
     affects: Literal["availability", "performance", "quality", "none"] = "availability"
@@ -298,7 +298,7 @@ def update_loss(cid: uuid.UUID, body: LossCategoryIn, ctx: Ctx = Depends(require
 
 # ================================================================ KPIs
 class KpiIn(In):
-    code: str = Field(min_length=1, max_length=30, pattern=CODE)
+    code: str = Field("", max_length=30, pattern="^$|" + CODE)  # blank: made from the name
     name: str = Field(min_length=1, max_length=120)
     description: str | None = Field(None, max_length=400)
     formula: str = Field(min_length=1, max_length=400)
@@ -388,7 +388,7 @@ def kpi_results(
 
 # ================================================================ alert rules and alerts
 class RuleIn(In):
-    code: str = Field(min_length=1, max_length=30, pattern=CODE)
+    code: str = Field("", max_length=30, pattern="^$|" + CODE)  # blank: made from the name
     name: str = Field(min_length=1, max_length=160)
     source_kind: Literal["kpi", "measure", "none"] = "kpi"
     source_code: str | None = Field(None, max_length=40)

@@ -32,7 +32,7 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 
 class WarehouseIn(In):
-    code: str
+    code: str = ""  # blank: made from the name
     name: str
 
 
@@ -56,7 +56,7 @@ def create_wh(body: WarehouseIn, ctx: Ctx = Depends(require("inventory.manage"))
 
 
 class SupplierIn(In):
-    code: str
+    code: str = ""  # blank: made from the name
     name: str
     contact_name: str | None = None
     email: str | None = None
@@ -94,7 +94,7 @@ def create_supplier(
 
 
 class PartIn(In):
-    code: str = Field(min_length=1, max_length=60)
+    code: str = Field("", max_length=60)  # blank: made from the name
     description: str
     description_ar: str | None = None
     oem_part_number: str | None = None

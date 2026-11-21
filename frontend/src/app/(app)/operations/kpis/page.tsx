@@ -35,7 +35,7 @@ function KpiModal({ form, vars, lines, onClose }: { form: KForm | null; vars: Kp
     <Modal opened onClose={onClose} title={f.id ? f.code : t("kpi2.new")} size="xl">
       <Stack>
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
-          <TextInput label={t("ops.set.code")} required value={f.code} onChange={(e) => set({ code: e.currentTarget.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_") })} />
+          <TextInput label={t("ops.set.code")} placeholder={t("common.autoCode")} value={f.code} onChange={(e) => set({ code: e.currentTarget.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_") })} />
           <TextInput style={{ gridColumn: "span 2" }} label={t("ops.set.name")} required value={f.name} onChange={(e) => set({ name: e.currentTarget.value })} />
         </SimpleGrid>
         <TextInput label={t("kpi2.description")} value={f.description} onChange={(e) => set({ description: e.currentTarget.value })} />
@@ -71,7 +71,7 @@ function KpiModal({ form, vars, lines, onClose }: { form: KForm | null; vars: Kp
           <Checkbox label={t("ops.set.active")} checked={f.is_active} onChange={(e) => set({ is_active: e.currentTarget.checked })} />
           <NumberInput w={100} label={t("ops.set.sort")} min={0} value={f.sort} onChange={(v) => set({ sort: v })} />
         </Group>
-        <Button loading={save.isPending} disabled={!f.code || !f.name || !f.formula.trim()} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
+        <Button loading={save.isPending} disabled={!f.name || !f.formula.trim()} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
       </Stack>
     </Modal>
   );

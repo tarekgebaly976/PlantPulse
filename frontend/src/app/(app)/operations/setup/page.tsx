@@ -69,7 +69,7 @@ function ProductModal({ form, lines, onClose }: { form: PForm | null; lines: OpS
     <Modal opened onClose={onClose} title={f.id ? f.code : t("setup.prod.new")} size="lg">
       <Stack>
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
-          <TextInput label={t("ops.set.code")} required value={f.code} onChange={(e) => set({ code: e.currentTarget.value })} />
+          <TextInput label={t("ops.set.code")} placeholder={t("common.autoCode")} value={f.code} onChange={(e) => set({ code: e.currentTarget.value })} />
           <TextInput style={{ gridColumn: "span 2" }} label={t("ops.set.name")} required value={f.name} onChange={(e) => set({ name: e.currentTarget.value })} />
           <TextInput label={t("setup.prod.category")} value={f.category} onChange={(e) => set({ category: e.currentTarget.value })} />
           <Select label={t("kpi2.line")} clearable placeholder={t("kpi2.allLines")} value={f.machine_id} onChange={(v) => set({ machine_id: v })} data={lines.map((m) => ({ value: m.id, label: m.code }))} />
@@ -81,7 +81,7 @@ function ProductModal({ form, lines, onClose }: { form: PForm | null; lines: OpS
         </SimpleGrid>
         <TextInput label={t("setup.prod.attrs")} description={t("setup.prod.attrsHint")} value={f.attrs.replace(/\n/g, "; ")} onChange={(e) => set({ attrs: e.currentTarget.value.replace(/;\s*/g, "\n") })} />
         <Checkbox label={t("ops.set.active")} checked={f.is_active} onChange={(e) => set({ is_active: e.currentTarget.checked })} />
-        <Button loading={save.isPending} disabled={!f.code || !f.name} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
+        <Button loading={save.isPending} disabled={!f.name} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
       </Stack>
     </Modal>
   );
@@ -106,7 +106,7 @@ function LossModal({ form, cats, discs, onClose }: { form: LForm | null; cats: L
     <Modal opened onClose={onClose} title={f.id ? f.name : t("setup.loss.new")} size="lg">
       <Stack>
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
-          <TextInput label={t("ops.set.code")} required value={f.code} onChange={(e) => set({ code: e.currentTarget.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_") })} />
+          <TextInput label={t("ops.set.code")} placeholder={t("common.autoCode")} value={f.code} onChange={(e) => set({ code: e.currentTarget.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_") })} />
           <TextInput style={{ gridColumn: "span 2" }} label={t("ops.set.name")} required value={f.name} onChange={(e) => set({ name: e.currentTarget.value })} />
         </SimpleGrid>
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
@@ -127,7 +127,7 @@ function LossModal({ form, cats, discs, onClose }: { form: LForm | null; cats: L
           <Checkbox label={t("ops.set.active")} checked={f.is_active} onChange={(e) => set({ is_active: e.currentTarget.checked })} />
         </Group>
         <Text size="xs" c="dimmed">{t("setup.loss.hint")}</Text>
-        <Button loading={save.isPending} disabled={!f.code || !f.name} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
+        <Button loading={save.isPending} disabled={!f.name} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
       </Stack>
     </Modal>
   );
@@ -156,7 +156,7 @@ function RuleModal({ form, kpis, vars, roles, lines, onClose }: { form: RForm | 
     <Modal opened onClose={onClose} title={f.id ? f.name : t("setup.rule.new")} size="lg">
       <Stack>
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
-          <TextInput label={t("ops.set.code")} required value={f.code} onChange={(e) => set({ code: e.currentTarget.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_") })} />
+          <TextInput label={t("ops.set.code")} placeholder={t("common.autoCode")} value={f.code} onChange={(e) => set({ code: e.currentTarget.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_") })} />
           <TextInput style={{ gridColumn: "span 2" }} label={t("ops.set.name")} required value={f.name} onChange={(e) => set({ name: e.currentTarget.value })} />
         </SimpleGrid>
         <Select label={t("setup.rule.condition")} allowDeselect={false} value={f.condition} onChange={(v) => v && set({ condition: v as Condition, source_kind: v === "kpi_limits" ? "kpi" : f.source_kind })}
@@ -183,7 +183,7 @@ function RuleModal({ form, kpis, vars, roles, lines, onClose }: { form: RForm | 
           <Select label={t("setup.rule.escalateTo")} clearable value={f.escalate_role} onChange={(v) => set({ escalate_role: v })} data={roles.map((r) => ({ value: r.code, label: r.name }))} />
         </SimpleGrid>
         <Checkbox label={t("ops.set.active")} checked={f.is_active} onChange={(e) => set({ is_active: e.currentTarget.checked })} />
-        <Button loading={save.isPending} disabled={!f.code || !f.name || (f.condition !== "action_overdue" && !f.source_code)} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
+        <Button loading={save.isPending} disabled={!f.name || (f.condition !== "action_overdue" && !f.source_code)} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
       </Stack>
     </Modal>
   );

@@ -178,12 +178,12 @@ function EditDept({ d, onClose }: { d: Department; onClose: () => void }) {
   return (
     <Modal opened onClose={onClose} title={`${t("reorg.editTitle")}: ${d.code}`}>
       <Stack>
-        <TextInput label={t("common.code")} value={f.code} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
+        <TextInput label={t("common.code")} placeholder={t("common.autoCode")} value={f.code} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
         <TextInput label={t("common.name")} value={f.name} onChange={(e) => setF({ ...f, name: e.currentTarget.value })} />
         <TextInput label="Arabic name" dir="rtl" value={f.name_ar} onChange={(e) => setF({ ...f, name_ar: e.currentTarget.value })} />
         <Select label={t("common.type")} data={DEPT_TYPES} value={f.type} onChange={(v) => setF({ ...f, type: v ?? f.type })} allowDeselect={false} />
         <Switch label={t("reorg.active")} checked={f.is_active} onChange={(e) => setF({ ...f, is_active: e.currentTarget.checked })} />
-        <Button disabled={!f.code || !f.name} loading={save.isPending} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
+        <Button disabled={!f.name} loading={save.isPending} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
       </Stack>
     </Modal>
   );
@@ -253,10 +253,10 @@ function Basics() {
     <SimpleGrid cols={{ base: 1, md: 2 }}>
       <Stack>
         <Text fw={600}>{t("admin.departments")}</Text>
-        <Group align="end" wrap="wrap"><TextInput label={t("common.code")} w={90} value={d.code} onChange={(e) => setD({ ...d, code: e.currentTarget.value })} />
+        <Group align="end" wrap="wrap"><TextInput label={t("common.code")} placeholder={t("common.autoCode")} w={90} value={d.code} onChange={(e) => setD({ ...d, code: e.currentTarget.value })} />
           <TextInput label={t("common.name")} value={d.name} onChange={(e) => setD({ ...d, name: e.currentTarget.value })} />
           <Select label={t("common.type")} w={170} data={DEPT_TYPES} value={d.type} onChange={(v) => setD({ ...d, type: v ?? "OTHER" })} />
-          <Button disabled={!d.code || !d.name} onClick={() => addD.mutate(undefined)}>{t("common.add")}</Button></Group>
+          <Button disabled={!d.name} onClick={() => addD.mutate(undefined)}>{t("common.add")}</Button></Group>
         <Group><Button size="xs" variant="light" color="orange" onClick={() => setMoving(true)}>{t("reorg.move")}</Button></Group>
         <DataTable rows={depts.data} columns={[{ key: "c", label: t("common.code"), render: (x) => x.code }, { key: "n", label: t("common.name"), render: (x) => `${x.name}${x.name_ar ? ` / ${x.name_ar}` : ""}` },
           { key: "t", label: t("common.type"), render: (x) => x.type }, { key: "a", label: t("common.active"), render: (x) => (x.is_active ? "✓" : "—") },
@@ -269,9 +269,9 @@ function Basics() {
           <Button size="xs" variant="light" onClick={() => setFcImp(true)}>{t("fm.importTitle")}</Button></Group>
         <FailureCodeImport opened={fcImp} onClose={() => setFcImp(false)} />
         <Group align="end" wrap="wrap"><Select label={t("common.type")} w={120} data={["problem", "cause", "remedy"]} value={c.kind} onChange={(v) => setC({ ...c, kind: v ?? "problem" })} />
-          <TextInput label={t("common.code")} w={90} value={c.code} onChange={(e) => setC({ ...c, code: e.currentTarget.value })} />
+          <TextInput label={t("common.code")} placeholder={t("common.autoCode")} w={90} value={c.code} onChange={(e) => setC({ ...c, code: e.currentTarget.value })} />
           <TextInput label={t("common.description")} value={c.description} onChange={(e) => setC({ ...c, description: e.currentTarget.value })} />
-          <Button disabled={!c.code || !c.description} onClick={() => addC.mutate(undefined)}>{t("common.add")}</Button></Group>
+          <Button disabled={!c.description} onClick={() => addC.mutate(undefined)}>{t("common.add")}</Button></Group>
         <TextInput placeholder={t("common.search")} value={fcq} onChange={(e) => setFcq(e.currentTarget.value)} />
         <DataTable rows={shownCodes} columns={[{ key: "k", label: t("common.type"), render: (x) => x.kind }, { key: "c", label: t("common.code"), render: (x) => x.code },
           { key: "d", label: t("common.description"), render: (x) => x.description }, { key: "e", label: t("fm.equipmentType"), render: (x) => x.equipment_type },

@@ -69,7 +69,7 @@ class ShiftIn(BaseModel):
 
 
 class MachineIn(In):
-    code: str = Field(min_length=1, max_length=20, pattern=CODE)
+    code: str = Field("", max_length=20, pattern="^$|" + CODE)  # blank: made from the name
     name: str = Field(min_length=1, max_length=120)
     department_id: uuid.UUID
     asset_id: uuid.UUID
@@ -90,7 +90,7 @@ class MachineIn(In):
 
 
 class GradeIn(In):
-    code: str = Field(min_length=1, max_length=30, pattern=CODE)
+    code: str = Field("", max_length=30, pattern="^$|" + CODE)  # blank: made from the name
     name: str | None = Field(None, max_length=120)
     gsm: int = Field(ge=10, le=2000)
     target_speed_mpm: float | None = Field(None, gt=0, le=3000)
@@ -99,7 +99,7 @@ class GradeIn(In):
 
 
 class DisciplineIn(In):
-    code: str = Field(min_length=1, max_length=20, pattern=CODE)
+    code: str = Field("", max_length=20, pattern="^$|" + CODE)  # blank: made from the name
     name: str = Field(min_length=1, max_length=80)
     maintenance: bool = False
     sort: int = Field(0, ge=0, le=999)

@@ -25,7 +25,7 @@ router = APIRouter(prefix="/shifts", tags=["shifts"])
 
 
 class ShiftIn(In):
-    code: str = Field(min_length=1, max_length=8)
+    code: str = Field("", max_length=8)  # blank: made from the name
     name: str
     kind: ShiftKind
     start_time: time
@@ -147,7 +147,7 @@ def roster_import_commit(
 
 
 class PatternIn(In):
-    code: str
+    code: str = ""  # blank: made from the name
     name: str
     cycle: list[str] = Field(min_length=1, max_length=56)
 

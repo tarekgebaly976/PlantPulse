@@ -90,7 +90,7 @@ export const en = {
   nav: { schedule: "Weekly schedule", "opsIncidents": "Safety incidents", opsKpis: "Production KPIs", opsInsights: "Production insights", opsSetup: "Production setup", opsDashboard: "Production dashboard", opsLogs: "Daily logs", operations: "Production reports", field: "Field round (offline)", rca: "Root cause analysis", dashboard: "Dashboard", myWork: "My work", scan: "Scan QR", requests: "Work requests", workOrders: "Work orders", assets: "Assets",
     pm: "Preventive maintenance", lubrication: "Lubrication", pdm: "Condition monitoring", shifts: "Shifts & handover", inventory: "Spare parts",
     shutdowns: "Shutdowns", kpis: "KPIs & reports", notifications: "Notifications", admin: "Administration" },
-  common: { save: "Save", cancel: "Cancel", create: "Create", add: "Add", edit: "Edit", delete: "Delete", search: "Search", filter: "Filter",
+  common: { autoCode: "Automatic – from the name", save: "Save", cancel: "Cancel", create: "Create", add: "Add", edit: "Edit", delete: "Delete", search: "Search", filter: "Filter",
     all: "All", yes: "Yes", no: "No", none: "None", actions: "Actions", status: "Status", type: "Type", priority: "Priority", code: "Code",
     name: "Name", description: "Description", department: "Department", asset: "Asset", date: "Date", from: "From", to: "To", quantity: "Quantity",
     unit: "Unit", cost: "Cost", total: "Total", notes: "Notes", reason: "Reason", submit: "Submit", confirm: "Confirm", close: "Close",

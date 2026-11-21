@@ -58,7 +58,7 @@ class ShiftIn(BaseModel):
 
 
 class TemplateIn(In):
-    code: str = Field(min_length=1, max_length=30, pattern=r"^[A-Za-z0-9][A-Za-z0-9 ._/-]*$")
+    code: str = Field("", max_length=30, pattern=r"^$|^[A-Za-z0-9][A-Za-z0-9 ._/-]*$")  # blank: made from the name
     name: str = Field(min_length=1, max_length=120)
     department_id: uuid.UUID
     frequency: Literal["day", "shift"] = "day"

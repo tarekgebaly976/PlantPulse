@@ -94,7 +94,7 @@ export const bn: Dict = {
   nav: { schedule: "সাপ্তাহিক সময়সূচি", "opsIncidents": "নিরাপত্তা দুর্ঘটনা", opsKpis: "উৎপাদন KPI", opsInsights: "উৎপাদন অন্তর্দৃষ্টি", opsSetup: "উৎপাদন সেটআপ", opsDashboard: "উৎপাদন ড্যাশবোর্ড", opsLogs: "দৈনিক লগ", operations: "উৎপাদন রিপোর্ট", field: "ফিল্ড রাউন্ড (অফলাইন)", rca: "রুট কজ অ্যানালাইসিস", dashboard: "ড্যাশবোর্ড", myWork: "আমার কাজ", scan: "QR স্ক্যান", requests: "কাজের অনুরোধ", workOrders: "ওয়ার্ক অর্ডার", assets: "যন্ত্রপাতি",
     pm: "প্রতিরোধমূলক রক্ষণাবেক্ষণ (PM)", lubrication: "লুব্রিকেশন", pdm: "কন্ডিশন মনিটরিং", shifts: "শিফট ও হ্যান্ডওভার", inventory: "স্পেয়ার পার্টস",
     shutdowns: "শাটডাউন", kpis: "KPI ও রিপোর্ট", notifications: "নোটিফিকেশন", admin: "প্রশাসন" },
-  common: { save: "সেভ", cancel: "বাতিল", create: "তৈরি করুন", add: "যোগ করুন", edit: "সম্পাদনা", delete: "মুছুন", search: "খুঁজুন", filter: "ফিল্টার",
+  common: { autoCode: "স্বয়ংক্রিয় – নাম থেকে", save: "সেভ", cancel: "বাতিল", create: "তৈরি করুন", add: "যোগ করুন", edit: "সম্পাদনা", delete: "মুছুন", search: "খুঁজুন", filter: "ফিল্টার",
     all: "সব", yes: "হ্যাঁ", no: "না", none: "কিছু নেই", actions: "কাজ", status: "অবস্থা", type: "ধরন", priority: "অগ্রাধিকার", code: "কোড",
     name: "নাম", description: "বিবরণ", department: "বিভাগ", asset: "যন্ত্র", date: "তারিখ", from: "থেকে", to: "পর্যন্ত", quantity: "পরিমাণ",
     unit: "একক", cost: "খরচ", total: "মোট", notes: "নোট", reason: "কারণ", submit: "জমা দিন", confirm: "নিশ্চিত করুন", close: "বন্ধ করুন",

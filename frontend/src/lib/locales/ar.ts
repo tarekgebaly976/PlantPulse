@@ -93,7 +93,7 @@ export const ar: Dict = {
   nav: { schedule: "الجدول الأسبوعي", "opsIncidents": "حوادث السلامة", opsKpis: "مؤشرات أداء الإنتاج", opsInsights: "رؤى الإنتاج", opsSetup: "إعداد الإنتاج", opsDashboard: "لوحة مؤشرات الإنتاج", opsLogs: "السجلات اليومية", operations: "تقارير الإنتاج", field: "جولة الموقع (بدون إنترنت)", rca: "تحليل السبب الجذري", dashboard: "لوحة المعلومات", myWork: "أعمالي", scan: "مسح رمز QR", requests: "طلبات العمل", workOrders: "أوامر العمل", assets: "الأصول",
     pm: "الصيانة الوقائية", lubrication: "التزييت", pdm: "مراقبة الحالة", shifts: "المناوبات والتسليم", inventory: "قطع الغيار",
     shutdowns: "التوقفات المخططة", kpis: "المؤشرات والتقارير", notifications: "الإشعارات", admin: "الإدارة" },
-  common: { save: "حفظ", cancel: "إلغاء", create: "إنشاء", add: "إضافة", edit: "تعديل", delete: "حذف", search: "بحث", filter: "تصفية",
+  common: { autoCode: "تلقائي – من الاسم", save: "حفظ", cancel: "إلغاء", create: "إنشاء", add: "إضافة", edit: "تعديل", delete: "حذف", search: "بحث", filter: "تصفية",
     all: "الكل", yes: "نعم", no: "لا", none: "لا يوجد", actions: "إجراءات", status: "الحالة", type: "النوع", priority: "الأولوية", code: "الرمز",
     name: "الاسم", description: "الوصف", department: "القسم", asset: "الأصل", date: "التاريخ", from: "من", to: "إلى", quantity: "الكمية",
     unit: "الوحدة", cost: "التكلفة", total: "الإجمالي", notes: "ملاحظات", reason: "السبب", submit: "إرسال", confirm: "تأكيد", close: "إغلاق",

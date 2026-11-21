@@ -111,26 +111,26 @@ function Lube() {
       </Tabs>
       <Modal opened={modal === "lub"} onClose={() => setModal(null)} title={t("lube.lubricants")}>
         <Stack>
-          <TextInput label={t("common.code")} value={lf.code} onChange={(e) => setLf({ ...lf, code: e.currentTarget.value })} />
+          <TextInput label={t("common.code")} placeholder={t("common.autoCode")} value={lf.code} onChange={(e) => setLf({ ...lf, code: e.currentTarget.value })} />
           <TextInput label="Manufacturer" value={lf.manufacturer} onChange={(e) => setLf({ ...lf, manufacturer: e.currentTarget.value })} />
           <TextInput label="Product" value={lf.product} onChange={(e) => setLf({ ...lf, product: e.currentTarget.value })} />
           <Select label={t("common.type")} data={["grease", "oil"]} value={lf.kind} onChange={(v) => setLf({ ...lf, kind: v ?? "grease" })} />
           <TextInput label={t("lube.viscosity")} value={lf.viscosity_grade} onChange={(e) => setLf({ ...lf, viscosity_grade: e.currentTarget.value })} />
-          <Button onClick={() => addLub.mutate(undefined)} disabled={!lf.code || !lf.product}>{t("common.create")}</Button>
+          <Button onClick={() => addLub.mutate(undefined)} disabled={!lf.product}>{t("common.create")}</Button>
         </Stack>
       </Modal>
       <Modal opened={modal === "route"} onClose={() => setModal(null)} title={t("lube.routes")}>
         <Stack>
-          <TextInput label={t("common.code")} value={rf.code} onChange={(e) => setRf({ ...rf, code: e.currentTarget.value })} />
+          <TextInput label={t("common.code")} placeholder={t("common.autoCode")} value={rf.code} onChange={(e) => setRf({ ...rf, code: e.currentTarget.value })} />
           <TextInput label={t("common.name")} value={rf.name} onChange={(e) => setRf({ ...rf, name: e.currentTarget.value })} />
           <DeptSelect value={rf.department_id} onChange={(v) => setRf({ ...rf, department_id: v })} />
           <NumberInput label={t("pm.lead")} value={rf.lead_days} onChange={(v) => setRf({ ...rf, lead_days: v })} min={0} />
-          <Button onClick={() => addRoute.mutate(undefined)} disabled={!rf.code || !rf.department_id}>{t("common.create")}</Button>
+          <Button onClick={() => addRoute.mutate(undefined)} disabled={!rf.department_id}>{t("common.create")}</Button>
         </Stack>
       </Modal>
       <Modal opened={modal === "point"} onClose={() => setModal(null)} title={t("lube.points")} size="lg">
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          <TextInput label={t("common.code")} value={pf.code} onChange={(e) => setPf({ ...pf, code: e.currentTarget.value })} />
+          <TextInput label={t("common.code")} placeholder={t("common.autoCode")} value={pf.code} onChange={(e) => setPf({ ...pf, code: e.currentTarget.value })} />
           <AssetPicker value={pf.asset_id} onChange={(v) => setPf({ ...pf, asset_id: v })} />
           <TextInput label="Component" value={pf.component} onChange={(e) => setPf({ ...pf, component: e.currentTarget.value })} />
           <Select label={t("lube.lubricant")} value={pf.lubricant_id} onChange={(v) => setPf({ ...pf, lubricant_id: v })} data={(lubs.data ?? []).map((l) => ({ value: l.id, label: `${l.code} ${l.product}` }))} />
@@ -141,7 +141,7 @@ function Lube() {
           <Select label={t("lube.routes")} clearable value={pf.route_id} onChange={(v) => setPf({ ...pf, route_id: v })} data={(routes.data ?? []).map((r) => ({ value: r.id, label: r.code }))} />
           <UserPicker label="Responsible" value={pf.responsible_user_id} onChange={(v) => setPf({ ...pf, responsible_user_id: v })} />
         </SimpleGrid>
-        <Group mt="md"><Button onClick={() => addPoint.mutate(undefined)} disabled={!pf.code || !pf.asset_id || !pf.lubricant_id}>{t("common.create")}</Button></Group>
+        <Group mt="md"><Button onClick={() => addPoint.mutate(undefined)} disabled={!pf.asset_id || !pf.lubricant_id}>{t("common.create")}</Button></Group>
       </Modal>
       <Modal opened={modal === "alt"} onClose={() => setModal(null)} title={t("lube.approveAlt")}>
         <Stack>

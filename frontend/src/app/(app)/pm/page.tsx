@@ -35,7 +35,7 @@ function NewJobPlan({ opened, onClose }: { opened: boolean; onClose: () => void 
     <Modal opened={opened} onClose={onClose} title={t("pm.newJobPlan")} size="xl">
       <Stack>
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
-          <TextInput label={t("common.code")} value={f.code} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
+          <TextInput label={t("common.code")} placeholder={t("common.autoCode")} value={f.code} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
           <TextInput label={t("common.name")} value={f.name} onChange={(e) => setF({ ...f, name: e.currentTarget.value })} />
           <TradeInput label={t("pm.trade")} value={f.trade} onChange={(v) => setF({ ...f, trade: v })} />
           <NumberInput label={t("wo.estHours")} min={0.25} value={f.estimated_hours} onChange={(v) => setF({ ...f, estimated_hours: v })} />
@@ -57,7 +57,7 @@ function NewJobPlan({ opened, onClose }: { opened: boolean; onClose: () => void 
             <Table.Td><ActionIcon variant="subtle" color="red" onClick={() => setTasks(tasks.filter((_, j) => j !== i))}>×</ActionIcon></Table.Td>
           </Table.Tr>))}</Table.Tbody></Table>
         <Group><Button variant="subtle" size="xs" onClick={() => setTasks([...tasks, { description: "", kind: "check", unit: "", max_value: "" }])}>+ {t("pm.tasks")}</Button></Group>
-        <Button onClick={() => m.mutate(undefined)} loading={m.isPending} disabled={!f.code || !f.name}>{t("common.create")}</Button>
+        <Button onClick={() => m.mutate(undefined)} loading={m.isPending} disabled={!f.name}>{t("common.create")}</Button>
       </Stack>
     </Modal>
   );
@@ -80,7 +80,7 @@ function NewPlan({ opened, onClose, jobPlans }: { opened: boolean; onClose: () =
     <Modal opened={opened} onClose={onClose} title={t("pm.newPlan")} size="lg">
       <Stack>
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          <TextInput label={t("common.code")} value={f.code} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
+          <TextInput label={t("common.code")} placeholder={t("common.autoCode")} value={f.code} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
           <TextInput label={t("common.name")} value={f.name} onChange={(e) => setF({ ...f, name: e.currentTarget.value })} />
           <AssetPicker value={f.asset_id} onChange={(v) => setF({ ...f, asset_id: v })} required />
           <Select label={t("pm.jobPlans")} value={f.job_plan_id} onChange={(v) => setF({ ...f, job_plan_id: v })} data={jobPlans.map((j) => ({ value: j.id, label: `${j.code} — ${j.name}` }))} />
@@ -104,7 +104,7 @@ function NewPlan({ opened, onClose, jobPlans }: { opened: boolean; onClose: () =
             <NumberInput label="Last service at" min={0} value={f.last_meter_value} onChange={(v) => setF({ ...f, last_meter_value: v })} />
           </SimpleGrid>
         )}
-        <Button onClick={() => m.mutate(undefined)} loading={m.isPending} disabled={!f.code || !f.asset_id || !f.job_plan_id}>{t("common.create")}</Button>
+        <Button onClick={() => m.mutate(undefined)} loading={m.isPending} disabled={!f.asset_id || !f.job_plan_id}>{t("common.create")}</Button>
       </Stack>
     </Modal>
   );

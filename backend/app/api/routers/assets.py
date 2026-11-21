@@ -29,7 +29,7 @@ router = APIRouter(prefix="/assets", tags=["assets"])
 
 
 class AssetIn(In):
-    code: str = Field(min_length=1, max_length=60, pattern=r"^[A-Za-z0-9._\-/]+$")
+    code: str = Field("", max_length=60, pattern=r"^$|^[A-Za-z0-9._\-/]+$")  # blank: made from the name
     name: str = Field(min_length=1, max_length=200)
     name_ar: str | None = None
     department_id: uuid.UUID

@@ -27,7 +27,7 @@ Category = Literal["equipment", "technique", "safety"]
 
 
 class SkillIn(In):
-    code: str = Field(min_length=1, max_length=30)
+    code: str = Field("", max_length=30)  # blank: made from the name
     name: str = Field(min_length=2, max_length=120)
     name_ar: str | None = Field(None, max_length=120)
     trade: str | None = Field(None, max_length=40)

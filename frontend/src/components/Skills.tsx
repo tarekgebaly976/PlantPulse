@@ -20,6 +20,8 @@ export interface Need { skill_id: string; min_level: number; code: string; name:
 
 /** Same colour code as the rest of the app: red act now, amber attention, green all clear, grey information. */
 const STATUS_COLOR: Record<string, string> = { valid: "green", expiring: "yellow", expired: "red", no_certificate: "red" };
+/** The people column stays in view while the skills scroll sideways (phones). */
+const STICKY = { position: "sticky", insetInlineStart: 0, zIndex: 1, background: "var(--mantine-color-body)", minWidth: 120 } as const;
 const CAT_COLOR: Record<string, string> = { equipment: "blue", technique: "grape", safety: "red" };
 
 function useSkillName() {
@@ -57,16 +59,17 @@ export function SkillMatrix() {
         <ScrollArea type="auto">
           <Table withTableBorder withColumnBorders fz="xs" miw={300 + (m?.skills.length ?? 0) * 70} data-testid="skill-matrix">
             <Table.Thead><Table.Tr>
-              <Table.Th>{t("common.user")}</Table.Th>
+              <Table.Th style={STICKY}>{t("common.user")}</Table.Th>
               {m?.skills.map((s) => (
-                <Table.Th key={s.id} style={{ textAlign: "center", cursor: manage ? "pointer" : undefined }} onClick={() => manage && setDef(s)}>
+                <Table.Th key={s.id} style={{ textAlign: "center", verticalAlign: "top", minWidth: 84, cursor: manage ? "pointer" : undefined }} onClick={() => manage && setDef(s)}>
                   <Tooltip label={`${name(s)} · ${t(`skill.cat_${s.category}`)}`}><Badge size="xs" variant="light" color={CAT_COLOR[s.category]}>{s.code}</Badge></Tooltip>
+                  <Text size="10px" fw={500} lh={1.25} mt={4} c="dimmed">{name(s)}</Text>
                 </Table.Th>))}
             </Table.Tr></Table.Thead>
             <Table.Tbody>
               {m?.people.map((p) => (
                 <Table.Tr key={p.user_id}>
-                  <Table.Td>{p.name}<Text size="xs" c="dimmed">{p.trade}</Text></Table.Td>
+                  <Table.Td style={STICKY}>{p.name}<Text size="xs" c="dimmed">{p.trade}</Text></Table.Td>
                   {m.skills.map((s) => {
                     const c = at.get(`${p.user_id}:${s.id}`);
                     return (
@@ -79,7 +82,7 @@ export function SkillMatrix() {
                   })}
                 </Table.Tr>))}
               <Table.Tr>
-                <Table.Td><Text size="xs" fw={700}>{t("skill.coverage")}</Text></Table.Td>
+                <Table.Td style={STICKY}><Text size="xs" fw={700}>{t("skill.coverage")}</Text></Table.Td>
                 {m?.skills.map((s) => { const n = m.coverage[s.id] ?? 0; return (
                   <Table.Td key={s.id} style={{ textAlign: "center" }}><Badge size="sm" color={coverColor(n)}>{n}</Badge></Table.Td>); })}
               </Table.Tr>
@@ -103,7 +106,7 @@ export function SkillMatrix() {
       <Modal opened={!!def} onClose={() => setDef(null)} title={def?.id ? t("skill.editSkill") : t("skill.newSkill")}>
         {def && <Stack>
           <SimpleGrid cols={2}>
-            <TextInput label={t("skill.code")} required disabled={!!def.id} maxLength={30} value={def.code ?? ""} onChange={(e) => setDef({ ...def, code: e.currentTarget.value })} />
+            <TextInput label={t("skill.code")} placeholder={t("common.autoCode")} disabled={!!def.id} maxLength={30} value={def.code ?? ""} onChange={(e) => setDef({ ...def, code: e.currentTarget.value })} />
             <Select label={t("skill.category")} value={def.category ?? "equipment"} allowDeselect={false} onChange={(v) => setDef({ ...def, category: v ?? "equipment" })}
               data={["equipment", "technique", "safety"].map((c) => ({ value: c, label: t(`skill.cat_${c}`) }))} />
           </SimpleGrid>
@@ -112,7 +115,7 @@ export function SkillMatrix() {
           <TextInput label={t("skill.trade")} value={def.trade ?? ""} onChange={(e) => setDef({ ...def, trade: e.currentTarget.value })} />
           <Checkbox label={t("skill.needsCert")} checked={!!def.needs_certificate} onChange={(e) => setDef({ ...def, needs_certificate: e.currentTarget.checked })} />
           {def.id && <Checkbox label={t("skill.active")} checked={def.is_active !== false} onChange={(e) => setDef({ ...def, is_active: e.currentTarget.checked })} />}
-          <Button disabled={!def.name || (!def.id && !def.code)} loading={saveDef.isPending} onClick={() => saveDef.mutate(undefined)}>{t("common.save")}</Button>
+          <Button disabled={!def.name} loading={saveDef.isPending} onClick={() => saveDef.mutate(undefined)}>{t("common.save")}</Button>
         </Stack>}
       </Modal>
     </Stack>

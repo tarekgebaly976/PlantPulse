@@ -45,7 +45,7 @@ function ShiftTypes({ shifts }: { shifts: ShiftDef[] }) {
       <Modal opened={!!f} onClose={() => setF(null)} title={f?.id ? `${t("common.edit")} ${f.code}` : t("shift.newType")}>
         {f && <Stack>
           <SimpleGrid cols={2}>
-            <TextInput label={t("common.code")} description="D, N, G…" value={f.code} disabled={!!f.id} maxLength={8} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
+            <TextInput label={t("common.code")} placeholder={t("common.autoCode")} description="D, N, G…" value={f.code} disabled={!!f.id} maxLength={8} onChange={(e) => setF({ ...f, code: e.currentTarget.value })} />
             <TextInput label={t("common.name")} value={f.name} onChange={(e) => setF({ ...f, name: e.currentTarget.value })} />
             <TextInput type="time" label={t("shift.from")} value={f.start_time} onChange={(e) => setF({ ...f, start_time: e.currentTarget.value })} />
             <TextInput type="time" label={t("shift.to")} value={f.end_time} onChange={(e) => setF({ ...f, end_time: e.currentTarget.value })} />
@@ -53,7 +53,7 @@ function ShiftTypes({ shifts }: { shifts: ShiftDef[] }) {
             <Select label={t("shift.kind")} value={f.kind} onChange={(v) => setF({ ...f, kind: v ?? "day" })}
               data={[{ value: "day", label: t("shift.kinds.day") }, { value: "night", label: t("shift.kinds.night") }, { value: "general", label: t("shift.kinds.general") }, { value: "evening", label: t("shift.kinds.evening") }]} />
           </SimpleGrid>
-          <Button disabled={!f.code.trim() || !f.name.trim()} loading={save.isPending} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
+          <Button disabled={!f.name.trim()} loading={save.isPending} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
         </Stack>}
       </Modal>
     </Stack>

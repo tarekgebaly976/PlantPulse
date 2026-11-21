@@ -49,7 +49,7 @@ class MaterialIn(In):
 
 
 class JobPlanIn(In):
-    code: str = Field(min_length=1, max_length=40)
+    code: str = Field("", max_length=40)  # blank: made from the name
     name: str
     description: str | None = None
     trade: str | None = None
@@ -138,7 +138,7 @@ def create_job_plan(body: JobPlanIn, ctx: Ctx = Depends(require("pm.manage")), d
 
 
 class PlanIn(In):
-    code: str = Field(min_length=1, max_length=40)
+    code: str = Field("", max_length=40)  # blank: made from the name
     name: str
     asset_id: uuid.UUID
     job_plan_id: uuid.UUID
