@@ -92,6 +92,9 @@ def test_propose_respects_roster_skills_and_lotos(world):
     # Deferred, with the reason.
     assert items[ids["long"]][0]["deferred"] and "longer than one shift" in items[ids["long"]][0]["reason"]
     assert items[ids["nohours"]][0]["reason"] == "no estimated hours"
+    # ... as a code with parameters for the page to translate.
+    assert (items[ids["nohours"]][0]["reason_code"], items[ids["nohours"]][0]["reason_params"]) == ("no_hours", {})
+    assert items[ids["long"]][0]["reason_code"] == "too_long" and items[ids["long"]][0]["reason_params"]["hours"] > 0
     assert v["schedule"]["stats"]["scheduled"] == 4 and v["schedule"]["stats"]["deferred"] == 2
 
 
@@ -111,6 +114,8 @@ def test_hand_edits_and_two_step_approval(world):
     v = planner.ok("patch", f"/schedule/items/{plain['id']}", {"user_id": tech2, "work_date": sun})
     moved = _by_wo(v)[ids["plain"]][0]
     assert v["schedule"]["status"] == "draft" and moved["pinned"] and moved["warnings"]  # tech2 is on leave on Sunday
+    assert moved["warnings"][0]["code"] == "not_at_work" and moved["warnings"][0]["params"]["date"] == sun
+    assert moved["warnings"][0]["text"] == f"{world.users['tech2'].full_name} is not at work on {sun}"
     v = planner.ok("patch", f"/schedule/items/{plain['id']}", {"user_id": tech, "work_date": sun})
     assert not _by_wo(v)[ids["plain"]][0]["warnings"]
     # Defer by hand; proposing again keeps the hand edits.
@@ -118,6 +123,7 @@ def test_hand_edits_and_two_step_approval(world):
     v = planner.ok("post", f"/schedule/weeks/{ws.isoformat()}/propose", {})
     items = _by_wo(v)
     assert items[ids["sht"]][0]["deferred"] and items[ids["sht"]][0]["reason"] == "Waiting for knives"
+    assert items[ids["sht"]][0]["reason_code"] is None  # typed by hand: shown as written
     assert (items[ids["plain"]][0]["user_id"], items[ids["plain"]][0]["work_date"]) == (tech, sun)
     # Send back with a comment, then the two steps.
     eng.ok("post", f"/schedule/{sid}/review")
@@ -189,6 +195,7 @@ def test_work_that_needs_the_line_stopped_goes_in_a_stop_window(world):
     assert [(i["work_date"], i["deferred"]) for i in items[fits]] == [(mon, False)]  # a window on the line above the unit
     assert "every stop window is shorter" in items[too_long][0]["reason"]
     assert "no stop window" in items[no_window][0]["reason"]
+    assert (items[too_long][0]["reason_code"], items[no_window][0]["reason_code"]) == ("windows_too_short", "no_window")
     assert [w["asset_code"] for w in v["windows"]] == ["PM1"] and v["windows"][0]["start"] == "09:00"
     # Approved: the stop work is timed inside the window, the rest of the day around it.
     sid = v["schedule"]["id"]
@@ -236,7 +243,8 @@ def test_reopened_week_is_planned_again(world):
     hyd = ids["hyd"]
     v = planner.ok("post", f"/schedule/{sid}/work-orders/{hyd}/defer", {"reason": "Parts late"})
     eng.ok("post", f"/schedule/{sid}/review")
-    assert any("taken off the schedule" in x for x in mgr.ok("post", f"/schedule/{sid}/approve")["apply_warnings"])
+    assert any(x["code"] == "taken_off" and x["params"]["number"] and "taken off the schedule" in x["text"]
+               for x in mgr.ok("post", f"/schedule/{sid}/approve")["apply_warnings"])
     w = planner.ok("get", f"/work-orders/{hyd}")
     w = w.get("work_order", w)
     assert w["status"] == "planned" and w["planned_start"] is None

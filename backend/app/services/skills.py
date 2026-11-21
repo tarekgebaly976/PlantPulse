@@ -39,6 +39,11 @@ def required_skills(db: Session, wo_id: uuid.UUID) -> list[tuple[WORequiredSkill
     )
 
 
+def gap_codes(lacking: list[str]) -> list[str]:
+    """The skill codes in the sentences gaps() returns ("certificate HV expired …" names it second, the others last)."""
+    return sorted({g.split()[1] if g.startswith("certificate ") else g.split()[-1] for g in lacking})
+
+
 def gaps(db: Session, wo_id: uuid.UUID, user: User, on: date) -> list[str]:
     """What the technician lacks for this work order on that day (empty = qualified). Plain sentences for the
     assignment warning, e.g. "no skill HYD", "level 1 < 2 for HYD", "certificate HV expired 2026-10-01"."""

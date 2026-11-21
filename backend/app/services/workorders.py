@@ -401,9 +401,13 @@ def _on_completed(db: Session, plant: Plant, wo: WorkOrder, user_id: uuid.UUID) 
         wo.is_repeat_failure = prior > 0
 
 
-def assign(db: Session, ctx: Ctx, wo: WorkOrder, user_ids: list[uuid.UUID], lead_id: uuid.UUID | None, force: bool = False) -> list[str]:
+def assign(
+    db: Session, ctx: Ctx, wo: WorkOrder, user_ids: list[uuid.UUID], lead_id: uuid.UUID | None, force: bool = False,
+    msgs: list[tuple[str, dict]] | None = None,
+) -> list[str]:  # fmt: skip
     """Assign technicians. Hard-blocks people on leave/absence on the planned date; returns warnings for
-    overlapping assignments (overridable with force)."""
+    overlapping assignments (overridable with force). msgs, if given, gets each warning as (code, parameters)."""
+    msgs = [] if msgs is None else msgs
     warnings: list[str] = []
     if wo.status in (WOStatus.COMPLETED, WOStatus.CLOSED, WOStatus.CANCELLED):
         raise DomainError("Cannot assign a finished work order", "wo_finished", 409)
@@ -440,9 +444,11 @@ def assign(db: Session, ctx: Ctx, wo: WorkOrder, user_ids: list[uuid.UUID], lead
             )
             if clash:
                 warnings.append(f"{user.full_name} already assigned to overlapping {', '.join(clash)}")
+                msgs.append(("assign_overlap", {"name": user.full_name, "numbers": ", ".join(clash)}))
         lacking = skills_svc.gaps(db, wo.id, user, work_day)
         if lacking:
             warnings.append(f"{user.full_name} does not meet the required skills: {', '.join(lacking)}")
+            msgs.append(("assign_skills", {"name": user.full_name, "skills": ", ".join(skills_svc.gap_codes(lacking))}))
     if warnings and not force:
         raise DomainError(
             "Assignment conflicts: " + "; ".join(warnings) + " (resubmit with force=true to override)", "assignment_conflict", 409

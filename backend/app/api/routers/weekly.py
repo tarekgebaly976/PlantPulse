@@ -117,6 +117,8 @@ def view(db: Session, ctx: Ctx, week_start: date) -> dict:
             "is_lead": i.is_lead,
             "deferred": i.deferred,
             "reason": i.reason,
+            "reason_code": i.reason_code,
+            "reason_params": i.reason_params or {},
             "pinned": i.pinned,
             "warnings": chk["warnings"].get(str(i.id), []),
         }

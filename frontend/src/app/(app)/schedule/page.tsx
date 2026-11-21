@@ -25,8 +25,11 @@ interface WO {
 }
 interface Item {
   id: string; work_order: WO | null; user_id: string | null; work_date: string | null; hours: number; overtime: boolean; is_lead: boolean;
-  deferred: boolean; reason: string | null; pinned: boolean; warnings: string[];
+  deferred: boolean; reason: string | null; reason_code: string | null; reason_params: MsgParams; pinned: boolean; warnings: Msg[];
 }
+type MsgParams = Record<string, string | number | null>;
+/** A reason or warning from the server: a code with parameters (translated here) and the English text. */
+interface Msg { code: string; params: MsgParams; text: string }
 interface RosterDay { kind: string; shift: string | null; regular: number; capacity: number }
 interface Person { user_id: string; name: string; trade: string | null; days: Record<string, RosterDay>; load: Record<string, number> }
 interface Sched {
@@ -36,7 +39,7 @@ interface Sched {
 }
 interface WeekView {
   week_start: string; days: string[]; today: string; schedule: Sched | null; people: Person[]; items: Item[];
-  over_capacity: { user_id: string; date: string; hours: number; capacity: number }[]; apply_warnings?: string[]; windows: Win[];
+  over_capacity: { user_id: string; date: string; hours: number; capacity: number }[]; apply_warnings?: Msg[]; windows: Win[];
 }
 interface Win { id: string; asset_id: string; asset: string; asset_code: string; date: string; start: string; end: string; hours: number; note: string | null }
 
@@ -64,7 +67,14 @@ function Schedule() {
   const [defer, setDefer] = useState<{ wo: WO; reason: string } | null>(null);
   const [place, setPlace] = useState<{ wo: WO; users: string[]; work_date: string } | null>(null);
   const [back, setBack] = useState<string | null>(null);
-  const [applied, setApplied] = useState<string[] | null>(null);
+  const [applied, setApplied] = useState<Msg[] | null>(null);
+  const msgT = (m: Msg) => {
+    const key = `schedMsg.${m.code}`;
+    if (!i18n.exists(key)) return m.text;
+    const p = m.params ?? {};
+    return `${p.number ? `${p.number}: ` : ""}${t(key, p)}`;
+  };
+  const reasonT = (i: Item) => (i.reason_code ? msgT({ code: i.reason_code, params: i.reason_params, text: i.reason ?? "" }) : i.reason);
   const phone = useMediaQuery("(max-width: 48em)");
   const [win, setWin] = useState<{ asset_id: string | null; work_date: string; start_time: string; hours: number | string; note: string } | null>(null);
 
@@ -215,7 +225,7 @@ function Schedule() {
                               <b>{i.work_order.number}</b> · {i.work_order.title}<br />{i.work_order.asset}<br />
                               {fmtNum(i.hours, 2)} h{i.overtime ? ` · ${t("sched.overtime")}` : ""}{i.work_order.due_date ? ` · ${t("sched.due")} ${i.work_order.due_date}` : ""}
                               {i.work_order.skills.length > 0 && <><br />{i.work_order.skills.join(", ")}</>}
-                              {i.warnings.map((w) => <div key={w}>⚠ {w}</div>)}
+                              {i.warnings.map((w) => <div key={w.text}>⚠ {msgT(w)}</div>)}
                             </>}>
                               <Badge fullWidth size="sm" radius="sm" tt="none" color={PRIO[i.work_order.priority] ?? "blue"} variant={i.warnings.length ? "outline" : "light"}
                                 style={{ cursor: canPlan ? "pointer" : "default", borderColor: i.warnings.length ? "var(--mantine-color-red-6)" : undefined }}
@@ -246,7 +256,7 @@ function Schedule() {
                   <Text size="sm" fw={600}>{i.work_order.title}</Text>
                   <Text size="xs" c="dimmed">{i.work_order.asset}</Text>
                   <Text size="xs" c="dimmed">{t("sched.hours")}: {i.work_order.hours ? fmtNum(i.work_order.hours, 1) : "—"} · {t("sched.due")}: {i.work_order.due_date ?? "—"}</Text>
-                  <Text size="sm" c="orange.8" mt={4}>{i.pinned && <IconPin size={12} />} {i.reason}</Text>
+                  <Text size="sm" c="orange.8" mt={4}>{i.pinned && <IconPin size={12} />} {reasonT(i)}</Text>
                   {canPlan && <Button mt={6} size="xs" variant="light" onClick={() => setPlace({ wo: i.work_order as WO, users: [], work_date: v.week_start })}>{t("sched.placeBtn")}</Button>}
                 </Paper>))}
             </Stack>
@@ -263,7 +273,7 @@ function Schedule() {
                     <Table.Td><Badge color={PRIO[i.work_order.priority]} variant="light">{i.work_order.priority}</Badge></Table.Td>
                     <Table.Td>{i.work_order.hours ? fmtNum(i.work_order.hours, 1) : "—"}</Table.Td>
                     <Table.Td>{i.work_order.due_date ?? "—"}</Table.Td>
-                    <Table.Td>{i.pinned && <IconPin size={12} />} {i.reason}</Table.Td>
+                    <Table.Td>{i.pinned && <IconPin size={12} />} {reasonT(i)}</Table.Td>
                     <Table.Td>{canPlan && <Button size="xs" variant="light" onClick={() => setPlace({ wo: i.work_order as WO, users: [], work_date: v.week_start })}>{t("sched.placeBtn")}</Button>}</Table.Td>
                   </Table.Tr>))}
               </Table.Tbody>
@@ -274,7 +284,7 @@ function Schedule() {
       <Modal opened={!!move} onClose={() => setMove(null)} title={move?.item.work_order ? `${move.item.work_order.number} · ${move.item.work_order.title}` : ""}>
         {move?.item.work_order && <Stack>
           <Text size="sm">{move.item.work_order.asset} · {fmtNum(move.item.hours, 2)} h · <Badge size="xs" color={PRIO[move.item.work_order.priority]}>{move.item.work_order.priority}</Badge></Text>
-          {move.item.warnings.map((w) => <Alert key={w} color="red" p="xs">{w}</Alert>)}
+          {move.item.warnings.map((w) => <Alert key={w.text} color="red" p="xs">{msgT(w)}</Alert>)}
           <Select label={t("sched.person")} data={peopleOpts} value={move.user_id} onChange={(x) => x && setMove({ ...move, user_id: x })} searchable />
           <Select label={t("sched.day")} data={dayOpts} value={move.work_date} onChange={(x) => x && setMove({ ...move, work_date: x })} />
           <Text size="xs" c="dimmed">{t("sched.moveHint")}</Text>
@@ -328,7 +338,7 @@ function Schedule() {
       <Modal opened={applied !== null} onClose={() => setApplied(null)} title={t("sched.appliedTitle")}>
         <Stack>
           <Text size="sm">{t("sched.appliedText")}</Text>
-          {applied?.map((w) => <Alert key={w} color="yellow" p="xs">{w}</Alert>)}
+          {applied?.map((w) => <Alert key={w.text} color="yellow" p="xs">{msgT(w)}</Alert>)}
           <Group justify="end"><Button onClick={() => setApplied(null)}>{t("common.close")}</Button></Group>
         </Stack>
       </Modal>

@@ -47,6 +47,68 @@ DEFAULT_SHIFT_START = time(7, 0)
 SOLVE_SECONDS = 20.0
 
 
+# --------------------------------------------------------------------------------------------------------------------
+# Messages: reasons and warnings go out as a code with parameters (the page translates them) and an English text (for the
+# audit log, notifications and the work order history).
+
+TEXT = {
+    # one person on one job on one day
+    "not_at_work": "{name} is not at work on {date}",
+    "trade_mismatch": "{trade} work, {name} is {person_trade}",
+    "other_departments": "{name} works in other departments",
+    "no_skill": "{name}: no skill {skill}",
+    "skill_level": "{name}: level {level} < {min_level} for {skill}",
+    "cert_expired": "{name}: certificate {skill} expired {date}",
+    "no_cert_date": "{name}: no certificate date for {skill}",
+    "no_signer_shift": "no supervisor or engineer on that shift to sign off LOTO / permit",
+    "line_running": "the line is not stopped during {name}'s shift on {date}",
+    "window_short": "the stop window in the shift is {have} h, the job needs {need} h",
+    "not_open": "work order is no longer open for scheduling",
+    "not_on_roster": "not on the roster this week",
+    # why a job is deferred
+    "no_hours": "no estimated hours",
+    "week_over": "the week is over",
+    "no_roster": "nobody on the roster this week",
+    "too_long": "longer than one shift ({hours} h per person)",
+    "no_window": "needs the line stopped: no stop window of its line this week",
+    "windows_too_short": "needs the line stopped: every stop window is shorter than the job ({hours} h per person)",
+    "no_trade": "no {trade} technician for this department on the roster",
+    "no_technician": "no technician for this department on the roster",
+    "certs_expired": "the {skills} certificate of everyone qualified has expired or has no date",
+    "no_skills": "nobody at work has the required skills ({skills})",
+    "no_signer": "no supervisor or engineer on shift to sign off LOTO / permit",
+    "stop_no_qualified": "needs the line stopped: nobody qualified is at work during a long enough stop window",
+    "no_crew": "a crew of {crew} is not available on one day",
+    "windows_full": "needs the line stopped: the stop windows of its line are already full",
+    "no_capacity": "not enough technician hours this week",
+    "no_solution": "no schedule found in time",
+    "hand_deferred": "deferred by hand",
+    # applying the approved week to the work orders
+    "skipped_closed": "no longer open, skipped",
+    "no_stop_fit": "does not fit in a stop window of its line on {date}",
+    "taken_off": "deferred, taken off the schedule",
+    "assign_overlap": "{name} already assigned to overlapping {numbers}",
+    "assign_skills": "{name} does not meet the required skills: {skills}",
+}
+
+
+def _param(v: object) -> object:
+    if isinstance(v, Decimal):
+        return float(v)
+    if isinstance(v, date):
+        return v.isoformat()
+    return v
+
+
+def msg(code: str, **params: object) -> dict:
+    """{"code", "params", "text"}; a "number" parameter (the work order) leads the English text."""
+    ps = {k: _param(v) for k, v in params.items()}
+    text = TEXT[code].format(**{k: (f"{v:g}" if isinstance(v, float) else v) for k, v in ps.items()})
+    if "number" in ps:
+        text = f"{ps['number']}: {text}"
+    return {"code": code, "params": ps, "text": text}
+
+
 def week_of(d: date) -> date:
     """The Sunday that starts d's week."""
     return d - timedelta(days=(d.weekday() + 1) % 7)
@@ -251,20 +313,21 @@ def load_week(db: Session, plant_id: uuid.UUID, tz: ZoneInfo, week_start: date, 
 # Who may do what, when
 
 
-def skill_gaps(job: Job, p: Person, d: date) -> list[str]:
+def skill_gaps(job: Job, p: Person, d: date) -> list[dict]:
     out = []
+    name = p.user.full_name
     for r, sk in job.need:
         t = p.skills.get(sk.id)
         if t is None:
-            out.append(f"no skill {sk.code}")
+            out.append(msg("no_skill", name=name, skill=sk.code))
             continue
         if t.level < r.min_level:
-            out.append(f"level {t.level} < {r.min_level} for {sk.code}")
+            out.append(msg("skill_level", name=name, level=t.level, min_level=r.min_level, skill=sk.code))
         st = skills_svc.cert_status(sk, t, d)
         if st == "expired":
-            out.append(f"certificate {sk.code} expired {t.certified_until}")
+            out.append(msg("cert_expired", name=name, skill=sk.code, date=t.certified_until))
         elif st == "no_certificate":
-            out.append(f"no certificate date for {sk.code}")
+            out.append(msg("no_cert_date", name=name, skill=sk.code))
     return out
 
 
@@ -299,49 +362,50 @@ def _covered(spans: list[tuple[datetime, datetime]], start: datetime, end: datet
     return total
 
 
-def problems(week: Week, job: Job, p: Person, d: date) -> list[str]:
+def problems(week: Week, job: Job, p: Person, d: date) -> list[dict]:
     """Why this person cannot take this job on this day (empty = they can)."""
+    name = p.user.full_name
     day = p.days.get(d)
     if day is None:
-        return [f"{p.user.full_name} is not at work on {d}"]
+        return [msg("not_at_work", name=name, date=d)]
     out = []
     if not _trade_ok(job, p):
-        out.append(f"{job.trade} work, {p.user.full_name} is {p.user.trade}")
+        out.append(msg("trade_mismatch", trade=job.trade, name=name, person_trade=p.user.trade))
     if not _dept_ok(job, p):
-        out.append(f"{p.user.full_name} works in other departments")
-    out += [f"{p.user.full_name}: {g}" for g in skill_gaps(job, p, d)]
+        out.append(msg("other_departments", name=name))
+    out += skill_gaps(job, p, d)
     if not _signer_ok(week, job, day, d):
-        out.append("no supervisor or engineer on that shift to sign off LOTO / permit")
+        out.append(msg("no_signer_shift"))
     if job.wo.requires_stop and job.hours is not None:
         h = stop_hours(job, day)
         if h <= 0:
-            out.append(f"the line is not stopped during {p.user.full_name}'s shift on {d}")
+            out.append(msg("line_running", name=name, date=d))
         elif h < job.per_person:
-            out.append(f"the stop window in the shift is {h} h, the job needs {job.per_person} h")
+            out.append(msg("window_short", have=h, need=job.per_person))
     return out
 
 
-def _why_not(week: Week, job: Job) -> str:
+def _why_not(week: Week, job: Job) -> dict:
     """Why a job could not be placed at all (not just for lack of hours)."""
     if job.hours is None:
-        return "no estimated hours"
+        return msg("no_hours")
     people = list(week.people.values())
     if not week.open_days:
-        return "the week is over"
+        return msg("week_over")
     if not people:
-        return "nobody on the roster this week"
+        return msg("no_roster")
     pp = job.per_person
     if all(pp > d.regular + d.overtime for p in people for d in p.days.values()):
-        return f"longer than one shift ({pp} h per person)"
+        return msg("too_long", hours=pp)
     if job.wo.requires_stop:
         open_windows = [(ws, we) for ws, we in job.windows if we.date() >= week.open_days[0]]
         if not open_windows:
-            return "needs the line stopped: no stop window of its line this week"
+            return msg("no_window")
         if all(Decimal(str((we - ws).total_seconds() / 3600)) < pp for ws, we in open_windows):
-            return f"needs the line stopped: every stop window is shorter than the job ({pp} h per person)"
+            return msg("windows_too_short", hours=pp)
     traded = [p for p in people if _trade_ok(job, p) and _dept_ok(job, p)]
     if not traded:
-        return f"no {job.trade or ''} technician for this department on the roster".replace("  ", " ")
+        return msg("no_trade", trade=job.trade) if job.trade else msg("no_technician")
     skilled = [(p, d) for p in traded for d in week.open_days if d in p.days and not skill_gaps(job, p, d)]
     if not skilled:
         at_work = [(p, d) for p in traded for d in week.open_days if d in p.days]
@@ -353,23 +417,23 @@ def _why_not(week: Week, job: Job) -> str:
             elif all(skills_svc.cert_status(sk, p.skills[sk.id], d) in ("expired", "no_certificate") for p, d in levelled):
                 expired.append(sk.code)
         if expired and not lacking:
-            return f"the {', '.join(expired)} certificate of everyone qualified has expired or has no date"
+            return msg("certs_expired", skills=", ".join(expired))
         codes = ", ".join(lacking) or ", ".join(f"{sk.code} ≥ {r.min_level}" for r, sk in job.need)
-        return f"nobody at work has the required skills ({codes})"
+        return msg("no_skills", skills=codes)
     if not any(_signer_ok(week, job, p.days[d], d) for p, d in skilled):
-        return "no supervisor or engineer on shift to sign off LOTO / permit"
+        return msg("no_signer")
     if job.wo.requires_stop and not any(stop_hours(job, p.days[d]) >= pp for p, d in skilled):
-        return "needs the line stopped: nobody qualified is at work during a long enough stop window"
+        return msg("stop_no_qualified")
     per_day: dict[date, int] = defaultdict(int)
     for p, d in skilled:
         if pp <= p.days[d].regular + p.days[d].overtime and _signer_ok(week, job, p.days[d], d):
             if not job.wo.requires_stop or stop_hours(job, p.days[d]) >= pp:
                 per_day[d] += 1
     if max(per_day.values(), default=0) < job.crew:
-        return f"a crew of {job.crew} is not available on one day"
+        return msg("no_crew", crew=job.crew)
     if job.wo.requires_stop:
-        return "needs the line stopped: the stop windows of its line are already full"
-    return "not enough technician hours this week"
+        return msg("windows_full")
+    return msg("no_capacity")
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -388,7 +452,7 @@ class Placement:
 
 def solve(
     week: Week, fixed: list[Placement], fixed_deferred: set[uuid.UUID], seconds: float = SOLVE_SECONDS
-) -> tuple[list[Placement], dict[uuid.UUID, str], dict]:
+) -> tuple[list[Placement], dict[uuid.UUID, dict], dict]:
     """fixed: placements kept as they are (pinned by hand, or already scheduled with assignees); they use up hours.
     Returns the placements (fixed ones included), the deferred jobs with the reason, and solver stats."""
     m = cp_model.CpModel()
@@ -399,7 +463,7 @@ def solve(
     free = [j for wid, j in week.jobs.items() if wid not in fixed_jobs and wid not in fixed_deferred]
     x: dict[tuple[uuid.UUID, uuid.UUID, date], cp_model.IntVar] = {}
     y: dict[tuple[uuid.UUID, date], cp_model.IntVar] = {}
-    deferred: dict[uuid.UUID, str] = {wid: "deferred by hand" for wid in fixed_deferred}
+    deferred: dict[uuid.UUID, dict] = {wid: msg("hand_deferred") for wid in fixed_deferred}
     zs: dict[uuid.UUID, cp_model.IntVar] = {}
     cost = []
     idx = {d: i for i, d in enumerate(week.days)}
@@ -482,7 +546,7 @@ def solve(
         if wid in deferred:
             continue
         if not ok or solver.value(zs[wid]):
-            deferred[wid] = _why_not(week, job) if ok else "no schedule found in time"
+            deferred[wid] = _why_not(week, job) if ok else msg("no_solution")
             continue
         team = [(uid, d) for (w, uid, d), v in x.items() if w == wid and solver.value(v)]
         for i, (uid, d) in enumerate(sorted(team, key=lambda t: week.people[t[0]].user.full_name)):
@@ -585,7 +649,8 @@ def propose(db: Session, ctx: Ctx, week_start: date, max_overtime: Decimal, seco
     for wid, reason in deferred.items():
         if wid in fixed_deferred:
             continue
-        s.items.append(ScheduleItem(work_order_id=wid, deferred=True, reason=reason[:300]))
+        s.items.append(ScheduleItem(work_order_id=wid, deferred=True, reason=reason["text"][:300], reason_code=reason["code"],
+                                    reason_params=reason["params"]))  # fmt: skip
     s.status, s.max_overtime_hours, s.created_by_id, s.proposed_at = "draft", max_overtime, ctx.user.id, utcnow()
     s.engineer_by_id = s.engineer_at = None
     s.returned_comment = None
@@ -609,18 +674,18 @@ def totals(s: WeeklySchedule) -> dict:
 def check(db: Session, ctx: Ctx, s: WeeklySchedule) -> dict:
     """Per item, what breaks a rule (after hand edits); per person and day, the load against the roster."""
     week = load_week(db, ctx.plant_id, ZoneInfo(ctx.plant.timezone), s.week_start, date.min, s.max_overtime_hours)
-    warn: dict[str, list[str]] = {}
+    warn: dict[str, list[dict]] = {}
     load: dict[tuple[uuid.UUID, date], Decimal] = defaultdict(Decimal)
     for it in s.items:
         if it.deferred or it.user_id is None or it.work_date is None:
             continue
         load[(it.user_id, it.work_date)] += it.hours
         job, p = week.jobs.get(it.work_order_id), week.people.get(it.user_id)
-        w: list[str] = []
+        w: list[dict] = []
         if job is None:
-            w.append("work order is no longer open for scheduling")
+            w.append(msg("not_open"))
         elif p is None:
-            w.append("not on the roster this week")
+            w.append(msg("not_on_roster"))
         else:
             w += problems(week, job, p, it.work_date)
         if w:
@@ -697,7 +762,7 @@ def _first_free(busy: list[tuple[datetime, datetime]], earliest: datetime, hours
     return None
 
 
-def approve(db: Session, ctx: Ctx, s: WeeklySchedule) -> list[str]:
+def approve(db: Session, ctx: Ctx, s: WeeklySchedule) -> list[dict]:
     """The manager's approval: each placed work order gets its people (lead first) and planned start / end, and becomes
     scheduled. Work that needs the line stopped is timed first, inside a stop window; the rest of a person's day follows
     from the start of their shift, most urgent first, in the free time around it."""
@@ -727,11 +792,11 @@ def approve(db: Session, ctx: Ctx, s: WeeklySchedule) -> list[str]:
         return p.days[d].start if p and d in p.days else datetime.combine(d, DEFAULT_SHIFT_START, tzinfo=tz)
 
     busy: dict[tuple[uuid.UUID, date], list[tuple[datetime, datetime]]] = defaultdict(list)
-    warnings: list[str] = []
+    warnings: list[dict] = []
     for wid in sorted(by_wo, key=order):
         w = wos.get(wid)
         if w is None or w.status not in SCHEDULABLE:
-            warnings.append(f"{w.number if w else wid}: no longer open, skipped")
+            warnings.append(msg("skipped_closed", number=w.number if w else str(wid)))
             continue
         team = sorted(by_wo[wid], key=lambda i: not i.is_lead)
         d = team[0].work_date
@@ -753,14 +818,16 @@ def approve(db: Session, ctx: Ctx, s: WeeklySchedule) -> list[str]:
                     if start:
                         break
             if start is None:
-                warnings.append(f"{w.number}: does not fit in a stop window of its line on {d}")
+                warnings.append(msg("no_stop_fit", number=w.number, date=d))
         if start is None:
             start = _first_free(spans, from_shift, hours, None) or from_shift
         end = start + timedelta(hours=hours)
         for u in uids:
             busy[(u, d)].append((start, end))
         w.planned_start, w.planned_end = start, end
-        warnings += [f"{w.number}: {x}" for x in wo_svc.assign(db, ctx, w, uids, uids[0] if uids else None, force=True)]
+        assign_msgs: list[tuple[str, dict]] = []
+        wo_svc.assign(db, ctx, w, uids, uids[0] if uids else None, force=True, msgs=assign_msgs)
+        warnings += [msg(code, number=w.number, **ps) for code, ps in assign_msgs]
         if w.status in (WOStatus.APPROVED, WOStatus.PLANNED):
             wo_svc.change_status(db, ctx, w, WOStatus.SCHEDULED, "Weekly schedule approved")
     # Deferred now but still scheduled in this week (e.g. by an earlier approval of a reopened week): off the schedule.
@@ -770,10 +837,10 @@ def approve(db: Session, ctx: Ctx, s: WeeklySchedule) -> list[str]:
         if w and w.status == WOStatus.SCHEDULED and w.planned_start and lo <= w.planned_start < hi:
             wo_svc.change_status(db, ctx, w, WOStatus.PLANNED, f"Deferred in the weekly schedule: {it.reason}")
             w.planned_start = w.planned_end = None
-            warnings.append(f"{w.number}: deferred, taken off the schedule")
+            warnings.append(msg("taken_off", number=w.number))
     s.status, s.manager_by_id, s.manager_at = "approved", ctx.user.id, utcnow()
     audit(db, "schedule.approve", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="weekly_schedule", entity_id=s.id,
-          data={"week": str(s.week_start), "work_orders": len(by_wo), "warnings": warnings})  # fmt: skip
+          data={"week": str(s.week_start), "work_orders": len(by_wo), "warnings": [x["text"] for x in warnings]})  # fmt: skip
     return warnings
 
 

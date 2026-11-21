@@ -52,7 +52,9 @@ class ScheduleItem(Base):
     overtime: Mapped[bool] = mapped_column(Boolean, default=False)  # falls (partly) in overtime
     is_lead: Mapped[bool] = mapped_column(Boolean, default=False)
     deferred: Mapped[bool] = mapped_column(Boolean, default=False)
-    reason: Mapped[str | None] = mapped_column(String(300))
+    reason: Mapped[str | None] = mapped_column(String(300))  # English text (typed by hand, or the optimiser's)
+    reason_code: Mapped[str | None] = mapped_column(String(40))  # the optimiser's reason, translated on the page
+    reason_params: Mapped[dict | None] = mapped_column(JSONB)
     pinned: Mapped[bool] = mapped_column(Boolean, default=False)  # set by hand: kept when the week is proposed again
 
 
