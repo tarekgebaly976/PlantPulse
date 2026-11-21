@@ -7,7 +7,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -34,6 +34,35 @@ class CutWinder(Base, PlantScoped, Timestamped):
     change_cost_sets: Mapped[Decimal] = mapped_column(
         Numeric(6, 2), default=Decimal("0.5")
     )  # a knife change "costs" the trim of this many sets of the deckle
+    set_length_m: Mapped[int] = mapped_column(Integer, default=0, server_default="0")  # metres of one set (one reel); 0 = not known
+
+
+class CutConverter(Base, PlantScoped, Timestamped):
+    """A converting unit after the winder of a paper machine: a sheeter (reels → sheets) or a rewinder (a parent reel →
+    narrower reels). Any number of each; a sheeter may be a production line with its own daily reports (line_id)."""
+
+    __tablename__ = "cut_converters"
+    __table_args__ = (
+        UniqueConstraint("plant_id", "code"),
+        CheckConstraint("kind IN ('sheeter','rewinder')", name="kind"),
+        CheckConstraint("min_width_mm > 0 AND max_width_mm >= min_width_mm AND side_trim_mm >= 0 AND stands >= 1", name="limits"),
+    )
+    id: Mapped[uuid.UUID] = uuid_pk()
+    machine_id: Mapped[uuid.UUID] = fk("op_machines.id", ondelete="CASCADE")  # the paper machine whose reels it takes
+    line_id: Mapped[uuid.UUID | None] = fk("op_machines.id", nullable=True, ondelete="SET NULL", index=False)  # its own production line
+    code: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(10))
+    min_width_mm: Mapped[int] = mapped_column(Integer)  # parent reel width it takes
+    max_width_mm: Mapped[int] = mapped_column(Integer)
+    min_length_mm: Mapped[int | None] = mapped_column(Integer)  # sheet length it cuts (sheeter)
+    max_length_mm: Mapped[int | None] = mapped_column(Integer)
+    side_trim_mm: Mapped[int] = mapped_column(Integer, default=10)  # trimmed off each parent reel
+    speed_mpm: Mapped[Decimal | None] = mapped_column(Numeric(8, 1))
+    change_minutes: Mapped[Decimal] = mapped_column(Numeric(6, 1), default=Decimal(30))  # one size change
+    stands: Mapped[int] = mapped_column(Integer, default=1)  # reels unwound together
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class CutPlan(Base, PlantScoped, Timestamped):
@@ -56,16 +85,24 @@ class CutPlan(Base, PlantScoped, Timestamped):
 
 
 class CutOrder(Base):
-    """One customer order line: reels of one width (quantity in reels, with the over / under tolerance allowed)."""
+    """One customer order line: reels of one width, or sheets of width × length (made on a sheeter); with the over /
+    under tolerance allowed."""
 
     __tablename__ = "cut_orders"
-    __table_args__ = (CheckConstraint("width_mm > 0 AND reels > 0 AND tolerance_pct >= 0 AND tolerance_pct <= 50", name="values"),)
+    __table_args__ = (
+        CheckConstraint("width_mm > 0 AND reels > 0 AND tolerance_pct >= 0 AND tolerance_pct <= 50", name="values"),
+        CheckConstraint("kind IN ('reel','sheet')", name="kind"),
+        CheckConstraint("kind = 'reel' OR sheet_length_mm > 0", name="sheet_length"),
+    )
     id: Mapped[uuid.UUID] = uuid_pk()
     plan_id: Mapped[uuid.UUID] = fk("cut_plans.id", ondelete="CASCADE")
     customer: Mapped[str | None] = mapped_column(String(120))
     ref: Mapped[str | None] = mapped_column(String(60))  # order / sales reference
-    width_mm: Mapped[int] = mapped_column(Integer)
-    reels: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(6), default="reel", server_default="reel")
+    width_mm: Mapped[int] = mapped_column(Integer)  # reel width, or sheet width
+    sheet_length_mm: Mapped[int | None] = mapped_column(Integer)
+    reels: Mapped[int] = mapped_column(Integer)  # the quantity: reels, or sheets for a sheet order
+    converter_id: Mapped[uuid.UUID | None] = fk("cut_converters.id", nullable=True, ondelete="SET NULL", index=False)  # this unit only
     tolerance_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal(0))  # ± reels allowed, in %
     due_date: Mapped[date | None] = mapped_column(Date)
     sort: Mapped[int] = mapped_column(Integer, default=0)

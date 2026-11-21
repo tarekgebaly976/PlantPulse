@@ -466,27 +466,57 @@ CUT_ORDERS = [  # customer, order ref, width mm, reels, tolerance %, due in days
     ("Nile Print (sample)", "SO-1052", 1250, 12, 0, 8),
     ("Al Noor Printing (sample)", "SO-1055", 780, 22, 5, None),
 ]
+CUT_SHEETS = [  # customer, order ref, sheet width × length mm, sheets, tolerance %, due in days
+    ("Cairo Print House (sample)", "SO-1060", 700, 1000, 120000, 5, 10),
+    ("Gulf Packaging (sample)", "SO-1062", 650, 900, 80000, 5, 12),
+]
+CUT_UNITS = [  # code, name, kind, widths, sheet lengths, speed m/min
+    ("SH1", "Sheeter 1 (sample)", "sheeter", (500, 1700), (400, 1600), 250),
+    ("SH2", "Sheeter 2 (sample)", "sheeter", (500, 1700), (400, 1600), 250),
+    ("SH3", "Sheeter 3 (sample)", "sheeter", (450, 1400), (350, 1200), 200),
+    ("SH4", "Sheeter 4 (sample)", "sheeter", (600, 1900), (500, 1600), 300),
+    ("RW1", "Rewinder 1 (sample)", "rewinder", (600, 2600), (None, None), 800),
+]
 
 
 def _cutting(db: Session, plant: Plant, m: OpMachine, ref: dict, current: date) -> None:
-    """The winder of PM1 and next week's cutting plan for grade 350, calculated (not released)."""
-    from app.models.cutting import CutOrder, CutPlan, CutWinder
+    """The winder of PM1, four sheeters and a rewinder after it, and next week's cutting plan for grade 350 (reels and
+    sheets), calculated (not released)."""
+    from app.models.cutting import CutConverter, CutOrder, CutPlan, CutWinder
     from app.services import cutting as cut_svc
 
     deckle = int(round(WIDTH_M * 1000))
     w = CutWinder(plant_id=plant.id, machine_id=m.id, deckle_mm=deckle, max_reels=6, min_trim_mm=20, max_trim_mm=250, min_width_mm=300,
-                  change_cost_sets=Decimal("0.5"))  # fmt: skip
+                  change_cost_sets=Decimal("0.5"), set_length_m=6000)  # fmt: skip
     db.add(w)
+    sh1 = db.execute(select(OpMachine).where(OpMachine.plant_id == plant.id, OpMachine.code == "SH1")).scalar_one_or_none()
+    units = []
+    for i, (code, name, kind, (w0, w1), (l0, l1), speed) in enumerate(CUT_UNITS):
+        u = CutConverter(plant_id=plant.id, machine_id=m.id, line_id=sh1.id if sh1 and code == "SH1" else None, code=code, name=name, kind=kind,
+                         min_width_mm=w0, max_width_mm=w1, min_length_mm=l0, max_length_mm=l1, side_trim_mm=10, speed_mpm=Decimal(speed),
+                         change_minutes=Decimal(30 if kind == "sheeter" else 20), stands=1, is_active=True, sort=i)  # fmt: skip
+        db.add(u)
+        units.append(u)
     g = ref["grades"].get(350)
     p = CutPlan(plant_id=plant.id, machine_id=m.id, grade_id=g.id if g else None, title="Next week – grade 350 (sample)", status="draft", result={},
                 created_by_id=ref["users"]["prod.mgr"].id)  # fmt: skip
     for i, (cust, so, width, reels, tol, due) in enumerate(CUT_ORDERS):
         p.orders.append(CutOrder(customer=cust, ref=so, width_mm=width, reels=reels, tolerance_pct=Decimal(tol), sort=i,
                                  due_date=current + timedelta(days=due) if due else None))  # fmt: skip
+    n = len(CUT_ORDERS)
+    for i, (cust, so, width, length, sheets, tol, due) in enumerate(CUT_SHEETS):
+        p.orders.append(CutOrder(customer=cust, ref=so, kind="sheet", width_mm=width, sheet_length_mm=length, reels=sheets, tolerance_pct=Decimal(tol),
+                                 sort=n + i, due_date=current + timedelta(days=due)))  # fmt: skip
+    p.orders.append(
+        CutOrder(customer="Nile Print (sample)", ref="SO-1066", width_mm=250, reels=24, tolerance_pct=Decimal(10), sort=n + len(CUT_SHEETS))
+    )
     db.add(p)
     db.flush()
-    lim = cut_svc.Limits(deckle=deckle, max_reels=6, min_trim=20, max_trim=250, min_width=300, change_cost_sets=0.5)
-    p.result = cut_svc.solve([cut_svc.Line(str(o.id), o.width_mm, o.reels, float(o.tolerance_pct), o.due_date) for o in p.orders], lim)
+    lim = cut_svc.Limits(deckle=deckle, max_reels=6, min_trim=20, max_trim=250, min_width=300, change_cost_sets=0.5, set_length_m=6000)
+    conv = [cut_svc.Converter(str(u.id), u.code, u.kind, u.min_width_mm, u.max_width_mm, u.min_length_mm, u.max_length_mm, u.side_trim_mm,
+                              float(u.speed_mpm or 0) or None, float(u.change_minutes), u.stands) for u in units]  # fmt: skip
+    p.result = cut_svc.solve([cut_svc.Line(str(o.id), o.width_mm, o.reels, float(o.tolerance_pct), o.due_date, o.kind, o.sheet_length_mm)
+                              for o in p.orders], lim, units=conv)  # fmt: skip
     p.status = "calculated" if p.result.get("status") in ("optimal", "feasible") else "draft"
     p.calculated_at = utcnow()
 

@@ -5,6 +5,7 @@ of its grade over the last 4 weeks (phase A) beside the planned trim."""
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import Field
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import Ctx, require
 from app.core.db import get_db
 from app.core.errors import DomainError
-from app.models.cutting import CutOrder, CutPlan, CutWinder
+from app.models.cutting import CutConverter, CutOrder, CutPlan, CutWinder
 from app.models.identity import User
 from app.models.operations import OpGrade, OpMachine
 from app.schemas.common import In
@@ -52,6 +53,8 @@ def winder_out(db: Session, m: OpMachine, w: CutWinder | None) -> dict:
         "max_trim_mm": w.max_trim_mm if w else 250,
         "min_width_mm": w.min_width_mm if w else 300,
         "change_cost_sets": float(w.change_cost_sets) if w else 0.5,
+        "set_length_m": w.set_length_m if w else 0,
+        "converters": [converter_out(c) for c in converters_of(db, m)],
         "grades": [
             {"id": g.id, "code": g.code, "gsm": g.gsm}
             for g in db.execute(
@@ -59,6 +62,22 @@ def winder_out(db: Session, m: OpMachine, w: CutWinder | None) -> dict:
             ).scalars()
         ],
     }
+
+
+def converters_of(db: Session, m: OpMachine, active: bool = False) -> list[CutConverter]:
+    q = select(CutConverter).where(CutConverter.machine_id == m.id)
+    if active:
+        q = q.where(CutConverter.is_active.is_(True))
+    return list(db.execute(q.order_by(CutConverter.sort, CutConverter.code)).scalars())
+
+
+def converter_out(c: CutConverter) -> dict:
+    return {
+        "id": c.id, "code": c.code, "name": c.name, "kind": c.kind, "line_id": c.line_id, "min_width_mm": c.min_width_mm,
+        "max_width_mm": c.max_width_mm, "min_length_mm": c.min_length_mm, "max_length_mm": c.max_length_mm, "side_trim_mm": c.side_trim_mm,
+        "speed_mpm": float(c.speed_mpm) if c.speed_mpm is not None else None, "change_minutes": float(c.change_minutes), "stands": c.stands,
+        "is_active": c.is_active, "sort": c.sort,
+    }  # fmt: skip
 
 
 @router.get("/winders")
@@ -77,6 +96,7 @@ class WinderIn(In):
     max_trim_mm: int = Field(250, ge=0, le=3000)
     min_width_mm: int = Field(300, ge=50, le=12000)
     change_cost_sets: Decimal = Field(Decimal("0.5"), ge=0, le=100)
+    set_length_m: int = Field(0, ge=0, le=200000)  # metres of one set; needed for sheet orders
 
 
 @router.put("/winders/{machine_id}")
@@ -99,6 +119,108 @@ def save_winder(machine_id: uuid.UUID, body: WinderIn, ctx: Ctx = Depends(requir
         data=body.model_dump(mode="json"),
     )
     return winder_out(db, m, w)
+
+
+class ConverterIn(In):
+    machine_id: uuid.UUID
+    code: str = Field(min_length=1, max_length=20)
+    name: str = Field(min_length=1, max_length=120)
+    kind: Literal["sheeter", "rewinder"]
+    line_id: uuid.UUID | None = None
+    min_width_mm: int = Field(ge=50, le=12000)
+    max_width_mm: int = Field(ge=50, le=12000)
+    min_length_mm: int | None = Field(None, ge=50, le=20000)
+    max_length_mm: int | None = Field(None, ge=50, le=20000)
+    side_trim_mm: int = Field(10, ge=0, le=1000)
+    speed_mpm: Decimal | None = Field(None, gt=0, le=5000)
+    change_minutes: Decimal = Field(Decimal(30), ge=0, le=1440)
+    stands: int = Field(1, ge=1, le=12)
+    is_active: bool = True
+    sort: int = 0
+
+
+def _converter_body(db: Session, ctx: Ctx, body: ConverterIn) -> dict:
+    _machine(db, ctx, body.machine_id)
+    if body.max_width_mm < body.min_width_mm:
+        raise DomainError("The widest reel is below the narrowest", "width_limits", 422)
+    if body.min_length_mm and body.max_length_mm and body.max_length_mm < body.min_length_mm:
+        raise DomainError("The longest sheet is below the shortest", "length_limits", 422)
+    if body.line_id:
+        ln = db.get(OpMachine, body.line_id)
+        if ln is None or ln.plant_id != ctx.plant_id:
+            raise HTTPException(422, "Unknown production line")
+    data = body.model_dump()
+    if body.kind == "rewinder":
+        data["min_length_mm"] = data["max_length_mm"] = None
+    return data
+
+
+def _code_free(db: Session, ctx: Ctx, code: str, exclude: uuid.UUID | None = None) -> None:
+    other = db.execute(select(CutConverter).where(CutConverter.plant_id == ctx.plant_id, CutConverter.code == code)).scalar_one_or_none()
+    if other is not None and other.id != exclude:
+        raise DomainError("This code is already used", "duplicate_code", 409)
+
+
+@router.post("/converters", status_code=201)
+def add_converter(body: ConverterIn, ctx: Ctx = Depends(require("op.manage")), db: Session = DB) -> dict:
+    data = _converter_body(db, ctx, body)
+    _code_free(db, ctx, body.code)
+    c = CutConverter(plant_id=ctx.plant_id, **data)
+    db.add(c)
+    db.flush()
+    audit(
+        db,
+        "cut.converter_add",
+        user_id=ctx.user.id,
+        plant_id=ctx.plant_id,
+        entity_type="cut_converter",
+        entity_id=c.id,
+        data={"code": c.code},
+    )
+    return converter_out(c)
+
+
+def _converter(db: Session, ctx: Ctx, cid: uuid.UUID) -> CutConverter:
+    c = db.get(CutConverter, cid)
+    if c is None or c.plant_id != ctx.plant_id:
+        raise HTTPException(404, "Converting unit not found")
+    _machine(db, ctx, c.machine_id)
+    return c
+
+
+@router.put("/converters/{cid}")
+def edit_converter(cid: uuid.UUID, body: ConverterIn, ctx: Ctx = Depends(require("op.manage")), db: Session = DB) -> dict:
+    c = _converter(db, ctx, cid)
+    data = _converter_body(db, ctx, body)
+    _code_free(db, ctx, body.code, c.id)
+    for k, v in data.items():
+        setattr(c, k, v)
+    db.flush()
+    audit(
+        db,
+        "cut.converter_edit",
+        user_id=ctx.user.id,
+        plant_id=ctx.plant_id,
+        entity_type="cut_converter",
+        entity_id=c.id,
+        data={"code": c.code},
+    )
+    return converter_out(c)
+
+
+@router.delete("/converters/{cid}", status_code=204)
+def delete_converter(cid: uuid.UUID, ctx: Ctx = Depends(require("op.manage")), db: Session = DB) -> None:
+    c = _converter(db, ctx, cid)
+    audit(
+        db,
+        "cut.converter_delete",
+        user_id=ctx.user.id,
+        plant_id=ctx.plant_id,
+        entity_type="cut_converter",
+        entity_id=c.id,
+        data={"code": c.code},
+    )
+    db.delete(c)
 
 
 def _plan(db: Session, ctx: Ctx, pid: uuid.UUID) -> CutPlan:
@@ -131,7 +253,8 @@ def plan_out(db: Session, ctx: Ctx, p: CutPlan, full: bool = True) -> dict:
         "status": p.status,
         "note": p.note,
         "orders_count": len(p.orders),
-        "reels": sum(o.reels for o in p.orders),
+        "reels": sum(o.reels for o in p.orders if o.kind == "reel"),
+        "sheets": sum(o.reels for o in p.orders if o.kind == "sheet"),
         "trim_pct": r.get("trim_pct"),
         "sets": r.get("sets"),
         "calculated_at": p.calculated_at,
@@ -147,7 +270,10 @@ def plan_out(db: Session, ctx: Ctx, p: CutPlan, full: bool = True) -> dict:
                 "id": o.id,
                 "customer": o.customer,
                 "ref": o.ref,
+                "kind": o.kind,
                 "width_mm": o.width_mm,
+                "sheet_length_mm": o.sheet_length_mm,
+                "converter_id": o.converter_id,
                 "reels": o.reels,
                 "tolerance_pct": float(o.tolerance_pct),
                 "due_date": o.due_date,
@@ -253,8 +379,11 @@ def edit_plan(pid: uuid.UUID, body: PlanEdit, ctx: Ctx = Depends(require("op.cut
 class OrderIn(In):
     customer: str | None = Field(None, max_length=120)
     ref: str | None = Field(None, max_length=60)
-    width_mm: int = Field(ge=10, le=12000)
-    reels: int = Field(ge=1, le=100000)
+    kind: Literal["reel", "sheet"] = "reel"
+    width_mm: int = Field(ge=10, le=12000)  # reel width, or sheet width
+    sheet_length_mm: int | None = Field(None, ge=50, le=20000)
+    reels: int = Field(ge=1, le=100_000_000)  # reels, or sheets for a sheet order
+    converter_id: uuid.UUID | None = None  # make it on this unit only
     tolerance_pct: Decimal = Field(Decimal(0), ge=0, le=50)
     due_date: date | None = None
 
@@ -268,10 +397,23 @@ def save_orders(pid: uuid.UUID, body: OrdersIn, ctx: Ctx = Depends(require("op.c
     """The plan's order lines, all at once (the page edits them as a table)."""
     p = _plan(db, ctx, pid)
     _editable(p)
+    m = db.get(OpMachine, p.machine_id)
+    assert m is not None
+    units = {c.id: c for c in converters_of(db, m)}
+    for o in body.orders:
+        if o.kind == "sheet" and not o.sheet_length_mm:
+            raise DomainError("A sheet order needs the sheet length", "sheet_length", 422)
+        if o.converter_id and o.converter_id not in units:
+            raise HTTPException(422, "Unknown converting unit for this machine")
+        if o.converter_id and o.kind == "sheet" and units[o.converter_id].kind != "sheeter":
+            raise DomainError("Sheets are cut on a sheeter", "not_sheeter", 422)
     p.orders.clear()
     db.flush()
     for i, o in enumerate(body.orders):
-        p.orders.append(CutOrder(sort=i, **o.model_dump()))
+        d = o.model_dump()
+        if o.kind == "reel":
+            d["sheet_length_mm"] = None
+        p.orders.append(CutOrder(sort=i, **d))
     _stale(p)
     p.result = {}
     p.calculated_at = None
@@ -290,9 +432,13 @@ def calculate(pid: uuid.UUID, ctx: Ctx = Depends(require("op.cut")), db: Session
     if not deckle:
         raise DomainError("Set the winder's jumbo width first", "no_deckle", 422)
     lim = svc.Limits(deckle=deckle, max_reels=wo["max_reels"], min_trim=wo["min_trim_mm"], max_trim=wo["max_trim_mm"],
-                     min_width=wo["min_width_mm"], change_cost_sets=wo["change_cost_sets"])  # fmt: skip
-    lines = [svc.Line(str(o.id), o.width_mm, o.reels, float(o.tolerance_pct), o.due_date) for o in p.orders]
-    r = svc.solve(lines, lim)
+                     min_width=wo["min_width_mm"], change_cost_sets=wo["change_cost_sets"], set_length_m=wo["set_length_m"])  # fmt: skip
+    lines = [svc.Line(str(o.id), o.width_mm, o.reels, float(o.tolerance_pct), o.due_date, o.kind, o.sheet_length_mm,
+                      str(o.converter_id) if o.converter_id else None) for o in p.orders]  # fmt: skip
+    units = [svc.Converter(str(c.id), c.code, c.kind, c.min_width_mm, c.max_width_mm, c.min_length_mm, c.max_length_mm, c.side_trim_mm,
+                           float(c.speed_mpm) if c.speed_mpm else None, float(c.change_minutes), c.stands)
+             for c in converters_of(db, m, active=True)]  # fmt: skip
+    r = svc.solve(lines, lim, units=units)
     p.result = r
     p.calculated_at = utcnow()
     p.status = "calculated" if r["status"] in ("optimal", "feasible") else "draft"

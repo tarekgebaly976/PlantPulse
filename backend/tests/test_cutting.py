@@ -4,7 +4,7 @@
 import pytest
 
 from app.core.config import get_settings
-from app.services.cutting import Limits, Line, patterns, solve
+from app.services.cutting import Converter, Limits, Line, patterns, solve
 from tests.conftest import World
 from tests.test_operations import fill_day, setup_mill
 
@@ -91,3 +91,68 @@ def test_plan_life_and_rights(world: World):
     p = mgr.ok("post", f"/operations/cutting/plans/{p['id']}/calculate")
     assert p["status"] == "draft" and p["result"]["problems"][0]["code"] == "too_wide"
     mgr.ok("delete", f"/operations/cutting/plans/{p['id']}", status=204)
+
+
+SH = Converter("sh1", "SH1", "sheeter", 500, 1700, 400, 1600, 10, 250, 30, 1)
+RW = Converter("rw1", "RW1", "rewinder", 600, 2600, None, None, 10, 800, 20, 1)
+
+
+def test_sheet_orders_choose_their_parent_reel_with_the_winder():
+    lim = Limits(3200, 6, 20, 250, 300, 0.5, set_length_m=6000)  # one set: 6000 m → 6000 sheets 1 m long per strip
+    # 1050 mm sheets, one across: parent reels of 1060 mm (the sheeter trims 10 mm), three to a set (trim 20 mm)
+    r = solve([Line("s", 1050, 54000, 5, None, "sheet", 1000)], lim, units=[SH])
+    assert (r["status"], r["sets"], r["orders"]) == ("optimal", 3, {"s": 54000})
+    assert r["routes"] == [{"order": "s", "unit": "sh1", "unit_code": "SH1", "parent_width": 1060, "across": 1, "reels": 9, "made": 54000,
+                            "side_trim_mm": 10}]  # fmt: skip
+    assert r["trim_mm_total"] == 60 and r["converting_trim_mm_total"] == 90 and r["total_trim_pct"] == round(150 / (3200 * 3), 4)
+    assert r["load"] == [{"unit": "sh1", "code": "SH1", "kind": "sheeter", "reels": 9, "sizes": 1, "hours": 3.6}]  # 9 × 6000 m at 250 m/min
+    # sheets and reels on the same jumbo: the sheet order's parent reels share the sets with the reel orders
+    r = solve([Line("s", 700, 60000, 5, None, "sheet", 1000), Line("w", 1000, 20, 10, None), Line("x", 750, 30, 10, None)], lim, units=[SH])
+    assert r["status"] in ("optimal", "feasible") and 57000 <= r["orders"]["s"] <= 63000 and 18 <= r["orders"]["w"] <= 22
+    assert {rt["parent_width"] for rt in r["routes"] if rt["order"] == "s"} <= {710, 1410, 2110}
+    assert all(20 <= p["trim_mm"] <= 250 for p in r["patterns"])
+    # the set length is needed, and a sheet the sheeters cannot cut is said so
+    no_len = Limits(3200, 6, 20, 250, 300, 0.5)
+    assert solve([Line("s", 700, 100, 0, None, "sheet", 1000)], no_len, units=[SH])["problems"][0]["code"] == "no_set_length"
+    assert solve([Line("s", 700, 100, 0, None, "sheet", 2000)], lim, units=[SH])["problems"][0]["code"] == "no_sheeter"
+
+
+def test_a_narrow_reel_goes_through_the_rewinder():
+    lim = Limits(3200, 6, 20, 250, 700, 0.5)  # the winder makes nothing under 700 mm
+    r = solve([Line("n", 320, 39, 5, None), Line("w", 1000, 20, 10, None), Line("v", 1200, 10, 20, None)], lim, units=[RW])
+    assert r["status"] == "optimal" and r["orders"]["n"] == 39
+    n = [rt for rt in r["routes"] if rt["order"] == "n"]
+    assert n == [
+        {"order": "n", "unit": "rw1", "unit_code": "RW1", "parent_width": 970, "across": 3, "reels": 13, "made": 39, "side_trim_mm": 10}
+    ]
+    assert solve([Line("n", 320, 40, 5, None)], lim)["problems"][0]["code"] == "too_narrow"  # no rewinder: impossible
+
+
+def test_converting_units_and_sheet_orders_in_a_plan(world: World):
+    s = setup_mill(world)
+    mgr = s["mgr"]
+    mid = s["machine"]["id"]
+    mgr.ok("put", f"/operations/cutting/winders/{mid}", {"deckle_mm": 3200, "set_length_m": 6000})
+    unit = {"machine_id": mid, "code": "SH2", "name": "Sheeter 2", "kind": "sheeter", "min_width_mm": 500, "max_width_mm": 1700,
+            "min_length_mm": 400, "max_length_mm": 1600, "side_trim_mm": 10, "speed_mpm": 250, "change_minutes": 30}  # fmt: skip
+    assert world.api("production").post("/operations/cutting/converters", unit).status_code == 403
+    sh = mgr.ok("post", "/operations/cutting/converters", unit, status=201)
+    assert mgr.post("/operations/cutting/converters", unit).status_code == 409  # the code is taken
+    mgr.ok("post", "/operations/cutting/converters", {**unit, "code": "RW1", "name": "Rewinder", "kind": "rewinder", "min_width_mm": 600,
+                                                      "max_width_mm": 2600}, status=201)  # fmt: skip
+    w = mgr.ok("get", "/operations/cutting/winders")[0]
+    assert w["set_length_m"] == 6000 and [c["code"] for c in w["converters"]] == ["RW1", "SH2"]
+    assert next(c for c in w["converters"] if c["code"] == "RW1")["max_length_mm"] is None
+    p = mgr.ok("post", "/operations/cutting/plans", {"machine_id": mid, "title": "Sheets"}, status=201)
+    bad = {"orders": [{"kind": "sheet", "width_mm": 700, "reels": 60000}]}
+    assert mgr.put(f"/operations/cutting/plans/{p['id']}/orders", bad).status_code == 422  # no sheet length
+    p = mgr.ok("put", f"/operations/cutting/plans/{p['id']}/orders", {"orders": [
+        {"customer": "Print house", "kind": "sheet", "width_mm": 1050, "sheet_length_mm": 1000, "reels": 54000, "tolerance_pct": 5,
+         "converter_id": sh["id"]},
+        {"customer": "Converter", "width_mm": 1000, "reels": 20, "tolerance_pct": 10},
+    ]})  # fmt: skip
+    assert p["orders"][0]["kind"] == "sheet" and p["orders"][0]["sheet_length_mm"] == 1000 and p["orders"][1]["sheet_length_mm"] is None
+    p = mgr.ok("post", f"/operations/cutting/plans/{p['id']}/calculate")
+    assert p["status"] == "calculated", p["result"]
+    assert {rt["unit_code"] for rt in p["result"]["routes"]} == {"SH2", None}
+    assert 51300 <= p["orders"][0]["made"] <= 56700 and p["result"]["load"][0]["code"] == "SH2"
