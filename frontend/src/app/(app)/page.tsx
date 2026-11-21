@@ -360,7 +360,7 @@ export default function Dashboard() {
   const tiles = TILES.filter((x) => on(`tile.${x.key}`));
   return (
     <>
-      <PageHeader title={t("nav.dashboard")} actions={
+      <PageHeader title={t("nav.home")} actions={
         <Button variant="light" leftSection={<IconAdjustments size={18} />} onClick={() => setEdit(true)} data-testid="customise-dashboard">{t("dash.customiseTitle")}</Button>}>
         <Text size="sm" c="dimmed">{plant?.plant_name} · {me?.full_name} · {s.today} ({s.timezone})</Text>
       </PageHeader>

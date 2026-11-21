@@ -309,8 +309,8 @@ export default function FieldPage() {
     <Container size={560} px="sm" py="sm">
       <Group justify="space-between" mb="sm" wrap="nowrap">
         <Group gap="xs" wrap="nowrap">
-          {online && me ? <ActionIcon component={Link} href="/" variant="subtle" aria-label={t("nav.dashboard")}><IconArrowLeft /></ActionIcon>
-            : <ActionIcon component="a" href="/" variant="subtle" aria-label={t("nav.dashboard")}><IconArrowLeft /></ActionIcon>}
+          {online && me ? <ActionIcon component={Link} href="/" variant="subtle" aria-label={t("nav.home")}><IconArrowLeft /></ActionIcon>
+            : <ActionIcon component="a" href="/" variant="subtle" aria-label={t("nav.home")}><IconArrowLeft /></ActionIcon>}
           <Title order={3}>{t("field.title")}</Title>
         </Group>
         <Badge size="lg" color={online ? "teal" : "red"} variant="light" leftSection={online ? <IconWifi size={14} /> : <IconWifiOff size={14} />} data-testid="field-net"
