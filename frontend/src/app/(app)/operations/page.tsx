@@ -3,8 +3,8 @@
 import { Alert, Badge, Button, Group, Paper, Select, Stack, Text, TextInput } from "@mantine/core";
 import { IconFileReport, IconNotebook, IconPlus, IconSettings } from "@tabler/icons-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
 import { Modal } from "@/components/Modal";
@@ -66,6 +66,10 @@ function List() {
   const [month, setMonth] = useState<string>("");
   const q = useQ<ReportList>(machineId ? "/operations/reports" : null, { machine_id: machineId, month: month || undefined });
   const [open, setOpen] = useState(false);
+  // "Report for a day" from the + button or the home page (/operations?new=1) opens the new-report dialog.
+  const sp = useSearchParams();
+  const [dismissed, setDismissed] = useState(false);
+  const asked = sp.get("new") === "1" && !dismissed && can("op.enter") && machines.length > 0;
   if (settings.isLoading) return <Loading />;
   const m = machines.find((x) => x.id === machineId);
   const today = m ? currentProductionDay(m.day_start, plant?.timezone) : null;
@@ -80,7 +84,7 @@ function List() {
       </>}>
         <Text size="sm" c="dimmed">{t("ops.subtitle")}</Text>
       </PageHeader>
-      {settings.data && <NewReport key={String(open)} opened={open} onClose={() => setOpen(false)} settings={settings.data} />}
+      {settings.data && <NewReport key={String(open || asked)} opened={open || asked} onClose={() => { setOpen(false); if (asked) { setDismissed(true); router.replace("/operations"); } }} settings={settings.data} />}
       {machines.length === 0 ? <Alert color="blue" icon={<IconFileReport />}>
         <Stack gap="xs">
           <Text size="sm">{t("ops.noMachine")}</Text>
@@ -115,5 +119,5 @@ function List() {
 }
 
 export default function OperationsPage() {
-  return <Guard perm="op.view"><List /></Guard>;
+  return <Guard perm="op.view"><Suspense><List /></Suspense></Guard>;
 }

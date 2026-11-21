@@ -137,4 +137,8 @@ body { background: var(--mantine-color-body); -webkit-font-smoothing: antialiase
     --badge-height-xs: 20px; --badge-height-sm: 22px; --badge-height-md: 22px;
   }
   body .mantine-Pill-root { --pill-fz-xs: 12px; --pill-height-xs: 22px; }
+  /* Tabs: one row that scrolls sideways (instead of 3-5 wrapped rows), each tab 44 px high. */
+  .mantine-Tabs-root:not([data-orientation="vertical"]) > .mantine-Tabs-list { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .mantine-Tabs-root:not([data-orientation="vertical"]) > .mantine-Tabs-list::-webkit-scrollbar { display: none; }
+  .mantine-Tabs-root:not([data-orientation="vertical"]) > .mantine-Tabs-list > .mantine-Tabs-tab { flex: none; white-space: nowrap; min-height: 44px; }
 }

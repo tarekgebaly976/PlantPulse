@@ -1,11 +1,11 @@
 "use client";
 
 import { BarChart } from "@mantine/charts";
-import { Anchor, Badge, Button, Card, Checkbox, Grid, Group, SegmentedControl, SimpleGrid, Stack, Table, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Anchor, Badge, Button, Card, Checkbox, Grid, Group, Popover, SegmentedControl, SimpleGrid, Stack, Table, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
 import { Modal } from "@/components/Modal";
 import {
   IconAdjustments, IconAlertOctagon, IconAlertTriangle, IconCalendarTime, IconChecklist, IconClipboardList, IconClockExclamation, IconDroplet,
-  IconCircleCheck, IconEye, IconHeartRateMonitor, IconPlus, IconQrcode, IconRoute, IconUserCheck,
+  IconBuildingFactory2, IconChartLine, IconCircleCheck, IconEye, IconHeartRateMonitor, IconInfoCircle, IconPlus, IconQrcode, IconRoute, IconUserCheck,
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -18,6 +18,7 @@ import { latestMonth, status, STATUS_COLOR, type KpiCard, type Status } from "@/
 import { CM_COLOR, ConditionLegend } from "@/components/KpiControlChart";
 import { useKpiTargets } from "@/lib/kpiTargets";
 import { put } from "@/lib/api";
+import type { OpConfig, OpSettings, ReportList } from "@/lib/ops";
 
 interface Summary {
   today: string; my_open_work?: number; open_work_orders?: number; open_emergencies?: number; overdue_work_orders?: number;
@@ -35,15 +36,70 @@ const LEVEL: Record<Level, { fg: string; bg: string; border: string; mantine: st
   info: { fg: "var(--pp-strong)", bg: "transparent", border: "#adb5bd", mantine: "gray" },
 };
 
+function LegendItems() {
+  const { t } = useTranslation();
+  return (["bad", "warn", "ok", "info"] as const).map((k) => (
+    <Group key={k} gap={6} wrap="nowrap"><span style={{ width: 14, height: 14, borderRadius: 3, background: LEVEL[k].bg, border: `3px solid ${LEVEL[k].border}`, flex: "none" }} />
+      <Text size="xs">{t(`dash.level_${k}`)}</Text></Group>));
+}
+
+/** Colour key: one line on a computer; on phones and tablets a small button that shows it (saves four lines of screen). */
 function DashLegend() {
   const { t } = useTranslation();
   return (
-    <Group gap="lg" mb="md" data-testid="dash-legend">
-      <Text size="xs" fw={700} c="dimmed">{t("dash.colourKey")}:</Text>
-      {(["bad", "warn", "ok", "info"] as const).map((k) => (
-        <Group key={k} gap={6} wrap="nowrap"><span style={{ width: 14, height: 14, borderRadius: 3, background: LEVEL[k].bg, border: `3px solid ${LEVEL[k].border}` }} />
-          <Text size="xs">{t(`dash.level_${k}`)}</Text></Group>))}
+    <>
+      <Group gap="lg" mb="md" data-testid="dash-legend" visibleFrom="md">
+        <Text size="xs" fw={700} c="dimmed">{t("dash.colourKey")}:</Text>
+        <LegendItems />
+      </Group>
+      <Popover position="bottom-start" shadow="md" withArrow>
+        <Popover.Target>
+          <Button hiddenFrom="md" variant="subtle" color="gray" size="compact-sm" mb="sm" leftSection={<IconInfoCircle size={16} />} data-testid="dash-legend-button">
+            {t("dash.colourKey")}
+          </Button>
+        </Popover.Target>
+        <Popover.Dropdown><Stack gap={8}><LegendItems /></Stack></Popover.Dropdown>
+      </Popover>
+    </>
+  );
+}
+
+/** Latest report of one production line this month: date, status, output and OEE; a tap opens it. */
+function LineReport({ id, code, name }: { id: string; code: string; name: string }) {
+  const { t } = useTranslation();
+  const q = useQ<ReportList>("/operations/reports", { machine_id: id }, { staleTime: 120_000 });
+  const r = q.data?.items[0];
+  const body = (
+    <Group justify="space-between" wrap="nowrap" gap="xs">
+      <Stack gap={0} style={{ minWidth: 0 }}>
+        <Text fw={600} size="sm" truncate>{code} – {name}</Text>
+        <Text size="xs" c="dimmed">{r ? `${fmtDate(r.report_date)} · ${fmtNum(r.gross, 1)} ${r.unit} · ${t("dash.prodOee")} ${r.oee == null ? "—" : `${fmtNum(r.oee * 100, 1)} %`}` : q.data ? t("dash.prodNone") : "…"}</Text>
+      </Stack>
+      {r && <StatusBadge value={r.status} size="sm" />}
     </Group>
+  );
+  return r ? <UnstyledButton component={Link} href={`/operations/${r.id}`} className="pp-row tap-target" data-testid="prod-line">{body}</UnstyledButton>
+    : <div className="pp-row" data-testid="prod-line">{body}</div>;
+}
+
+/** Production users: their lines' latest daily reports first, one tap to today's report and to the production dashboard. */
+function ProductionToday() {
+  const { t } = useTranslation();
+  const { can } = useSession();
+  const settings = useQ<OpSettings>("/operations/settings", undefined, { staleTime: 300_000 });
+  const machines = (settings.data?.machines ?? []).filter((m) => m.is_active);
+  if (!settings.data || machines.length === 0) return null;
+  return (
+    <Card withBorder padding="md" mb="lg" data-testid="dash-production">
+      <Group justify="space-between" mb="xs" wrap="wrap" gap="xs">
+        <Group gap={8}><IconBuildingFactory2 size={20} /><Text fw={700}>{t("dash.production")}</Text></Group>
+        <Group gap="xs">
+          {can("op.enter") && <Button component={Link} href="/operations?new=1" size="xs" leftSection={<IconPlus size={14} />}>{t("ops.newReport")}</Button>}
+          <Button component={Link} href="/operations/dashboard" size="xs" variant="default" leftSection={<IconChartLine size={14} />}>{t("nav.opsDashboard")}</Button>
+        </Group>
+      </Group>
+      <Stack gap={4}>{machines.slice(0, 6).map((m) => <LineReport key={m.id} id={m.id} code={m.code} name={m.name} />)}</Stack>
+    </Card>
   );
 }
 
@@ -175,16 +231,16 @@ const tileLevel = (x: TileDef, s: Summary): Level => {
   if (x.level === "info") return "info";
   return v > 0 ? (typeof x.level === "function" ? x.level(s) : x.level) : "ok";
 };
-const SECTIONS = ["quick", "tiles", "attention", "activity", "kpis", "condition"] as const;
+const SECTIONS = ["production", "quick", "tiles", "attention", "activity", "kpis", "condition"] as const;
 
 /** One place to choose everything the dashboard shows: sections, counters, and the KPIs with their targets. */
-function Customise({ prefs, summary, defs, cards, onSave, onClose }: {
-  prefs: DashPrefs; summary: Summary; defs: { code: string; name: string }[]; cards: KpiCard[]; onSave: (p: DashPrefs) => void; onClose: () => void;
+function Customise({ prefs, summary, defs, cards, production, onSave, onClose }: {
+  prefs: DashPrefs; summary: Summary; defs: { code: string; name: string }[]; cards: KpiCard[]; production: boolean; onSave: (p: DashPrefs) => void; onClose: () => void;
 }) {
   const { t } = useTranslation();
   const { can } = useSession();
   const tiles = TILES.filter((x) => x.value(summary) !== undefined);
-  const sections = SECTIONS.filter((x) => (x !== "kpis" || can("kpi.view")) && (x !== "condition" || can("pdm.view")));
+  const sections = SECTIONS.filter((x) => (x !== "kpis" || can("kpi.view")) && (x !== "condition" || can("pdm.view")) && (x !== "production" || production));
   const all = [...sections.map((x) => `section.${x}`), ...tiles.map((x) => `tile.${x.key}`)];
   const [shown, setShown] = useState(all.filter((k) => !prefs.hidden.includes(k)));
   const [calc, setCalc] = useState(prefs.calc ?? DEFAULT_TILES);
@@ -338,6 +394,10 @@ export default function Dashboard() {
   const [edit, setEdit] = useState(false);
   const year = q.data ? Number(q.data.today.slice(0, 4)) : null;
   const defs = useQ<{ code: string; name: string }[]>(can("kpi.view") ? "/kpis/definitions" : null, undefined, { staleTime: 3_600_000 });
+  // Production users (enter daily reports, do not plan maintenance): their lines first. Only where the production
+  // module and its reports are switched on (without the module the op.* permissions are not given).
+  const opCfg = useQ<OpConfig>(can("op.enter") ? "/operations/config" : null, undefined, { staleTime: 300_000 });
+  const production = can("op.enter") && !can("wo.plan") && !!opCfg.data && opCfg.data.features.reports !== false;
   const sc = useQ<KpiCard[]>(can("kpi.view") && year ? "/kpis/scorecard" : null, { year }, { staleTime: 300_000 });
   if (!q.data) return <Loading />;
   const s = q.data;
@@ -360,14 +420,18 @@ export default function Dashboard() {
   const tiles = TILES.filter((x) => on(`tile.${x.key}`));
   return (
     <>
-      <PageHeader title={t("nav.home")} actions={
-        <Button variant="light" leftSection={<IconAdjustments size={18} />} onClick={() => setEdit(true)} data-testid="customise-dashboard">{t("dash.customiseTitle")}</Button>}>
+      <PageHeader title={t("nav.home")} actions={<>
+        <Button visibleFrom="md" variant="light" leftSection={<IconAdjustments size={18} />} onClick={() => setEdit(true)} data-testid="customise-dashboard">{t("dash.customiseTitle")}</Button>
+        <ActionIcon hiddenFrom="md" variant="light" size={44} onClick={() => setEdit(true)} aria-label={t("dash.customiseTitle")} data-testid="customise-dashboard-phone">
+          <IconAdjustments size={20} /></ActionIcon></>}>
         <Text size="sm" c="dimmed">{plant?.plant_name} · {me?.full_name} · {s.today} ({s.timezone})</Text>
       </PageHeader>
-      {on("section.quick") && <Group gap="sm" mb="lg">
-          {can("request.create") && <Button component={Link} href="/requests?new=1" color="red" leftSection={<IconAlertTriangle size={18} />} className="tap-target">{t("req.new")}</Button>}
-          {can("wo.create") && <Button component={Link} href="/work-orders/new" leftSection={<IconPlus size={18} />} className="tap-target">{t("wo.new")}</Button>}
-          <Button component={Link} href="/scan" variant="default" leftSection={<IconQrcode size={18} />} className="tap-target">{t("nav.scan")}</Button>
+      {production && on("section.production") && <ProductionToday />}
+      {/* Phones and tablets have new request / work order (+) and Scan in the bottom bar: only the field round stays here. */}
+      {on("section.quick") && <Group gap="sm" mb="lg" data-testid="dash-quick" visibleFrom={can("request.create") ? undefined : "md"}>
+          {can("request.create") && <Button visibleFrom="md" component={Link} href="/requests?new=1" color="red" leftSection={<IconAlertTriangle size={18} />} className="tap-target">{t("req.new")}</Button>}
+          {can("wo.create") && <Button visibleFrom="md" component={Link} href="/work-orders/new" leftSection={<IconPlus size={18} />} className="tap-target">{t("wo.new")}</Button>}
+          <Button visibleFrom="md" component={Link} href="/scan" variant="default" leftSection={<IconQrcode size={18} />} className="tap-target">{t("nav.scan")}</Button>
           {can("request.create") && <Button component={Link} href="/field" variant="default" leftSection={<IconRoute size={18} />} className="tap-target">{t("nav.field")}</Button>}
       </Group>}
       <DashLegend />
@@ -377,7 +441,7 @@ export default function Dashboard() {
       </SimpleGrid>}
       {on("section.kpis") && can("kpi.view") && <KpiTiles today={s.today} prefs={prefs} onCustomise={() => setEdit(true)} />}
       {!mine && work}
-      {edit && <Customise prefs={prefs} summary={s} defs={defs.data ?? []} cards={sc.data ?? []} onSave={save} onClose={() => setEdit(false)} />}
+      {edit && <Customise prefs={prefs} summary={s} defs={defs.data ?? []} cards={sc.data ?? []} production={production} onSave={save} onClose={() => setEdit(false)} />}
     </>
   );
 }

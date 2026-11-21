@@ -63,8 +63,19 @@ const NAV_GROUPS: { key: string | null; items: NavItem[] }[] = [
 /** Counts shown next to a menu entry (from the dashboard summary, shared with the dashboard page). */
 interface NavCounts {
   my_open_work?: number; open_emergencies?: number; new_requests?: number; pm_pending_approvals?: number; lube_overdue?: number;
-  open_alerts?: { critical: number; warning: number };
+  open_alerts?: { critical: number; warning: number }; awaiting_approval?: number; awaiting_review?: number;
 }
+
+/** What a user mostly does, from the permissions (so custom roles follow too): it picks the second slot of the bottom
+ * bar and the menu group that is open at first on a phone. */
+type Focus = "production" | "orders" | "stores" | "work";
+function focusOf(can: (p: string) => boolean, production: boolean): Focus {
+  if (production && can("op.enter") && !can("wo.plan")) return "production"; // operators, shift leaders, production manager
+  if (can("wo.approve") || can("wo.plan")) return "orders"; // supervisors, planners, engineers, managers
+  if (can("inventory.transact") && !can("request.create")) return "stores"; // storekeeper
+  return "work"; // technicians and everyone else
+}
+const FOCUS_GROUP: Record<Focus, string> = { production: "navGroup.operations", orders: "navGroup.maintenance", stores: "navGroup.resources", work: "navGroup.maintenance" };
 function navCount(href: string, s: NavCounts | undefined): { n: number; color: string } | null {
   if (!s) return null;
   const v: Record<string, [number | undefined, string]> = {
@@ -95,12 +106,28 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const navShown = (n: NavItem) => (!n.perm || can(n.perm)) && (!n.feature || opCfg.data?.features?.[n.feature] !== false);
   const navLabel = (n: NavItem) => (n.label && opCfg.data?.labels?.[n.label]) || t(n.key);
   const wide = useMediaQuery("(min-width: 62em)", true);
-  const [navOpen, setNavOpen] = useLocalStorage<string[]>({ key: "pp-nav-open", defaultValue: [] });
+  const production = !!opCfg.data && opCfg.data.features.reports !== false;
+  const focus = focusOf(can, production);
+  // Until the user opens or closes a group, the group of their daily work is open.
+  const [navStored, setNavOpen] = useLocalStorage<string[] | null>({ key: "pp-nav-open", defaultValue: null });
+  const navOpen = navStored ?? [FOCUS_GROUP[focus]];
   const { setColorScheme } = useMantineColorScheme();
   const dark = useComputedColorScheme("light", { getInitialValueInEffect: true }) === "dark";
 
   useEffect(() => { if (!loading && !me && !offline) router.replace("/login"); }, [loading, me, offline, router]);
   useEffect(() => close(), [pathname, close]);
+  // Phones: tabs are one row that scrolls sideways; a page opened on a later tab (e.g. /pm?tab=approvals) shows it.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      for (const tab of document.querySelectorAll<HTMLElement>(".pp-main .mantine-Tabs-list > .mantine-Tabs-tab[data-active]")) {
+        const list = tab.parentElement;
+        if (!list || list.scrollWidth <= list.clientWidth) continue;
+        const r = tab.getBoundingClientRect(), l = list.getBoundingClientRect();
+        if (r.left < l.left || r.right > l.right) list.scrollBy({ left: r.left + r.width / 2 - (l.left + l.width / 2) });
+      }
+    }, 700);
+    return () => window.clearTimeout(id);
+  }, [pathname]);
   // Without internet the app's pages cannot load their data: moving to any page (Back included) leads to the
   // offline dashboard. Only on navigation: a connection lost while typing on a page does not throw the user out.
   useEffect(() => { if (!navigator.onLine && pathname !== "/") window.location.replace("/"); }, [pathname]);
@@ -186,7 +213,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
               <div key={g.key ?? "top"}>
                 {g.key && (foldable ? (
                   <UnstyledButton className="pp-nav-group pp-nav-fold" aria-expanded={open} data-testid={`nav-group-${g.key}`}
-                    onClick={() => !hasActive && setNavOpen((o) => (o.includes(g.key ?? "") ? o.filter((k) => k !== g.key) : [...o, g.key ?? ""]))}>
+                    onClick={() => !hasActive && setNavOpen(navOpen.includes(g.key ?? "") ? navOpen.filter((k) => k !== g.key) : [...navOpen, g.key ?? ""])}>
                     <span>{t(g.key)}</span>
                     <Group gap={6} wrap="nowrap">
                       {waiting > 0 && <Badge size="sm" circle={waiting < 10} color="accent" variant="filled" aria-hidden>{waiting}</Badge>}
@@ -218,37 +245,49 @@ export function AppFrame({ children }: { children: ReactNode }) {
         </AppShell.Section>
       </AppShell.Navbar>
       <AppShell.Main className="pp-main pp-has-bottom-nav">{children}</AppShell.Main>
-      {!opened && <BottomNav pathname={pathname} myOpen={counts.data?.my_open_work ?? 0} onMore={toggle} />}
+      {!opened && <BottomNav pathname={pathname} counts={counts.data} focus={focus} production={production} onMore={toggle} />}
       <ChangePassword opened={pwOpen} onClose={pw.close} />
     </AppShell>
   );
 }
 
-/** Phones and tablets: Home, My work, Create, Scan and More (the full menu), always one tap away.
+/** Phones and tablets: Home, the user's daily list, Create, Scan and More (the full menu), always one tap away.
+ * The second slot follows what the user mostly does: My work (technicians), Work orders with what waits for approval
+ * or review (supervisors, planners, managers), Production reports (production users), Spare parts (storekeepers).
  * Notifications live in the bell at the top. */
-function BottomNav({ pathname, myOpen, onMore }: { pathname: string; myOpen: number; onMore: () => void }) {
+function BottomNav({ pathname, counts, focus, production, onMore }: {
+  pathname: string; counts: NavCounts | undefined; focus: Focus; production: boolean; onMore: () => void;
+}) {
   const { t } = useTranslation();
   const { can } = useSession();
   const label = (text: string) => <span style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>;
-  const item = (href: string, text: string, Icon: typeof IconDashboard, n = 0) => (
-    <Link href={href} data-active={(href === "/" ? pathname === "/" : pathname.startsWith(href)) || undefined} aria-label={text}>
+  const item = (href: string, text: string, Icon: typeof IconDashboard, n = 0, testid?: string) => (
+    <Link href={href} data-active={(href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`)) || undefined} aria-label={text} data-testid={testid}>
       <Indicator disabled={!n} label={n} size={16} color="red" offset={2}><Icon size={24} stroke={1.7} /></Indicator>
       {label(text)}
     </Link>
   );
+  const second =
+    focus === "production" ? item("/operations", t("nav.operations"), IconBuildingFactory2, 0, "bottom-second")
+    : focus === "orders" && can("wo.view") ? item("/work-orders", t("nav.workOrders"), IconClipboardList, (counts?.awaiting_approval ?? 0) + (counts?.awaiting_review ?? 0), "bottom-second")
+    : focus === "stores" && can("inventory.view") ? item("/inventory", t("nav.inventory"), IconBox, 0, "bottom-second")
+    : can("wo.view") ? item("/my-work", t("nav.myWork"), IconUserCheck, counts?.my_open_work ?? 0, "bottom-second") : null;
   // Create: only what this user may create. One choice opens at once, no extra tap.
+  const report = production && can("op.enter") && { href: "/operations?new=1", text: t("ops.newReport"), Icon: IconBuildingFactory2, color: "var(--pp-strong)" };
   const creates = [
+    focus === "production" && report,
     can("request.create") && { href: "/requests?new=1", text: t("req.new"), Icon: IconAlertTriangle, color: "var(--mantine-color-red-6)" },
     can("wo.create") && { href: "/work-orders/new", text: t("wo.new"), Icon: IconClipboardList, color: "var(--pp-strong)" },
+    focus !== "production" && report,
   ].filter((c): c is { href: string; text: string; Icon: typeof IconDashboard; color: string } => !!c);
   const fab = <span className="pp-fab-circle"><IconPlus size={28} stroke={2.2} /></span>;
   return (
     <Box hiddenFrom="md" component="nav" className="pp-bottom-nav" data-testid="bottom-nav" aria-label="shortcuts">
       {item("/", t("nav.home"), IconDashboard)}
-      {can("wo.view") && item("/my-work", t("nav.myWork"), IconUserCheck, myOpen)}
+      {second}
       {creates.length === 1 && creates[0] && <Link href={creates[0].href} className="pp-fab" aria-label={creates[0].text}>{fab}</Link>}
       {creates.length > 1 && (
-        <Menu position="top" offset={10} withinPortal shadow="md" width={230}>
+        <Menu position="top" offset={10} withinPortal shadow="md" width={240}>
           <Menu.Target>
             <UnstyledButton className="pp-fab" aria-label={t("nav.create")} data-testid="create-menu">{fab}</UnstyledButton>
           </Menu.Target>

@@ -105,6 +105,7 @@ export const en = {
     passwordRule: "At least 12 characters, 3 of: lowercase, uppercase, digit, symbol", passwordMismatch: "The two new passwords do not match",
     passwordChanged: "Password changed. Other devices have been signed out." },
   dash: {
+    production: "Production", prodOee: "OEE", prodNone: "No report this month", sec_production: "Production lines: latest daily report",
     colourKey: "Colour key", level_bad: "Red = act now", level_warn: "Amber = needs attention / waiting", level_ok: "Green = all clear / target met", level_info: "Grey = information", kpiTitle: "KPIs: result vs target", noTarget: "No target set", setTargets: "Some KPIs have no target yet. A manager sets them on",
     cmAlarms: "Condition monitoring alarms (open)", cmAlarmsSplit: "{{a}} alarm limit · {{w}} warning limit",
     customiseTitle: "Customise dashboard", sections: "Sections", tiles: "Counters", sec_quick: "Quick actions (new request, new work order, scan)", sec_tiles: "Counters", sec_attention: "Needs attention (open work orders)", sec_activity: "Work orders per week", sec_kpis: "KPIs: result vs target", sec_condition: "Condition monitoring signals (Nelson rules, alarms)", noCompany: "No company KPIs yet (KPIs & reports > Company KPIs > Add KPI)", cmHint: "Alarms and Nelson rule signals", cmClear: "No alarms and no Nelson rule signals",
