@@ -19,7 +19,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from ortools.sat.python import cp_model
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, true
 from sqlalchemy.orm import Session
 
 from app.api.deps import Ctx
@@ -120,8 +120,17 @@ def check_days(n: int) -> None:
         raise DomainError(f"A plan is 1 to {MAX_DAYS} days long", "plan_days", 422)
 
 
-def overlapping(db: Session, plant_id: uuid.UUID, start: date, n: int, exclude: uuid.UUID | None = None) -> list[WeeklySchedule]:
-    """Other plans with a day in [start, start + n)."""
+def overlapping(
+    db: Session,
+    plant_id: uuid.UUID,
+    start: date,
+    n: int,
+    exclude: uuid.UUID | None = None,
+    department_id: uuid.UUID | None = None,
+    clashing: bool = True,
+) -> list[WeeklySchedule]:
+    """Other plans with a day in [start, start + n). clashing: only those that would plan the same work (the same
+    department, or either is the whole plant's); else only the others (another department's: they share people)."""
     near = db.execute(
         select(WeeklySchedule).where(
             WeeklySchedule.plant_id == plant_id,
@@ -129,7 +138,22 @@ def overlapping(db: Session, plant_id: uuid.UUID, start: date, n: int, exclude: 
             WeeklySchedule.week_start > start - timedelta(days=MAX_DAYS),
         )
     ).scalars()
-    return sorted((s for s in near if s.id != exclude and s.week_start + timedelta(days=s.days) > start), key=lambda s: s.week_start)
+    out = [s for s in near if s.id != exclude and s.week_start + timedelta(days=s.days) > start]
+    out = [s for s in out if (department_id is None or s.department_id is None or s.department_id == department_id) == clashing]
+    return sorted(out, key=lambda s: s.week_start)
+
+
+def busy_elsewhere(
+    db: Session, plant_id: uuid.UUID, start: date, n: int, exclude: uuid.UUID | None, department_id: uuid.UUID | None
+) -> dict[tuple[uuid.UUID, date], Decimal]:
+    """Hours each person already has, day by day, in other departments' plans of the same days (shared people)."""
+    out: dict[tuple[uuid.UUID, date], Decimal] = defaultdict(Decimal)
+    end = start + timedelta(days=n - 1)
+    for o in overlapping(db, plant_id, start, n, exclude, department_id, clashing=False):
+        for it in o.items:
+            if not it.deferred and it.user_id and it.work_date and start <= it.work_date <= end:
+                out[(it.user_id, it.work_date)] += it.hours
+    return out
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -192,9 +216,17 @@ def _holders(db: Session, plant_id: uuid.UUID, perm: str) -> set[uuid.UUID]:
 
 
 def load_week(
-    db: Session, plant_id: uuid.UUID, tz: ZoneInfo, week_start: date, today: date, max_overtime: Decimal, n_days: int = 7
+    db: Session,
+    plant_id: uuid.UUID,
+    tz: ZoneInfo,
+    week_start: date,
+    today: date,
+    max_overtime: Decimal,
+    n_days: int = 7,
+    department_id: uuid.UUID | None = None,
 ) -> Week:
-    """The plan period: week_start and the n_days - 1 days after it (a week by default)."""
+    """The plan period: week_start and the n_days - 1 days after it (a week by default). With a department: only its work
+    orders, and only the people who may work there (theirs, or the whole plant)."""
     days = [week_start + timedelta(days=i) for i in range(n_days)]
     end = days[-1]
     after_week = datetime.combine(end + timedelta(days=1), time(0), tzinfo=tz)
@@ -204,6 +236,7 @@ def load_week(
                 WorkOrder.plant_id == plant_id,
                 WorkOrder.status.in_(SCHEDULABLE),
                 WorkOrder.shutdown_package_id.is_(None),  # shutdown work is planned with its shutdown
+                WorkOrder.department_id == department_id if department_id else true(),
                 or_(
                     WorkOrder.due_date.is_(None),
                     WorkOrder.due_date <= end,
@@ -310,7 +343,10 @@ def load_week(
         m = members[r.user_id]
         p = people.get(u.id)
         if p is None:
-            p = people[u.id] = Person(user=u, departments=({m.department_id} if m.department_id else set()) | extra[m.id])
+            depts = ({m.department_id} if m.department_id else set()) | extra[m.id]
+            if department_id and depts and department_id not in depts:
+                continue  # works in other departments only: not in this department's plan
+            p = people[u.id] = Person(user=u, departments=depts)
         hours, ot = Decimal(r.hours or 0), Decimal(r.overtime_hours or 0)
         if r.kind == RosterKind.WORK:
             regular, extra_h = hours, max(max_overtime, ot)
@@ -467,12 +503,19 @@ class Placement:
 
 
 def solve(
-    week: Week, fixed: list[Placement], fixed_deferred: set[uuid.UUID], seconds: float = SOLVE_SECONDS
+    week: Week,
+    fixed: list[Placement],
+    fixed_deferred: set[uuid.UUID],
+    seconds: float = SOLVE_SECONDS,
+    busy: dict[tuple[uuid.UUID, date], Decimal] | None = None,
 ) -> tuple[list[Placement], dict[uuid.UUID, dict], dict]:
     """fixed: placements kept as they are (pinned by hand, or already scheduled with assignees); they use up hours.
-    Returns the placements (fixed ones included), the deferred jobs with the reason, and solver stats."""
+    busy: hours people already have in other departments' plans. Returns the placements (fixed ones included), the
+    deferred jobs with the reason, and solver stats."""
     m = cp_model.CpModel()
     used: dict[tuple[uuid.UUID, date], int] = defaultdict(int)
+    for k, h in (busy or {}).items():
+        used[k] += int(math.ceil(h * Q))
     fixed_jobs = {f.wo_id for f in fixed}
     for f in fixed:
         used[(f.user_id, f.day)] += int(f.hours * Q)
@@ -599,38 +642,60 @@ def _order_key(week: Week, wo_id: uuid.UUID) -> tuple:
 # Propose, check, approve
 
 
-def plan_at(db: Session, plant_id: uuid.UUID, start: date) -> WeeklySchedule | None:
+def page_link(s: WeeklySchedule) -> str:
+    return f"/schedule?week={s.week_start}&days={s.days}" + (f"&dept={s.department_id}" if s.department_id else "")
+
+
+def plan_at(db: Session, plant_id: uuid.UUID, start: date, department_id: uuid.UUID | None = None) -> WeeklySchedule | None:
     return db.execute(
-        select(WeeklySchedule).where(WeeklySchedule.plant_id == plant_id, WeeklySchedule.week_start == start)
+        select(WeeklySchedule).where(
+            WeeklySchedule.plant_id == plant_id,
+            WeeklySchedule.week_start == start,
+            WeeklySchedule.department_id == department_id if department_id else WeeklySchedule.department_id.is_(None),
+        )
     ).scalar_one_or_none()
 
 
-def get_or_create(db: Session, plant_id: uuid.UUID, week_start: date, n_days: int = 7) -> WeeklySchedule:
-    s = plan_at(db, plant_id, week_start)
+def get_or_create(
+    db: Session, plant_id: uuid.UUID, week_start: date, n_days: int = 7, department_id: uuid.UUID | None = None
+) -> WeeklySchedule:
+    s = plan_at(db, plant_id, week_start, department_id)
     if s is None:
-        s = WeeklySchedule(plant_id=plant_id, week_start=week_start, days=n_days, status="draft", stats={})
+        s = WeeklySchedule(plant_id=plant_id, week_start=week_start, days=n_days, department_id=department_id, status="draft", stats={})
         db.add(s)
         db.flush()
     return s
 
 
 def propose(
-    db: Session, ctx: Ctx, week_start: date, max_overtime: Decimal, seconds: float = SOLVE_SECONDS, n_days: int | None = None
+    db: Session,
+    ctx: Ctx,
+    week_start: date,
+    max_overtime: Decimal,
+    seconds: float = SOLVE_SECONDS,
+    n_days: int | None = None,
+    department_id: uuid.UUID | None = None,
 ) -> WeeklySchedule:
-    """Propose the plan that starts on week_start, n_days long (default: the plan's length, or a week)."""
-    existing = plan_at(db, ctx.plant_id, week_start)
+    """Propose the plan that starts on week_start, n_days long (default: the plan's length, or a week), for the whole
+    plant or one department. Someone limited to departments plans only their own departments."""
+    if department_id is None and ctx.department_ids:
+        raise DomainError("Choose one of your departments to plan", "schedule_department", 403)
+    if department_id is not None and not ctx.dept_ok(department_id):
+        raise DomainError("Not your department", "schedule_department", 403)
+    existing = plan_at(db, ctx.plant_id, week_start, department_id)
     n = n_days or (existing.days if existing else 7)
     check_days(n)
     if existing and existing.status == "approved":
         raise DomainError("This plan is approved; reopen it to propose again", "schedule_approved", 409)
-    clash = overlapping(db, ctx.plant_id, week_start, n, existing.id if existing else None)
+    clash = overlapping(db, ctx.plant_id, week_start, n, existing.id if existing else None, department_id)
     if clash:
         o = clash[0]
         raise DomainError(f"Overlaps the plan of {o.week_start} – {o.week_start + timedelta(days=o.days - 1)}", "schedule_overlap", 409)
-    s = get_or_create(db, ctx.plant_id, week_start, n)
+    s = get_or_create(db, ctx.plant_id, week_start, n, department_id)
     s.days = n
     tz = ZoneInfo(ctx.plant.timezone)
-    week = load_week(db, ctx.plant_id, tz, week_start, plant_today(ctx.plant), max_overtime, n)
+    week = load_week(db, ctx.plant_id, tz, week_start, plant_today(ctx.plant), max_overtime, n, department_id)
+    busy = busy_elsewhere(db, ctx.plant_id, week_start, n, s.id, department_id)
     # Keep what was pinned by hand, and work already scheduled this week with its people.
     fixed: list[Placement] = []
     fixed_deferred: set[uuid.UUID] = set()
@@ -662,7 +727,7 @@ def propose(
         if week.days[0] <= d <= week.days[-1]:
             for a in w.assignments:
                 fixed.append(Placement(wid, a.user_id, d, job.per_person, a.is_lead))
-    placements, deferred, stats = solve(week, fixed, fixed_deferred, seconds)
+    placements, deferred, stats = solve(week, fixed, fixed_deferred, seconds, busy)
     # Start again from the pinned deferrals; pinned placements come back from the solver (with their overtime flag).
     pinned_pl = {(it.work_order_id, it.user_id, it.work_date) for it in kept if not it.deferred}
     for it in list(s.items):
@@ -687,7 +752,7 @@ def propose(
     s.stats = stats | totals(s)
     db.flush()
     audit(db, "schedule.propose", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="weekly_schedule", entity_id=s.id,
-          data={"week": str(week_start), "days": n, **{k: v for k, v in s.stats.items() if k != "objective"}})  # fmt: skip
+          data={"week": str(week_start), "days": n, "department": str(department_id) if department_id else None, **{k: v for k, v in s.stats.items() if k != "objective"}})  # fmt: skip
     return s
 
 
@@ -703,9 +768,10 @@ def totals(s: WeeklySchedule) -> dict:
 
 def check(db: Session, ctx: Ctx, s: WeeklySchedule) -> dict:
     """Per item, what breaks a rule (after hand edits); per person and day, the load against the roster."""
-    week = load_week(db, ctx.plant_id, ZoneInfo(ctx.plant.timezone), s.week_start, date.min, s.max_overtime_hours, s.days)
+    week = load_week(db, ctx.plant_id, ZoneInfo(ctx.plant.timezone), s.week_start, date.min, s.max_overtime_hours, s.days, s.department_id)
+    busy = busy_elsewhere(db, ctx.plant_id, s.week_start, s.days, s.id, s.department_id)
     warn: dict[str, list[dict]] = {}
-    load: dict[tuple[uuid.UUID, date], Decimal] = defaultdict(Decimal)
+    load: dict[tuple[uuid.UUID, date], Decimal] = defaultdict(Decimal, busy)
     for it in s.items:
         if it.deferred or it.user_id is None or it.work_date is None:
             continue
@@ -726,7 +792,7 @@ def check(db: Session, ctx: Ctx, s: WeeklySchedule) -> dict:
         cap = (p.days[d].regular + p.days[d].overtime) if p and d in p.days else Decimal(0)
         if h > cap:
             over.append({"user_id": uid, "date": d, "hours": h, "capacity": cap})
-    return {"warnings": warn, "over_capacity": over, "week": week}
+    return {"warnings": warn, "over_capacity": over, "week": week, "busy": busy}
 
 
 def _back_to_draft(s: WeeklySchedule) -> None:
@@ -754,9 +820,9 @@ def review(db: Session, ctx: Ctx, s: WeeklySchedule) -> None:
         entity_id=s.id,
         data={"week": str(s.week_start)},
     )
-    notify(db, ctx.plant_id, [u for u in users_with_permission(db, ctx.plant_id, "schedule.approve") if u != ctx.user.id],
+    notify(db, ctx.plant_id, [u for u in users_with_permission(db, ctx.plant_id, "schedule.approve", s.department_id) if u != ctx.user.id],
            kind="approval", title=f"Weekly schedule {s.week_start} awaits your approval", body=f"Approved by {ctx.user.full_name}",
-           link=f"/schedule?week={s.week_start}", dedupe_key=f"schedule:{s.id}:review")  # fmt: skip
+           link=page_link(s), dedupe_key=f"schedule:{s.id}:review")  # fmt: skip
 
 
 def send_back(db: Session, ctx: Ctx, s: WeeklySchedule, comment: str) -> None:
@@ -778,7 +844,7 @@ def send_back(db: Session, ctx: Ctx, s: WeeklySchedule, comment: str) -> None:
     )
     if s.created_by_id and s.created_by_id != ctx.user.id:
         notify(db, ctx.plant_id, [s.created_by_id], kind="approval", title=f"Weekly schedule {s.week_start} sent back",
-               body=comment, link=f"/schedule?week={s.week_start}", dedupe_key=f"schedule:{s.id}:return")  # fmt: skip
+               body=comment, link=page_link(s), dedupe_key=f"schedule:{s.id}:return")  # fmt: skip
 
 
 def _first_free(busy: list[tuple[datetime, datetime]], earliest: datetime, hours: float, latest_end: datetime | None) -> datetime | None:
@@ -799,7 +865,7 @@ def approve(db: Session, ctx: Ctx, s: WeeklySchedule) -> list[dict]:
     if s.status != "engineer_approved":
         raise DomainError("The engineer approves the week first", "schedule_state", 409)
     tz = ZoneInfo(ctx.plant.timezone)
-    week = load_week(db, ctx.plant_id, tz, s.week_start, date.min, s.max_overtime_hours, s.days)
+    week = load_week(db, ctx.plant_id, tz, s.week_start, date.min, s.max_overtime_hours, s.days, s.department_id)
     by_wo: dict[uuid.UUID, list[ScheduleItem]] = defaultdict(list)
     for it in s.items:
         if not it.deferred and it.user_id and it.work_date:

@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,13 +18,24 @@ SCHEDULE_STATUSES = ("draft", "engineer_approved", "approved")
 class WeeklySchedule(Base, PlantScoped, Timestamped):
     __tablename__ = "weekly_schedules"
     __table_args__ = (
-        UniqueConstraint("plant_id", "week_start"),
+        # one plan per start day for the whole plant, and one per department
+        Index("uq_weekly_schedules_plant_start", "plant_id", "week_start", unique=True, postgresql_where=text("department_id IS NULL")),
+        Index(
+            "uq_weekly_schedules_dept_start",
+            "plant_id",
+            "department_id",
+            "week_start",
+            unique=True,
+            postgresql_where=text("department_id IS NOT NULL"),
+        ),  # fmt: skip
         CheckConstraint("status IN ('draft','engineer_approved','approved')", name="status"),
         CheckConstraint("days BETWEEN 1 AND 31", name="days"),
     )
     id: Mapped[uuid.UUID] = uuid_pk()
     week_start: Mapped[date] = mapped_column(Date)  # the first day of the plan (any day; a week starts on Sunday)
     days: Mapped[int] = mapped_column(Integer, default=7, server_default="7")  # length of the plan: a week, 10 days, 20 days …
+    # None: the whole plant; else the plan of one department (its work orders, and the people who may work there)
+    department_id: Mapped[uuid.UUID | None] = fk("departments.id", nullable=True, ondelete="CASCADE", index=False)
     status: Mapped[str] = mapped_column(String(20), default="draft")
     max_overtime_hours: Mapped[Decimal] = mapped_column(Numeric(4, 2), default=2)  # extra hours a person may get on a work day
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))

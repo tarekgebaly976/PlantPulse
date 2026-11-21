@@ -22,6 +22,7 @@ import { useSession } from "@/lib/session";
 interface WO {
   id: string; number: string; title: string; type: string; status: string; priority: string; asset: string | null; criticality: string | null;
   due_date: string | null; pm_deadline: string | null; hours: number | null; crew: number; trade: string | null; safety: boolean; stop: boolean; skills: string[];
+  department_id: string;
 }
 interface Item {
   id: string; work_order: WO | null; user_id: string | null; work_date: string | null; hours: number; overtime: boolean; is_lead: boolean;
@@ -31,16 +32,17 @@ type MsgParams = Record<string, string | number | null>;
 /** A reason or warning from the server: a code with parameters (translated here) and the English text. */
 interface Msg { code: string; params: MsgParams; text: string }
 interface RosterDay { kind: string; shift: string | null; regular: number; capacity: number }
-interface Person { user_id: string; name: string; trade: string | null; days: Record<string, RosterDay>; load: Record<string, number> }
+interface Person { user_id: string; name: string; trade: string | null; departments: string[]; days: Record<string, RosterDay>; load: Record<string, number> }
 interface Sched {
-  id: string; status: string; days: number; max_overtime_hours: number; proposed_at: string | null; proposed_by: string | null; engineer_at: string | null;
+  id: string; status: string; days: number; department_id: string | null; max_overtime_hours: number; proposed_at: string | null; proposed_by: string | null; engineer_at: string | null;
   engineer_by: string | null; manager_at: string | null; manager_by: string | null; returned_comment: string | null;
   stats: { solver?: string; seconds?: number; scheduled?: number; deferred?: number; hours?: number; overtime_items?: number; people?: number };
 }
 interface WeekView {
   week_start: string; days: string[]; today: string; schedule: Sched | null; people: Person[]; items: Item[];
   over_capacity: { user_id: string; date: string; hours: number; capacity: number }[]; apply_warnings?: Msg[]; windows: Win[];
-  overlaps: { start: string; end: string; days: number; status: string }[];
+  overlaps: { start: string; end: string; days: number; status: string; department_id: string | null }[];
+  department_id: string | null; busy_elsewhere: { user_id: string; date: string; hours: number }[];
 }
 interface Win { id: string; asset_id: string; asset: string; asset_code: string; date: string; start: string; end: string; hours: number; note: string | null }
 
@@ -62,9 +64,17 @@ function Schedule() {
   const params = useSearchParams();
   // A plan starts on any day and is 1–31 days long; by default a week from Sunday.
   const week = /^\d{4}-\d{2}-\d{2}$/.test(params.get("week") ?? "") ? (params.get("week") as string) : defaultWeek();
-  const askDays = Math.min(MAX_DAYS, Math.max(1, Number(params.get("days")) || 0)) || null;
-  const setWeek = (w: string, n?: number | null) => router.replace(`/schedule?week=${w}${n ? `&days=${n}` : ""}`);
-  const q = useQ<WeekView>(`/schedule/weeks/${week}`, askDays ? { days: askDays } : undefined);
+  const rawDays = Number(params.get("days"));
+  const askDays = Number.isInteger(rawDays) && rawDays >= 1 ? Math.min(MAX_DAYS, rawDays) : null; // none: the plan's own length, or a week
+  // The plan of the whole plant (no dept) or of one department.
+  const dept = params.get("dept") || null;
+  const go = (w: string, n: number | null | undefined, d: string | null) =>
+    router.replace(`/schedule?week=${w}${n ? `&days=${n}` : ""}${d ? `&dept=${d}` : ""}`);
+  const setWeek = (w: string, n?: number | null) => go(w, n, dept);
+  const q = useQ<WeekView>(`/schedule/weeks/${week}`, { ...(askDays ? { days: askDays } : {}), ...(dept ? { department_id: dept } : {}) });
+  const depts = useQ<{ id: string; code: string; name: string; name_ar: string | null }[]>("/departments").data ?? [];
+  const deptName = (id: string | null) => { const d = depts.find((x) => x.id === id); return d ? `${d.code} — ${i18n.language === "ar" && d.name_ar ? d.name_ar : d.name}` : t("sched.wholePlant"); };
+  const [show, setShow] = useState<string | null>(null); // whole plant's plan: show one department only
   const v = q.data;
   const s = v?.schedule ?? null;
   const n = v?.days.length ?? askDays ?? 7; // the days shown
@@ -85,7 +95,7 @@ function Schedule() {
   const phone = useMediaQuery("(max-width: 48em)");
   const [win, setWin] = useState<{ asset_id: string | null; work_date: string; start_time: string; hours: number | string; note: string } | null>(null);
 
-  const propose = useMut(() => post(`/schedule/weeks/${week}/propose`, { max_overtime_hours: Number(ot) || 0, days: want }), { success: t("sched.proposed") });
+  const propose = useMut(() => post(`/schedule/weeks/${week}/propose`, { max_overtime_hours: Number(ot) || 0, days: want, department_id: dept }), { success: t("sched.proposed") });
   const review = useMut(() => post(`/schedule/${s?.id}/review`));
   const approve = useMut(() => post<WeekView>(`/schedule/${s?.id}/approve`), { onDone: (r) => setApplied(r.apply_warnings ?? []) });
   const sendBack = useMut(() => post(`/schedule/${s?.id}/return`, { comment: back }), { onDone: () => setBack(null) });
@@ -103,8 +113,18 @@ function Schedule() {
   const locked = s?.status === "approved";
   const canPlan = can("schedule.plan") && !locked;
   const dayName = (d: string) => new Intl.DateTimeFormat(i18n.language, { weekday: "short", timeZone: "UTC" }).format(new Date(`${d}T00:00:00Z`));
-  const placed = v.items.filter((i) => !i.deferred);
-  const deferred = v.items.filter((i) => i.deferred);
+  const shown = (i: Item) => !show || i.work_order?.department_id === show;
+  const placed = v.items.filter((i) => !i.deferred && shown(i));
+  const deferred = v.items.filter((i) => i.deferred && shown(i));
+  const people = v.people.filter((p) => !show || !p.departments.length || p.departments.includes(show));
+  const elsewhere = new Map(v.busy_elsewhere.map((b) => [`${b.user_id}:${b.date}`, b.hours]));
+  // the whole plant's plan, per department: work orders placed, hours, deferred
+  const perDept = dept ? [] : Object.entries(v.items.reduce<Record<string, { wos: Set<string>; hours: number; deferred: number }>>((acc, i) => {
+    const k = i.work_order?.department_id; if (!k) return acc;
+    const a = (acc[k] ??= { wos: new Set(), hours: 0, deferred: 0 });
+    if (i.deferred) a.deferred += 1; else { a.wos.add(i.work_order!.id); a.hours += i.hours; }
+    return acc;
+  }, {}));
   const at = (uid: string, d: string) => placed.filter((i) => i.user_id === uid && i.work_date === d);
   const over = new Set(v.over_capacity.map((o) => `${o.user_id}:${o.date}`));
   const peopleOpts = v.people.map((p) => ({ value: p.user_id, label: `${p.name}${p.trade ? ` · ${p.trade}` : ""}` }));
@@ -126,6 +146,8 @@ function Schedule() {
       <Stack>
         <Paper withBorder p="md">
           <Group gap="sm" align="end" mb="md" wrap="wrap">
+            <Select label={t("sched.scope")} w={230} allowDeselect={false} value={dept ?? ""} onChange={(x) => { setShow(null); go(week, askDays, x || null); }}
+              data={[{ value: "", label: t("sched.wholePlant") }, ...depts.map((d) => ({ value: d.id, label: deptName(d.id) }))]} />
             <TextInput type="date" label={t("sched.planStart")} value={week} w={170}
               onChange={(e) => /^\d{4}-\d{2}-\d{2}$/.test(e.currentTarget.value) && setWeek(e.currentTarget.value, askDays)} />
             <div>
@@ -137,12 +159,22 @@ function Schedule() {
               onChange={(x) => typeof x === "number" && x >= 1 && x <= MAX_DAYS && setWeek(week, x)} />
             <Button variant="subtle" size="xs" onClick={() => setWeek(sundayOf(week), 7)}>{t("sched.week7")}: {fmtDate(sundayOf(week))}</Button>
           </Group>
+          {!dept && depts.length > 1 && (
+            <Group gap="xs" mb="sm" wrap="wrap" align="center">
+              <Select size="xs" w={230} clearable placeholder={t("sched.allDepts")} aria-label={t("sched.showDept")} value={show} onChange={setShow}
+                data={depts.map((d) => ({ value: d.id, label: deptName(d.id) }))} />
+              {perDept.map(([k, a]) => (
+                <Badge key={k} variant={show === k ? "filled" : "light"} tt="none" style={{ cursor: "pointer" }} onClick={() => setShow(show === k ? null : k)}>
+                  {deptName(k).split(" — ")[0]}: {t("sched.deptSummary", { n: a.wos.size, h: fmtNum(a.hours, 1), d: a.deferred })}
+                </Badge>))}
+            </Group>
+          )}
           {s && askDays && askDays !== s.days && <Alert mb="sm" color="blue" p="xs">{t("sched.lengthNote", { n: s.days, m: askDays })}</Alert>}
           {v.overlaps.map((o) => (
-            <Alert key={o.start} mb="sm" color="orange" p="xs">
+            <Alert key={`${o.start}-${o.department_id}`} mb="sm" color="orange" p="xs">
               <Group justify="space-between" gap="xs">
-                <Text size="sm">{t("sched.overlap", { start: fmtDate(o.start), end: fmtDate(o.end), n: o.days })}</Text>
-                <Button size="xs" variant="light" onClick={() => setWeek(o.start, null)}>{t("sched.openPlan")}</Button>
+                <Text size="sm">{t("sched.overlap", { start: fmtDate(o.start), end: fmtDate(o.end), n: o.days })} · {deptName(o.department_id)}</Text>
+                <Button size="xs" variant="light" onClick={() => go(o.start, null, o.department_id)}>{t("sched.openPlan")}</Button>
               </Group>
             </Alert>
           ))}
@@ -217,7 +249,7 @@ function Schedule() {
             </Table>)}
         </Card>
 
-        {v.people.length === 0 && <Alert color="gray">{t("sched.noRoster")}</Alert>}
+        {people.length === 0 && <Alert color="gray">{t("sched.noRoster")}</Alert>}
         <ScrollArea type="auto">
           <Table withTableBorder withColumnBorders fz="xs" miw={1100} data-testid="schedule-grid" style={{ tableLayout: "fixed" }}>
             <Table.Thead><Table.Tr>
@@ -232,7 +264,7 @@ function Schedule() {
                 </Table.Th>))}
             </Table.Tr></Table.Thead>
             <Table.Tbody>
-              {v.people.map((p) => (
+              {people.map((p) => (
                 <Table.Tr key={p.user_id}>
                   <Table.Td>{p.name}<Text size="xs" c="dimmed">{p.trade ?? ""}</Text></Table.Td>
                   {v.days.map((d) => {
@@ -240,12 +272,14 @@ function Schedule() {
                     const off = !r || ["leave", "absence"].includes(r.kind);
                     const load = p.load[d] ?? 0;
                     const full = over.has(`${p.user_id}:${d}`);
+                    const other = elsewhere.get(`${p.user_id}:${d}`) ?? 0;
                     return (
                       <Table.Td key={d} style={{ verticalAlign: "top", background: off ? "var(--mantine-color-gray-light)" : undefined }} data-testid={`day-${p.user_id}-${d}`}>
                         <Group gap={4} justify="space-between" mb={4} wrap="nowrap">
                           {r ? <Badge size="xs" variant="light" color={KIND_COLOR[r.kind] ?? "blue"}>{r.kind === "work" ? r.shift ?? "" : t(`sched.kind_${r.kind}`)}</Badge>
                             : <Text size="xs" c="dimmed">{t("sched.off")}</Text>}
                           {r && !off && <Text size="xs" dir="ltr" c={full ? "red" : load > r.regular ? "orange" : "dimmed"} fw={full ? 700 : undefined}>{fmtNum(load, 1)}/{fmtNum(r.regular || r.capacity, 1)} h</Text>}
+                          {other > 0 && <Tooltip label={t("sched.busyElsewhere", { h: fmtNum(other, 1) })}><Badge size="xs" color="gray" variant="outline" dir="ltr">+{fmtNum(other, 1)} h</Badge></Tooltip>}
                         </Group>
                         <Stack gap={3}>
                           {at(p.user_id, d).map((i) => i.work_order && (

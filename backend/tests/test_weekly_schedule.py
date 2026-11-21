@@ -272,3 +272,29 @@ def test_plan_of_any_length_from_any_day(world):
     assert planner.ok("post", f"/schedule/weeks/{after.isoformat()}/propose", {"days": 20})["schedule"]["days"] == 20
     assert planner.ok("post", f"/schedule/weeks/{start.isoformat()}/propose", {"days": 5})["schedule"]["days"] == 5
     assert planner.post(f"/schedule/weeks/{start.isoformat()}/propose", {"days": 32}).status_code == 422
+
+
+def test_plan_per_department_shares_people_with_the_others(world):
+    """A plan for the whole plant or for one department: a department's plan takes only its work orders; two
+    departments may plan the same days (their people's hours in the other plan are taken as used), but not over the
+    whole plant's plan."""
+    ws, ids = _setup(world)
+    planner = world.api("planner")
+    dept = planner.ok("get", f"/work-orders/{ids['plain']}")
+    dept = dept.get("work_order", dept)["department_id"]
+    other = next(str(d.id) for k, d in world.depts.items() if str(d.id) != dept)
+    v = planner.ok("post", f"/schedule/weeks/{ws.isoformat()}/propose", {"department_id": dept})
+    assert v["schedule"]["department_id"] == dept and v["department_id"] == dept
+    assert {i["work_order"]["department_id"] for i in v["items"]} == {dept}
+    placed = [i for i in v["items"] if not i["deferred"]]
+    assert placed
+    # another department plans the same days: allowed, and sees the hours its shared people already have
+    w = planner.ok("post", f"/schedule/weeks/{ws.isoformat()}/propose", {"department_id": other})
+    assert w["schedule"]["id"] != v["schedule"]["id"] and w["items"] == []
+    busy = {(b["user_id"], b["date"]): b["hours"] for b in w["busy_elsewhere"]}
+    assert busy[(placed[0]["user_id"], placed[0]["work_date"])] >= placed[0]["hours"]
+    # the whole plant's plan over the same days is refused; each department's plan opens on its own
+    r = planner.post(f"/schedule/weeks/{ws.isoformat()}/propose", {})
+    assert r.status_code == 409 and r.json()["code"] == "schedule_overlap"
+    assert planner.ok("get", f"/schedule/weeks/{ws.isoformat()}", params={"department_id": dept})["schedule"]["id"] == v["schedule"]["id"]
+    assert planner.ok("get", f"/schedule/weeks/{ws.isoformat()}")["schedule"] is None

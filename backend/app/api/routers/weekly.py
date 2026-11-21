@@ -19,6 +19,7 @@ from app.models.assets import Asset
 from app.models.enums import RosterKind
 from app.models.identity import User
 from app.models.shifts import RosterEntry, ShiftDefinition
+from app.models.tenancy import Department
 from app.models.weekly import ScheduleItem, StopWindow, WeeklySchedule
 from app.models.workorders import WorkOrder
 from app.schemas.common import In
@@ -30,8 +31,10 @@ router = APIRouter(prefix="/schedule", tags=["schedule"])
 
 def _sched(db: Session, ctx: Ctx, sid: uuid.UUID) -> WeeklySchedule:
     s = db.get(WeeklySchedule, sid)
-    if s is None or s.plant_id != ctx.plant_id:
+    if s is None or s.plant_id != ctx.plant_id or (s.department_id and not ctx.dept_ok(s.department_id)):
         raise HTTPException(404, "Schedule not found")
+    if s.department_id is None and ctx.department_ids:
+        raise DomainError("The whole plant's plan is changed by someone who plans the whole plant", "schedule_department", 403)
     return s
 
 
@@ -40,15 +43,19 @@ def _name(db: Session, uid: uuid.UUID | None) -> str | None:
     return u.full_name if u else None
 
 
-def view(db: Session, ctx: Ctx, week_start: date, n_days: int | None = None) -> dict:
+def view(db: Session, ctx: Ctx, week_start: date, n_days: int | None = None, department_id: uuid.UUID | None = None) -> dict:
     """The plan as the page shows it: people × days (roster and load), the placed and deferred work, and the warnings.
     A plan starts on any day and is 1–31 days long (its own length once proposed; else n_days, by default a week)."""
-    s = svc.plan_at(db, ctx.plant_id, week_start)
+    if department_id:
+        d = db.get(Department, department_id)
+        if d is None or d.plant_id != ctx.plant_id or not ctx.dept_ok(d.id):
+            raise HTTPException(404, "Department not found")
+    s = svc.plan_at(db, ctx.plant_id, week_start, department_id)
     n = s.days if s else (n_days or 7)
     svc.check_days(n)
     days = [week_start + timedelta(days=i) for i in range(n)]
     chk = svc.check(db, ctx, s) if s else {"warnings": {}, "over_capacity": [], "week": None}
-    week = chk["week"] or svc.load_week(db, ctx.plant_id, ZoneInfo(ctx.plant.timezone), week_start, date.min, Decimal(2), n)
+    week = chk["week"] or svc.load_week(db, ctx.plant_id, ZoneInfo(ctx.plant.timezone), week_start, date.min, Decimal(2), n, department_id)
     items = list(s.items) if s else []
     wos = {w.id: w for w in db.execute(select(WorkOrder).where(WorkOrder.id.in_([i.work_order_id for i in items]))).scalars()}
     assets = {a.id: a for a in db.execute(select(Asset).where(Asset.id.in_([w.asset_id for w in wos.values()]))).scalars()}
@@ -78,6 +85,7 @@ def view(db: Session, ctx: Ctx, week_start: date, n_days: int | None = None) -> 
             "user_id": u.id,
             "name": u.full_name,
             "trade": u.trade,
+            "departments": sorted(week.people[u.id].departments, key=str) if u.id in week.people else [],
             "days": cal.get(u.id, {}),
             "load": {d.isoformat(): load.get((u.id, d.isoformat()), 0) for d in days},
         }
@@ -102,6 +110,7 @@ def view(db: Session, ctx: Ctx, week_start: date, n_days: int | None = None) -> 
             "crew": job.crew if job else 1,
             "trade": job.trade if job else None,
             "safety": bool(w.requires_loto or w.requires_permit),
+            "department_id": w.department_id,
             "stop": w.requires_stop,
             "skills": [f"{sk.code} ≥ {r.min_level}" for r, sk in job.need] if job else [],
         }
@@ -130,6 +139,7 @@ def view(db: Session, ctx: Ctx, week_start: date, n_days: int | None = None) -> 
             "id": s.id,
             "status": s.status,
             "days": s.days,
+            "department_id": s.department_id,
             "max_overtime_hours": float(s.max_overtime_hours),
             "proposed_at": s.proposed_at,
             "proposed_by": _name(db, s.created_by_id),
@@ -147,12 +157,21 @@ def view(db: Session, ctx: Ctx, week_start: date, n_days: int | None = None) -> 
         "schedule": sched,
         "people": people,
         "items": out_items,
+        "department_id": department_id,
+        # hours each person has in other departments' plans of these days (shared people)
+        "busy_elsewhere": [{"user_id": u, "date": d, "hours": float(h)} for (u, d), h in (chk.get("busy") or {}).items() if h],
         "over_capacity": [{**o, "hours": float(o["hours"]), "capacity": float(o["capacity"])} for o in chk["over_capacity"]],
         "windows": windows_of(db, ctx, week_start, n),
         # other plans sharing a day with this period (a new plan here may not overlap them)
         "overlaps": [
-            {"start": o.week_start, "days": o.days, "end": o.week_start + timedelta(days=o.days - 1), "status": o.status}
-            for o in svc.overlapping(db, ctx.plant_id, week_start, n, s.id if s else None)
+            {
+                "start": o.week_start,
+                "days": o.days,
+                "end": o.week_start + timedelta(days=o.days - 1),
+                "status": o.status,
+                "department_id": o.department_id,
+            }  # fmt: skip
+            for o in svc.overlapping(db, ctx.plant_id, week_start, n, s.id if s else None, department_id)
         ],
     }
 
@@ -186,33 +205,38 @@ def windows_of(db: Session, ctx: Ctx, week_start: date, n_days: int = 7) -> list
 
 @router.get("/weeks/{week_start}")
 def get_week(
-    week_start: date, days: int | None = Query(None, ge=1, le=svc.MAX_DAYS), ctx: Ctx = Depends(require("wo.view")),
-    db: Session = Depends(get_db, scope="function"),
+    week_start: date, days: int | None = Query(None, ge=1, le=svc.MAX_DAYS), department_id: uuid.UUID | None = None,
+    ctx: Ctx = Depends(require("wo.view")), db: Session = Depends(get_db, scope="function"),
 ) -> dict:  # fmt: skip
-    return view(db, ctx, week_start, days)
+    return view(db, ctx, week_start, days, department_id)
 
 
 class ProposeIn(In):
     max_overtime_hours: Decimal = Field(Decimal(2), ge=0, le=8)
     days: int | None = Field(None, ge=1, le=svc.MAX_DAYS)  # length of the plan; default: as it is, or a week
+    department_id: uuid.UUID | None = None  # None: the whole plant
 
 
 @router.post("/weeks/{week_start}/propose")
 def propose(
     week_start: date, body: ProposeIn, ctx: Ctx = Depends(require("schedule.plan")), db: Session = Depends(get_db, scope="function")
 ) -> dict:
-    s = svc.propose(db, ctx, week_start, body.max_overtime_hours, n_days=body.days)
+    if body.department_id:
+        d = db.get(Department, body.department_id)
+        if d is None or d.plant_id != ctx.plant_id:
+            raise HTTPException(404, "Department not found")
+    s = svc.propose(db, ctx, week_start, body.max_overtime_hours, n_days=body.days, department_id=body.department_id)
     notify_reviewers(db, ctx, s)
-    return view(db, ctx, week_start)
+    return view(db, ctx, week_start, department_id=body.department_id)
 
 
 def notify_reviewers(db: Session, ctx: Ctx, s: WeeklySchedule) -> None:
     from app.services.notifications import notify, users_with_permission
 
-    to = [u for u in users_with_permission(db, ctx.plant_id, "schedule.review") if u != ctx.user.id]
+    to = [u for u in users_with_permission(db, ctx.plant_id, "schedule.review", s.department_id) if u != ctx.user.id]
     notify(db, ctx.plant_id, to, kind="approval", title=f"Weekly schedule {s.week_start} proposed",
            body=f"{s.stats.get('scheduled', 0)} work orders scheduled, {s.stats.get('deferred', 0)} deferred",
-           link=f"/schedule?week={s.week_start}", dedupe_key=f"schedule:{s.id}:proposed")  # fmt: skip
+           link=svc.page_link(s), dedupe_key=f"schedule:{s.id}:proposed")  # fmt: skip
 
 
 def _editable(s: WeeklySchedule) -> None:
@@ -260,7 +284,7 @@ def move_item(
     audit(db, "schedule.edit", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="weekly_schedule", entity_id=s.id,
           data={"item": str(it.id), "user": str(new_user), "day": str(new_day)})  # fmt: skip
     db.flush()
-    return view(db, ctx, s.week_start)
+    return view(db, ctx, s.week_start, department_id=s.department_id)
 
 
 class DeferIn(In):
@@ -284,7 +308,7 @@ def defer(
     audit(db, "schedule.defer", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="weekly_schedule", entity_id=s.id,
           data={"work_order": str(wo_id), "reason": body.reason})  # fmt: skip
     db.flush()
-    return view(db, ctx, s.week_start)
+    return view(db, ctx, s.week_start, department_id=s.department_id)
 
 
 class PlaceIn(In):
@@ -304,7 +328,9 @@ def place(
     w = db.get(WorkOrder, wo_id)
     if w is None or w.plant_id != ctx.plant_id:
         raise HTTPException(404, "Work order not found")
-    week = svc.load_week(db, ctx.plant_id, ZoneInfo(ctx.plant.timezone), s.week_start, date.min, s.max_overtime_hours, s.days)
+    week = svc.load_week(
+        db, ctx.plant_id, ZoneInfo(ctx.plant.timezone), s.week_start, date.min, s.max_overtime_hours, s.days, s.department_id
+    )
     job = week.jobs.get(wo_id)
     if job is None:
         raise DomainError("This work order is not open for scheduling this week", "not_schedulable", 409)
@@ -321,7 +347,7 @@ def place(
     audit(db, "schedule.place", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="weekly_schedule", entity_id=s.id,
           data={"work_order": str(wo_id), "users": [str(u) for u in users], "day": str(body.work_date)})  # fmt: skip
     db.flush()
-    return view(db, ctx, s.week_start)
+    return view(db, ctx, s.week_start, department_id=s.department_id)
 
 
 @router.post("/{sid}/review")
@@ -329,7 +355,7 @@ def review(sid: uuid.UUID, ctx: Ctx = Depends(require("schedule.review")), db: S
     s = _sched(db, ctx, sid)
     svc.review(db, ctx, s)
     db.flush()
-    return view(db, ctx, s.week_start)
+    return view(db, ctx, s.week_start, department_id=s.department_id)
 
 
 @router.post("/{sid}/approve")
@@ -337,7 +363,7 @@ def approve(sid: uuid.UUID, ctx: Ctx = Depends(require("schedule.approve")), db:
     s = _sched(db, ctx, sid)
     warnings = svc.approve(db, ctx, s)
     db.flush()
-    return view(db, ctx, s.week_start) | {"apply_warnings": warnings}
+    return view(db, ctx, s.week_start, department_id=s.department_id) | {"apply_warnings": warnings}
 
 
 class ReturnIn(In):
@@ -353,7 +379,7 @@ def send_back(
         raise DomainError("This week is approved; reopen it instead", "schedule_approved", 409)
     svc.send_back(db, ctx, s, body.comment)
     db.flush()
-    return view(db, ctx, s.week_start)
+    return view(db, ctx, s.week_start, department_id=s.department_id)
 
 
 @router.post("/{sid}/reopen")
@@ -361,7 +387,7 @@ def reopen(sid: uuid.UUID, ctx: Ctx = Depends(require("schedule.approve")), db: 
     s = _sched(db, ctx, sid)
     svc.reopen(db, ctx, s)
     db.flush()
-    return view(db, ctx, s.week_start)
+    return view(db, ctx, s.week_start, department_id=s.department_id)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
