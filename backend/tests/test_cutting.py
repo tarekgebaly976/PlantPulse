@@ -201,3 +201,32 @@ def test_converting_schedule_spreads_orders_over_the_units_and_keeps_due_dates()
     slow = [Converter("s9", "SH9", "sheeter", 500, 1700, 400, 1600, 10, None, 30, 1)]
     r = solve([Line("x", 1050, 54000, 0, None, "sheet", 1000)], lim, units=slow)
     assert schedule(r, [Line("x", 1050, 54000, 0, None, "sheet", 1000)], slow, 6000, start, tz)["unplaced"][0]["code"] == "no_unit_speed"
+
+
+def test_suggestions_when_no_plan_is_possible():
+    lim = Limits(3200, 6, 20, 250, 300, 0.5, set_length_m=6000)
+    sheeter = [Converter("s1", "SH1", "sheeter", 500, 1700, 400, 1600, 10, 250, 30, 1)]
+    # three tiny sheet orders (a 6000 m parent reel gives thousands of sheets): each is far smaller than one reel, and
+    # even one reel of each (710 + 1110 + 610 mm) leaves 750 mm free: add a 750 mm order
+    lines = [
+        Line("a", 700, 100, 1, None, "sheet", 1000),
+        Line("b", 600, 70, 1, None, "sheet", 800),
+        Line("c", 1100, 80, 2, None, "sheet", 1000),
+    ]
+    r = solve(lines, lim, units=sheeter)
+    assert r["status"] == "infeasible"
+    s = {(x["code"], x["order"]): x["params"] for x in r["suggestions"]}
+    assert s[("small", "a")] == {"step": 6000, "nearest": 6000, "kind": "sheet"} and s[("small", "b")]["step"] == 7500
+    assert s[("filler", None)]["width"] == 750 and s[("filler", None)]["after_steps"] is True
+    # close to a whole reel: change the quantity or the tolerance
+    r = solve([Line("a", 700, 6200, 1, None, "sheet", 1000)], lim, units=sheeter)
+    assert next(x for x in r["suggestions"] if x["code"] == "step")["params"] == {
+        "step": 6000,
+        "nearest": 6000,
+        "tolerance": 3.3,
+        "kind": "sheet",
+    }
+    # widths that only fit with a looser tolerance on one order
+    r = solve([Line("a", 2000, 4, 0, None), Line("b", 1000, 20, 0, None)], lim)
+    assert [x["code"] for x in r["suggestions"]] == ["widen_tolerance"] and r["suggestions"][0]["order"] == "b"
+    assert "suggestions" not in solve([Line("a", 1060, 30, 0, None)], lim)  # a plan: nothing to suggest

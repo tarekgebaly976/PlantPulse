@@ -156,7 +156,17 @@ def options(ln: Line, lim: Limits, units: list[Converter]) -> list[Option]:
     return out
 
 
-def solve(lines: list[Line], lim: Limits, seconds: float = SOLVE_SECONDS, units: list[Converter] | None = None) -> dict:
+def solve(
+    lines: list[Line], lim: Limits, seconds: float = SOLVE_SECONDS, units: list[Converter] | None = None, suggest: bool = True
+) -> dict:
+    """The cutting plan; when none is possible, `suggestions` say what to change (see suggestions())."""
+    r = _solve(lines, lim, seconds, units)
+    if suggest and r["status"] in ("infeasible", "timeout"):
+        r["suggestions"] = suggestions(lines, lim, units or [])
+    return r
+
+
+def _solve(lines: list[Line], lim: Limits, seconds: float, units: list[Converter] | None) -> dict:
     units = units or []
     pre = problems(lines, lim, units)
     if pre:
@@ -450,3 +460,99 @@ def schedule(
         "units": per,
         "unplaced": unplaced,
     }
+
+
+# --------------------------------------------------------------------------------------------------------------------
+# Suggestions for the planner when no plan is possible
+
+SUGGEST_SECONDS = 3.0
+SUGGEST_ORDERS = 8  # the orders tried one by one with a wider tolerance
+WIDE_TOLERANCE = 10.0
+
+
+def _nearest(demand: int, steps: list[int]) -> int:
+    """The quantity nearest the demand that whole parent reels can make (one option's multiples; at least one reel)."""
+    best = None
+    for y in steps:
+        k = demand // y
+        for v in (k * y, (k + 1) * y):
+            if v > 0 and (best is None or abs(v - demand) < abs(best - demand)):
+                best = v
+    return best or demand
+
+
+def suggestions(lines: list[Line], lim: Limits, units: list[Converter]) -> list[dict]:
+    """What the planner may change so a plan becomes possible, each tried for real (code + parameters; the page words
+    them): an order smaller than one parent reel (`small`) or whose quantity whole parent reels cannot make within its
+    tolerance (`step`); one order with a wider tolerance (`widen_tolerance`); a larger side trim on the winder
+    (`max_trim`); an extra reel order of the width the orders leave free (`filler`); else `none`. When the quantities
+    had to change, the other suggestions are tried with the changed quantities."""
+    out: list[dict] = []
+    work = list(lines)
+    for i, ln in enumerate(lines):
+        opts = options(ln, lim, units)
+        if not opts:
+            continue
+        lo, hi = math.ceil(ln.reels * (1 - ln.tolerance_pct / 100)), math.floor(ln.reels * (1 + ln.tolerance_pct / 100))
+        steps = sorted({o.yield_ for o in opts})
+        if any((lo + y - 1) // y * y <= hi for y in steps):
+            continue  # some whole number of parent reels makes it
+        near = _nearest(ln.reels, steps)
+        if near >= 2 * ln.reels:
+            out.append({"code": "small", "order": ln.key, "params": {"step": steps[0], "nearest": near, "kind": ln.kind}})
+        else:
+            tol = math.ceil(abs(near - ln.reels) / ln.reels * 1000) / 10
+            out.append({"code": "step", "order": ln.key, "params": {"step": steps[0], "nearest": near, "tolerance": tol, "kind": ln.kind}})
+        work[i] = Line(ln.key, ln.width, near, ln.tolerance_pct, ln.due, ln.kind, ln.sheet_length, ln.converter)
+    changed = bool(out)
+    if changed:
+        r = _solve(work, lim, SUGGEST_SECONDS, units)
+        if r.get("sets"):
+            out.append({"code": "with_steps", "order": None, "params": {"trim_pct": r["trim_pct"]}})
+            return out
+    found = False
+    for ln in work[:SUGGEST_ORDERS]:
+        if ln.tolerance_pct >= WIDE_TOLERANCE:
+            continue
+        trial = [Line(x.key, x.width, x.reels, WIDE_TOLERANCE, x.due, x.kind, x.sheet_length, x.converter) if x is ln else x for x in work]
+        r = _solve(trial, lim, SUGGEST_SECONDS, units)
+        if r.get("sets"):
+            found = True
+            out.append(
+                {
+                    "code": "widen_tolerance",
+                    "order": ln.key,
+                    "params": {"tolerance": WIDE_TOLERANCE, "trim_pct": r["trim_pct"], "after_steps": changed},
+                }
+            )
+    wider = max(lim.max_trim + 150, int(lim.max_trim * 1.6))
+    if wider < lim.deckle:
+        r = _solve(
+            work,
+            Limits(lim.deckle, lim.max_reels, lim.min_trim, wider, lim.min_width, lim.change_cost_sets, lim.set_length_m),
+            SUGGEST_SECONDS,
+            units,
+        )
+        if r.get("sets"):
+            found = True
+            out.append({"code": "max_trim", "order": None, "params": {"mm": wider, "trim_pct": r["trim_pct"], "after_steps": changed}})
+    if not found:
+        # the width the orders leave free in one set, as one more reel order (as many reels as the most parent reels needed)
+        firsts = [min(options(ln, lim, units), key=lambda o: o.width) for ln in work if options(ln, lim, units)]
+        gap = lim.deckle - lim.min_trim - sum(o.width for o in firsts)
+        if firsts and lim.min_width <= gap:
+            need = max(math.ceil(ln.reels / o.yield_) for ln, o in zip([o.line for o in firsts], firsts, strict=True))
+            trial = [*work, Line("__filler", gap, need, 50.0, None)]
+            r = _solve(trial, lim, SUGGEST_SECONDS, units)
+            if r.get("sets"):
+                found = True
+                out.append(
+                    {
+                        "code": "filler",
+                        "order": None,
+                        "params": {"width": gap, "reels": need, "trim_pct": r["trim_pct"], "after_steps": changed},
+                    }
+                )
+    if not found:
+        out.append({"code": "none", "order": None, "params": {}})
+    return out

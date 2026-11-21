@@ -63,7 +63,7 @@ interface Order { id?: string; customer: string | null; ref: string | null; kind
 interface Route { order: string; unit: string | null; unit_code: string | null; parent_width: number; across: number; reels: number; made: number; side_trim_mm: number }
 interface Problem { code: string; params: Record<string, string | number> }
 interface Result {
-  status?: string; problems?: Problem[]; seconds?: number; patterns_considered?: number; capped?: boolean; deckle_mm?: number; sets?: number;
+  status?: string; problems?: Problem[]; suggestions?: { code: string; order: string | null; params: Record<string, string | number | boolean> }[]; seconds?: number; patterns_considered?: number; capped?: boolean; deckle_mm?: number; sets?: number;
   patterns_used?: number; trim_mm_total?: number; trim_pct?: number | null; total_trim_pct?: number | null; converting_trim_mm_total?: number;
   patterns?: { widths: number[]; sets: number; trim_mm: number; trim_pct: number }[];
   widths?: { width: number; made: number; demand?: number; min?: number; max?: number; for?: string[] }[];
@@ -301,6 +301,20 @@ function PlanView({ id, onBack }: { id: string; onBack: () => void }) {
       {r.problems && r.problems.length > 0 && (
         <Alert color="red" title={t("cut.notPossible")}>
           <Stack gap={2}>{r.problems.map((x, i) => <Text key={i} size="sm">• {problem(x)}</Text>)}</Stack>
+        </Alert>
+      )}
+      {r.suggestions && r.suggestions.length > 0 && (
+        <Alert color="blue" title={t("cut.suggestTitle")} data-testid="cut-suggestions">
+          <Stack gap={4}>
+            {r.suggestions.map((x, i) => {
+              const o = p.orders.find((y) => y.id === x.order);
+              const pr = { ...x.params, order: o ? orderName(o.id as string) : "",
+                unit: x.params.kind === "sheet" ? t("cut.sheetsShort") : t("cut.reelsShort"),
+                trim: typeof x.params.trim_pct === "number" ? pct(x.params.trim_pct, 2) : "",
+                nearest: typeof x.params.nearest === "number" ? fmtNum(x.params.nearest, 0) : "", step: typeof x.params.step === "number" ? fmtNum(x.params.step, 0) : "" };
+              return <Text key={i} size="sm">• {t(`cut.suggest.${x.code}`, pr)}{x.params.after_steps ? ` ${t("cut.suggest.afterSteps")}` : ""}</Text>;
+            })}
+          </Stack>
         </Alert>
       )}
       {r.sets != null && (
