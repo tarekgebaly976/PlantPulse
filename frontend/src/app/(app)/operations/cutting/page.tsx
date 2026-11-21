@@ -26,8 +26,38 @@ interface Unit { id?: string; code: string; name: string; kind: "sheeter" | "rew
   stands: number | string; is_active: boolean; sort: number }
 interface Winder { machine_id: string; code: string; name: string; saved: boolean; deckle_mm: number | null; max_reels: number; min_trim_mm: number;
   max_trim_mm: number; min_width_mm: number; change_cost_sets: number; set_length_m: number; grades: Grade[]; converters: Unit[] }
+interface SchedJob { order: string; unit: string; unit_code: string; start: string; end: string; start_min: number; end_min: number; parent_width: number;
+  across: number; reels: number; made: number; due: string | null; late_min: number }
+interface Schedule { status: string; start?: string; end?: string; hours?: number; late_orders?: number; jobs: SchedJob[];
+  units: { unit: string; code: string; kind: string; jobs: number; busy_h: number; changes: number; end: string | null }[]; unplaced: { order: string; code: string }[] }
+/** "2026-11-22T07:00+03:00" → "22/11 07:00" (plant time, as the server sent it). */
+const hm = (iso: string | null | undefined) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)} ${iso.slice(11, 16)}` : "—");
+
+/** One row per unit, its jobs as bars along the time from the plan's start to the end. */
+function Timeline({ s, color, label }: { s: Schedule; color: (w: number) => string; label: (j: SchedJob) => string }) {
+  const total = Math.max(1, ...s.jobs.map((j) => j.end_min));
+  return (
+    <Stack gap={6}>
+      {s.units.map((u) => (
+        <Group key={u.unit} gap="xs" wrap="nowrap" align="center">
+          <Text size="xs" fw={700} w={44}>{u.code}</Text>
+          <div dir="ltr" style={{ position: "relative", flex: 1, height: 22, background: "var(--mantine-color-gray-1)", borderRadius: 4 }}>
+            {s.jobs.filter((j) => j.unit === u.unit).map((j, i) => (
+              <Tooltip key={i} label={`${label(j)} · ${hm(j.start)}–${hm(j.end).slice(6)}`}>
+                <div style={{ position: "absolute", top: 2, bottom: 2, left: `${(j.start_min / total) * 100}%`, width: `${Math.max(0.6, ((j.end_min - j.start_min) / total) * 100)}%`,
+                  background: `var(--mantine-color-${color(j.parent_width)}-5)`, borderRadius: 3, outline: j.late_min > 0 ? "2px solid var(--mantine-color-red-7)" : undefined }} />
+              </Tooltip>
+            ))}
+          </div>
+        </Group>
+      ))}
+      <Group justify="space-between" dir="ltr"><Text size="xs" c="dimmed">{hm(s.start)}</Text><Text size="xs" c="dimmed">{hm(s.end)}</Text></Group>
+    </Stack>
+  );
+}
+
 interface PlanRow { id: string; title: string; machine: string; machine_id: string; grade: string | null; gsm: number | null; status: string; orders_count: number;
-  reels: number; sheets: number; trim_pct: number | null; sets: number | null; calculated_at: string | null; created_at: string; deckle_mm: number | null; grade_id: string | null; note: string | null }
+  reels: number; sheets: number; trim_pct: number | null; sets: number | null; calculated_at: string | null; created_at: string; deckle_mm: number | null; grade_id: string | null; note: string | null; start_at: string | null }
 interface Order { id?: string; customer: string | null; ref: string | null; kind: "reel" | "sheet"; width_mm: number | string; sheet_length_mm: number | string | null;
   converter_id: string | null; reels: number | string; tolerance_pct: number | string; due_date: string | null; made?: number | null }
 interface Route { order: string; unit: string | null; unit_code: string | null; parent_width: number; across: number; reels: number; made: number; side_trim_mm: number }
@@ -38,9 +68,14 @@ interface Result {
   patterns?: { widths: number[]; sets: number; trim_mm: number; trim_pct: number }[];
   widths?: { width: number; made: number; demand?: number; min?: number; max?: number; for?: string[] }[];
   routes?: Route[]; load?: { unit: string; code: string; kind: string; reels: number; sizes: number; hours: number | null }[];
+  schedule?: Schedule;
 }
 interface Plan extends PlanRow { created_by: string | null; orders: Order[]; result: Result; winder: Winder;
   baseline: { from: string; to: string; machine_trim_pct: number | null; grade_trim_pct: number | null } }
+
+/** An ISO time → the value of a datetime-local input, in the browser's time (the plant's, for its users). */
+const localInput = (iso: string) => { const d = new Date(iso); const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 
 const STATUS_COLOR: Record<string, string> = { draft: "gray", calculated: "blue", released: "teal" };
 // one colour per width, the same in the bars and the legend
@@ -140,13 +175,14 @@ function PlanView({ id, onBack }: { id: string; onBack: () => void }) {
   const { can } = useSession();
   const q = useQ<Plan>(`/operations/cutting/plans/${id}`);
   const [orders, setOrders] = useState<Order[] | null>(null);
-  const [head, setHead] = useState<{ title: string; grade_id: string | null; deckle_mm: number | string; note: string } | null>(null);
+  const [head, setHead] = useState<{ title: string; grade_id: string | null; deckle_mm: number | string; note: string; start_at: string } | null>(null);
   const saveOrders = useMut(() => put(`/operations/cutting/plans/${id}/orders`, { orders: (orders ?? []).map((o) => ({
     customer: o.customer || null, ref: o.ref || null, kind: o.kind, width_mm: Number(o.width_mm), reels: Number(o.reels), tolerance_pct: Number(o.tolerance_pct) || 0,
     due_date: o.due_date || null, sheet_length_mm: o.kind === "sheet" ? Number(o.sheet_length_mm) || null : null, converter_id: o.converter_id || null,
   })) }), { onDone: () => setOrders(null) });
   const phone = useMediaQuery("(max-width: 48em)");
-  const saveHead = useMut(() => put(`/operations/cutting/plans/${id}`, { ...head, deckle_mm: head?.deckle_mm === "" ? null : Number(head?.deckle_mm) || null, note: head?.note || null }),
+  const saveHead = useMut(() => put(`/operations/cutting/plans/${id}`, { ...head, deckle_mm: head?.deckle_mm === "" ? null : Number(head?.deckle_mm) || null, note: head?.note || null,
+    start_at: head?.start_at ? `${head.start_at}:00` : null }),
     { onDone: () => setHead(null) });
   const calc = useMut(() => post(`/operations/cutting/plans/${id}/calculate`));
   const release = useMut(() => post(`/operations/cutting/plans/${id}/release`));
@@ -206,14 +242,16 @@ function PlanView({ id, onBack }: { id: string; onBack: () => void }) {
           <Badge color={STATUS_COLOR[p.status]} variant="light">{t(`cut.status_${p.status}`)}</Badge>
         </Group>
         <Group gap="xs">
-          {edit && <Button variant="default" size="xs" onClick={() => setHead({ title: p.title, grade_id: p.grade_id, deckle_mm: p.deckle_mm ?? "", note: p.note ?? "" })}>{t("cut.editPlan")}</Button>}
+          {edit && <Button variant="default" size="xs" onClick={() => setHead({ title: p.title, grade_id: p.grade_id, deckle_mm: p.deckle_mm ?? "", note: p.note ?? "",
+            start_at: p.start_at ? localInput(p.start_at) : "" })}>{t("cut.editPlan")}</Button>}
           {edit && <Button leftSection={<IconCalculator size={16} />} loading={calc.isPending} disabled={orders !== null || p.orders.length === 0} onClick={() => calc.mutate(undefined)}>{t("cut.calculate")}</Button>}
           {can("op.cut") && p.status === "calculated" && <Button color="teal" leftSection={<IconLock size={16} />} loading={release.isPending} onClick={() => release.mutate(undefined)}>{t("cut.release")}</Button>}
           {can("op.cut") && locked && <Button variant="default" leftSection={<IconLockOpen size={16} />} onClick={() => reopen.mutate(undefined)}>{t("cut.reopen")}</Button>}
           {edit && <ConfirmButton color="red" onConfirm={() => remove.mutate(undefined)}>{t("common.delete")}</ConfirmButton>}
         </Group>
       </Group>
-      <Text size="sm" c="dimmed">{p.machine}{p.grade ? ` · ${t("cut.grade")} ${p.grade} (${p.gsm} gsm)` : ""} · {t("cut.deckle")}: <span dir="ltr">{fmtNum(deckle, 0)} mm</span>{p.note ? ` · ${p.note}` : ""}</Text>
+      <Text size="sm" c="dimmed">{p.machine}{p.grade ? ` · ${t("cut.grade")} ${p.grade} (${p.gsm} gsm)` : ""} · {t("cut.deckle")}: <span dir="ltr">{fmtNum(deckle, 0)} mm</span>{p.note ? ` · ${p.note}` : ""}
+        {` · ${t("cut.startAt")}: `}<span dir="ltr">{p.start_at ? fmtDate(p.start_at, undefined, true) : t("cut.startNext")}</span></Text>
 
       <Card withBorder>
         <Group justify="space-between" mb="xs">
@@ -306,22 +344,58 @@ function PlanView({ id, onBack }: { id: string; onBack: () => void }) {
               <Text fw={600} mb="xs">{t("cut.converting")}</Text>
               <DataTable rows={routes.filter((rt) => rt.unit)} rowKey={(rt, i) => `${rt.order}-${rt.unit}-${rt.parent_width}-${i}`} columns={[
                 { key: "o", label: t("cut.order"), render: (rt: Route) => orderName(rt.order) },
-                { key: "u", label: t("cut.unit"), render: (rt: Route) => <b>{rt.unit_code}</b> },
+                ...(r.schedule ? [] : [{ key: "u", label: t("cut.unit"), render: (rt: Route) => <b>{rt.unit_code}</b> }]),
                 { key: "p", label: t("cut.parentReel"), render: (rt: Route) => <Badge color={color(rt.parent_width)} variant="filled" tt="none">{rt.parent_width} mm</Badge> },
                 { key: "a", label: t("cut.across"), render: (rt: Route) => `${rt.across} ×` },
                 { key: "r", label: t("cut.reels"), render: (rt: Route) => rt.reels },
                 { key: "m", label: t("cut.made"), render: (rt: Route) => fmtNum(rt.made, 0) },
                 { key: "t", label: t("cut.sideTrim"), render: (rt: Route) => <span dir="ltr">{rt.side_trim_mm} mm</span> },
               ]} />
+              {r.schedule && r.schedule.jobs.length > 0 ? (() => { const sc = r.schedule; return (
+                <>
+                  <Text fw={600} mt="md" mb="xs">{t("cut.schedule")}</Text>
+                  <SimpleGrid cols={{ base: 2, sm: 4 }} mb="sm">
+                    <Paper withBorder p="xs"><Text size="xs" c="dimmed">{t("cut.startAt")}</Text><Text fw={700} dir="ltr" ta="start">{hm(sc.start)}</Text></Paper>
+                    <Paper withBorder p="xs"><Text size="xs" c="dimmed">{t("cut.allDone")}</Text><Text fw={700} dir="ltr" ta="start">{hm(sc.end)}</Text></Paper>
+                    <Paper withBorder p="xs"><Text size="xs" c="dimmed">{t("cut.hours")}</Text><Text fw={700}>{fmtNum(sc.hours ?? 0, 1)}</Text></Paper>
+                    <Paper withBorder p="xs"><Text size="xs" c="dimmed">{t("cut.lateOrders")}</Text><Text fw={700} c={sc.late_orders ? "red.7" : "teal.7"}>{sc.late_orders ?? 0}</Text></Paper>
+                  </SimpleGrid>
+                  <Timeline s={sc} color={color} label={(j) => orderName(j.order)} />
+                  <DataTable rows={sc.jobs} rowKey={(j, i) => `${j.unit}-${j.start_min}-${i}`} columns={[
+                    { key: "u", label: t("cut.unit"), render: (j: SchedJob) => <b>{j.unit_code}</b> },
+                    { key: "f", label: t("cut.from"), render: (j: SchedJob) => <span dir="ltr">{hm(j.start)}</span> },
+                    { key: "t", label: t("cut.to"), render: (j: SchedJob) => <span dir="ltr">{hm(j.end)}</span> },
+                    { key: "o", label: t("cut.order"), render: (j: SchedJob) => orderName(j.order) },
+                    { key: "p", label: t("cut.parentReel"), render: (j: SchedJob) => <span dir="ltr">{j.reels} × {j.parent_width} mm</span> },
+                    { key: "d", label: t("cut.due"), render: (j: SchedJob) => (j.due ? fmtDate(j.due) : "—") },
+                    { key: "l", label: t("cut.onTime"), render: (j: SchedJob) => j.late_min > 0
+                      ? <Badge color="red" variant="filled" tt="none">{t("cut.lateBy", { h: fmtNum(j.late_min / 60, 1) })}</Badge>
+                      : j.due ? <Badge color="teal" variant="light" tt="none">{t("cut.inTime")}</Badge> : "—" },
+                  ]} />
+                  <Text fw={600} mt="md" mb="xs">{t("cut.load")}</Text>
+                  <DataTable rows={sc.units} rowKey={(u) => u.unit} columns={[
+                    { key: "u", label: t("cut.unit"), render: (u) => <b>{u.code}</b> },
+                    { key: "j", label: t("cut.jobs"), render: (u) => u.jobs },
+                    { key: "h", label: t("cut.busy"), render: (u) => fmtNum(u.busy_h, 1) },
+                    { key: "c", label: t("cut.sizeChanges"), render: (u) => u.changes },
+                    { key: "e", label: t("cut.freeFrom"), render: (u) => <span dir="ltr">{hm(u.end)}</span> },
+                  ]} />
+                  {sc.unplaced.length > 0 && <Alert color="orange" mt="sm">{t("cut.unplaced", { n: sc.unplaced.length })}</Alert>}
+                  <Text size="xs" c="dimmed" mt="xs">{t("cut.scheduleNote")}</Text>
+                </>
+              ); })() : (
+                <>
               <Text fw={600} mt="md" mb="xs">{t("cut.load")}</Text>
-              <DataTable rows={r.load ?? []} rowKey={(l) => l.unit} columns={[
-                { key: "u", label: t("cut.unit"), render: (l) => <b>{l.code}</b> },
-                { key: "k", label: t("cut.kind"), render: (l) => t(`cut.kind_${l.kind}`) },
-                { key: "r", label: t("cut.reels"), render: (l) => l.reels },
-                { key: "s", label: t("cut.sizes"), render: (l) => l.sizes },
-                { key: "h", label: t("cut.hours"), render: (l) => (l.hours != null ? fmtNum(l.hours, 1) : "—") },
-              ]} />
-              <Text size="xs" c="dimmed" mt="xs">{t("cut.loadNote")}</Text>
+                <DataTable rows={r.load ?? []} rowKey={(l) => l.unit} columns={[
+                  { key: "u", label: t("cut.unit"), render: (l) => <b>{l.code}</b> },
+                  { key: "k", label: t("cut.kind"), render: (l) => t(`cut.kind_${l.kind}`) },
+                  { key: "r", label: t("cut.reels"), render: (l) => l.reels },
+                  { key: "s", label: t("cut.sizes"), render: (l) => l.sizes },
+                  { key: "h", label: t("cut.hours"), render: (l) => (l.hours != null ? fmtNum(l.hours, 1) : "—") },
+                ]} />
+                <Text size="xs" c="dimmed" mt="xs">{t("cut.loadNote")}</Text>
+                </>
+              )}
             </Card>
           )}
         </>
@@ -333,6 +407,8 @@ function PlanView({ id, onBack }: { id: string; onBack: () => void }) {
             <TextInput label={t("cut.title")} value={head.title} onChange={(e) => setHead({ ...head, title: e.currentTarget.value })} />
             <Select label={t("cut.grade")} clearable value={head.grade_id} onChange={(v) => setHead({ ...head, grade_id: v })}
               data={p.winder.grades.map((g) => ({ value: g.id, label: `${g.code} (${g.gsm} gsm)` }))} />
+            <TextInput type="datetime-local" label={t("cut.startAt")} description={t("cut.startHint")} value={head.start_at}
+              onChange={(e) => setHead({ ...head, start_at: e.currentTarget.value })} />
             <NumberInput label={t("cut.planDeckle")} description={t("cut.planDeckleHint", { mm: p.winder.deckle_mm ?? "—" })} value={head.deckle_mm} min={500} max={12000}
               onChange={(v) => setHead({ ...head, deckle_mm: v })} />
             <Textarea label={t("cut.note")} autosize minRows={2} value={head.note} onChange={(e) => setHead({ ...head, note: e.currentTarget.value })} />

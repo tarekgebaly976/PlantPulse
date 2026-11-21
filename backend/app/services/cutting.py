@@ -11,12 +11,16 @@
    itself, or on a rewinder from a parent reel n times its width. Every way that fits a unit's limits is an option;
    CP-SAT picks the options and the winder patterns together, so the parent widths suit both stages (the least total
    trim: winder + converting), with the fewest size changes. A parent reel is one set long (`set_length_m`).
+4. Converting schedule (schedule()): each job (an order's parent reels for a unit) may run on any unit that can take it;
+   an order's reels may be split over several units. CP-SAT gives every unit its sequence, with the unit's size change
+   time between different sizes; first no order late
+   against its due date, then everything done early, then few changes. Units run round the clock from the plan's start.
 
 Everything is in whole millimetres; trim % = trim ÷ (deckle × sets)."""
 
 import math
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, time, timedelta, tzinfo
 
 from ortools.sat.python import cp_model
 
@@ -266,4 +270,183 @@ def solve(lines: list[Line], lim: Limits, seconds: float = SOLVE_SECONDS, units:
         "orders": {ln.key: sum(rt["made"] for rt in routes if rt["order"] == ln.key) for ln in lines},
         "routes": routes,
         "load": load,
+    }
+
+
+SCHEDULE_SECONDS = 10.0
+
+
+@dataclass
+class Job:
+    key: str
+    line: Line
+    parent_width: int
+    across: int
+    reels: int
+    made: int
+    units: list[Converter]  # units that can run it
+
+
+def _job_units(rt: dict, ln: Line, units: list[Converter]) -> list[Converter]:
+    out = []
+    for u in units:
+        if ln.converter and u.key != ln.converter:
+            continue
+        if not u.speed_mpm or not (u.min_width <= rt["parent_width"] <= u.max_width):
+            continue
+        if rt["parent_width"] - rt["across"] * ln.width < u.side_trim:
+            continue  # this unit trims more than the parent reel has to spare
+        if ln.kind == "sheet":
+            if (
+                u.kind != "sheeter"
+                or (u.min_length and (ln.sheet_length or 0) < u.min_length)
+                or (u.max_length and (ln.sheet_length or 0) > u.max_length)
+            ):
+                continue
+        elif u.kind != "rewinder":
+            continue
+        out.append(u)
+    return out
+
+
+def schedule(
+    result: dict,
+    lines: list[Line],
+    units: list[Converter],
+    set_length_m: int,
+    start: datetime,
+    tz: tzinfo,
+    seconds: float = SCHEDULE_SECONDS,
+) -> dict:
+    """Spread the converting jobs of a solved plan over the units and put each unit's jobs in order (see 4. above)."""
+    by_key = {ln.key: ln for ln in lines}
+    jobs: list[Job] = []
+    unplaced = []
+    for i, rt in enumerate(result.get("routes") or []):
+        if not rt.get("unit"):
+            continue
+        ln = by_key[rt["order"]]
+        can = _job_units(rt, ln, units)
+        if not can:
+            unplaced.append({"order": rt["order"], "code": "no_unit_speed"})
+            continue
+        # a big order may be split over several units (as many parts as units that can run it, at most its reels);
+        # parts left on one unit follow each other with no size change
+        parts = min(len(can), rt["reels"])
+        for k in range(parts):
+            n = rt["reels"] // parts + (1 if k < rt["reels"] % parts else 0)
+            jobs.append(Job(f"j{i}_{k}", ln, rt["parent_width"], rt["across"], n, round(rt["made"] * n / rt["reels"]), can))
+    if not jobs:
+        return {"status": "none", "jobs": [], "units": [], "unplaced": unplaced}
+
+    def minutes(j: Job, u: Converter) -> int:
+        return max(1, math.ceil(j.reels * set_length_m / max(1, u.stands) / float(u.speed_mpm or 1)))
+
+    def size(j: Job) -> tuple:
+        return (j.line.kind, j.line.width, j.line.sheet_length, j.parent_width)
+
+    def due_min(j: Job) -> int | None:
+        if not j.line.due:
+            return None
+        return int((datetime.combine(j.line.due + timedelta(days=1), time(0), tzinfo=tz) - start).total_seconds() // 60)
+
+    horizon = sum(max(minutes(j, u) for u in j.units) for j in jobs) + sum(int(u.change_min) for u in units) * len(jobs) + 60
+    m = cp_model.CpModel()
+    st = {j.key: m.new_int_var(0, horizon, "") for j in jobs}
+    en = {j.key: m.new_int_var(0, horizon, "") for j in jobs}
+    on: dict[tuple[str, str], cp_model.IntVar] = {}
+    for j in jobs:
+        lits = []
+        for u in j.units:
+            p = on[(j.key, u.key)] = m.new_bool_var("")
+            m.add(en[j.key] == st[j.key] + minutes(j, u)).only_enforce_if(p)
+            lits.append(p)
+        m.add_exactly_one(lits)
+    cost = []
+    for u in units:
+        mine = [j for j in jobs if (j.key, u.key) in on]
+        if not mine:
+            continue
+        arcs = []
+        for a, ja in enumerate(mine, start=1):
+            arcs.append((0, a, m.new_bool_var("")))
+            arcs.append((a, 0, m.new_bool_var("")))
+            arcs.append((a, a, ~on[(ja.key, u.key)]))
+            for b, jb in enumerate(mine, start=1):
+                if a == b:
+                    continue
+                lit = m.new_bool_var("")
+                gap = int(u.change_min) if size(ja) != size(jb) else 0
+                m.add(st[jb.key] >= en[ja.key] + gap).only_enforce_if(lit)
+                if gap:
+                    cost.append(gap * lit)
+                arcs.append((a, b, lit))
+        arcs.append((0, 0, m.new_bool_var("")))  # a unit with nothing to do
+        m.add_circuit(arcs)
+    late = {}
+    for j in jobs:
+        d = due_min(j)
+        if d is not None:
+            lv = late[j.key] = m.new_int_var(0, horizon, "")
+            m.add(lv >= en[j.key] - d)
+            cost.append(100 * lv)
+    span = m.new_int_var(0, horizon, "")
+    for j in jobs:
+        m.add(span >= en[j.key])
+    cost.append(10 * span)
+    m.minimize(sum(cost))
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = seconds
+    solver.parameters.num_workers = 8
+    status = solver.solve(m)
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return {"status": "timeout", "jobs": [], "units": [], "unplaced": unplaced}
+    at = lambda mins: (start + timedelta(minutes=mins)).astimezone(tz).isoformat(timespec="minutes")  # noqa: E731
+    out = []
+    for j in jobs:
+        u = next(u for u in j.units if solver.value(on[(j.key, u.key)]))
+        lm = solver.value(late[j.key]) if j.key in late else 0
+        out.append({"order": j.line.key, "unit": u.key, "unit_code": u.code, "start": at(solver.value(st[j.key])), "end": at(solver.value(en[j.key])),
+                    "start_min": solver.value(st[j.key]), "end_min": solver.value(en[j.key]), "parent_width": j.parent_width, "across": j.across,
+                    "reels": j.reels, "made": j.made, "due": j.line.due.isoformat() if j.line.due else None, "late_min": lm})  # fmt: skip
+    out.sort(key=lambda x: (x["unit_code"], x["start_min"]))
+    merged: list[dict] = []
+    for x in out:  # parts of one order one after the other on a unit: one line
+        y = merged[-1] if merged else None
+        if (
+            y
+            and y["unit"] == x["unit"]
+            and y["order"] == x["order"]
+            and y["parent_width"] == x["parent_width"]
+            and y["end_min"] == x["start_min"]
+        ):
+            y.update(
+                end=x["end"],
+                end_min=x["end_min"],
+                reels=y["reels"] + x["reels"],
+                made=y["made"] + x["made"],
+                late_min=max(y["late_min"], x["late_min"]),
+            )
+        else:
+            merged.append(dict(x))
+    out = merged
+    per = []
+    for u in units:
+        mine = [x for x in out if x["unit"] == u.key]
+        if not mine:
+            per.append({"unit": u.key, "code": u.code, "kind": u.kind, "jobs": 0, "busy_h": 0, "changes": 0, "end": None})
+            continue
+        busy = sum(x["end_min"] - x["start_min"] for x in mine)
+        sizes = [(x["order"], x["parent_width"]) for x in mine]
+        per.append({"unit": u.key, "code": u.code, "kind": u.kind, "jobs": len(mine), "busy_h": round(busy / 60, 1),
+                    "changes": sum(1 for a, b in zip(sizes, sizes[1:], strict=False) if a != b), "end": mine[-1]["end"]})  # fmt: skip
+    return {
+        "status": "optimal" if status == cp_model.OPTIMAL else "feasible",
+        "start": start.astimezone(tz).isoformat(timespec="minutes"),
+        "end": at(solver.value(span)),
+        "hours": round(solver.value(span) / 60, 1),
+        "late_orders": len({x["order"] for x in out if x["late_min"] > 0}),
+        "jobs": out,
+        "units": per,
+        "unplaced": unplaced,
     }

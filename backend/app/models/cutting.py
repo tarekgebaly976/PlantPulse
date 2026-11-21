@@ -79,6 +79,7 @@ class CutPlan(Base, PlantScoped, Timestamped):
     note: Mapped[str | None] = mapped_column(Text)
     result: Mapped[dict] = mapped_column(JSONB, default=dict)  # patterns, sets, trim, per width and order
     calculated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # converting starts (None: the next full hour)
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
     orders: Mapped[list["CutOrder"]] = relationship(cascade="all, delete-orphan", lazy="selectin", order_by="CutOrder.sort")

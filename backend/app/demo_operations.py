@@ -517,6 +517,11 @@ def _cutting(db: Session, plant: Plant, m: OpMachine, ref: dict, current: date) 
                               float(u.speed_mpm or 0) or None, float(u.change_minutes), u.stands) for u in units]  # fmt: skip
     p.result = cut_svc.solve([cut_svc.Line(str(o.id), o.width_mm, o.reels, float(o.tolerance_pct), o.due_date, o.kind, o.sheet_length_mm)
                               for o in p.orders], lim, units=conv)  # fmt: skip
+    tz = ZoneInfo(plant.timezone)
+    p.start_at = datetime.combine(current + timedelta(days=1), time(7, 0), tzinfo=tz)  # converting starts tomorrow 07:00
+    lines = [cut_svc.Line(str(o.id), o.width_mm, o.reels, float(o.tolerance_pct), o.due_date, o.kind, o.sheet_length_mm) for o in p.orders]
+    if p.result.get("routes"):
+        p.result = p.result | {"schedule": cut_svc.schedule(p.result, lines, conv, 6000, p.start_at, tz)}
     p.status = "calculated" if p.result.get("status") in ("optimal", "feasible") else "draft"
     p.calculated_at = utcnow()
 

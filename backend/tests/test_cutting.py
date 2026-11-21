@@ -1,6 +1,8 @@
 """Paper waste, phase B: the winder's cutting plan. Small cases whose best answer is known by hand, the plan's life
 (orders, calculate, release, reopen) and the rights."""
 
+from datetime import UTC
+
 import pytest
 
 from app.core.config import get_settings
@@ -156,3 +158,46 @@ def test_converting_units_and_sheet_orders_in_a_plan(world: World):
     assert p["status"] == "calculated", p["result"]
     assert {rt["unit_code"] for rt in p["result"]["routes"]} == {"SH2", None}
     assert 51300 <= p["orders"][0]["made"] <= 56700 and p["result"]["load"][0]["code"] == "SH2"
+    sc = p["result"]["schedule"]  # the sheeter's work is timed from the plan's start
+    assert sc["status"] in ("optimal", "feasible") and sc["jobs"][0]["unit_code"] == "SH2" and sc["jobs"][0]["start"]
+    p = mgr.ok("put", f"/operations/cutting/plans/{p['id']}", {"title": "Sheets", "start_at": "2026-12-01T06:00:00"})
+    from datetime import datetime
+
+    assert p["status"] == "draft"  # a new start time makes the result out of date
+    assert datetime.fromisoformat(p["start_at"]).astimezone(UTC).isoformat() == "2026-12-01T03:00:00+00:00"  # read as plant time (UTC+3)
+    p = mgr.ok("post", f"/operations/cutting/plans/{p['id']}/calculate")
+    assert p["result"]["schedule"]["start"] == "2026-12-01T06:00+03:00"
+
+
+def test_converting_schedule_spreads_orders_over_the_units_and_keeps_due_dates():
+    from datetime import date, datetime
+    from zoneinfo import ZoneInfo
+
+    from app.services.cutting import schedule
+
+    tz = ZoneInfo("Asia/Riyadh")
+    lim = Limits(3200, 6, 20, 250, 300, 0.5, set_length_m=6000)
+    units = [Converter(f"s{i}", f"SH{i}", "sheeter", 500, 1700, 400, 1600, 10, 250, 30, 1) for i in (1, 2)]
+    # two sheet orders of the same parent reel size (1060 mm); the earlier due one must come first, the big one is split
+    lines = [
+        Line("late", 1050, 108000, 0, date(2026, 11, 25), "sheet", 1000),
+        Line("soon", 1050, 54000, 0, date(2026, 11, 22), "sheet", 1000),
+    ]
+    r = solve(lines, lim, units=units)
+    assert r["status"] in ("optimal", "feasible") and r["orders"] == {"late": 108000, "soon": 54000}
+    start = datetime(2026, 11, 22, 7, 0, tzinfo=tz)
+    sc = schedule(r, lines, units, lim.set_length_m, start, tz)
+    assert sc["status"] in ("optimal", "feasible") and sc["late_orders"] == 0
+    jobs = sc["jobs"]
+    assert sum(j["reels"] for j in jobs if j["order"] == "late") == 18 and sum(j["reels"] for j in jobs if j["order"] == "soon") == 9
+    assert {j["unit_code"] for j in jobs} == {"SH1", "SH2"}  # both sheeters work
+    # 27 reels × 6000 m at 250 m/min = 648 min of work over two units: about 5.4 h each, well under the one-unit 10.8 h
+    assert sc["hours"] <= 6.5 and all(u["busy_h"] > 0 for u in sc["units"])
+    # every job of a unit after the previous one (one unit does one thing at a time)
+    for u in ("SH1", "SH2"):
+        mine = sorted((j for j in jobs if j["unit_code"] == u), key=lambda j: j["start_min"])
+        assert all(a["end_min"] <= b["start_min"] for a, b in zip(mine, mine[1:], strict=False))
+    # a unit with no speed cannot be timed: the job says so
+    slow = [Converter("s9", "SH9", "sheeter", 500, 1700, 400, 1600, 10, None, 30, 1)]
+    r = solve([Line("x", 1050, 54000, 0, None, "sheet", 1000)], lim, units=slow)
+    assert schedule(r, [Line("x", 1050, 54000, 0, None, "sheet", 1000)], slow, 6000, start, tz)["unplaced"][0]["code"] == "no_unit_speed"

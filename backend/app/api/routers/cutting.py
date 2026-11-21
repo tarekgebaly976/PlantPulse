@@ -3,9 +3,10 @@ order lines (op.cut), the optimiser (calculate), release; everyone with op.view 
 of its grade over the last 4 weeks (phase A) beside the planned trim."""
 
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import Field
@@ -258,6 +259,7 @@ def plan_out(db: Session, ctx: Ctx, p: CutPlan, full: bool = True) -> dict:
         "trim_pct": r.get("trim_pct"),
         "sets": r.get("sets"),
         "calculated_at": p.calculated_at,
+        "start_at": p.start_at,
         "created_at": p.created_at,
     }
     if not full:
@@ -349,6 +351,7 @@ def get_plan(pid: uuid.UUID, ctx: Ctx = Depends(require("op.view")), db: Session
 
 
 class PlanEdit(In):
+    start_at: datetime | None = None  # converting starts; plant time if no zone given
     grade_id: uuid.UUID | None = None
     title: str = Field(min_length=2, max_length=160)
     deckle_mm: int | None = Field(None, ge=500, le=12000)
@@ -368,9 +371,12 @@ def edit_plan(pid: uuid.UUID, body: PlanEdit, ctx: Ctx = Depends(require("op.cut
     m = db.get(OpMachine, p.machine_id)
     assert m is not None
     _grade(db, m, body.grade_id)
-    if body.deckle_mm != p.deckle_mm:
+    if body.deckle_mm != p.deckle_mm or body.start_at != p.start_at:
         _stale(p)
-    for k, v in body.model_dump().items():
+    data = body.model_dump()
+    if body.start_at and body.start_at.tzinfo is None:
+        data["start_at"] = body.start_at.replace(tzinfo=ZoneInfo(ctx.plant.timezone))
+    for k, v in data.items():
         setattr(p, k, v)
     db.flush()
     return plan_out(db, ctx, p)
@@ -439,6 +445,10 @@ def calculate(pid: uuid.UUID, ctx: Ctx = Depends(require("op.cut")), db: Session
                            float(c.speed_mpm) if c.speed_mpm else None, float(c.change_minutes), c.stands)
              for c in converters_of(db, m, active=True)]  # fmt: skip
     r = svc.solve(lines, lim, units=units)
+    if r.get("routes") and any(rt.get("unit") for rt in r["routes"]):
+        tz = ZoneInfo(ctx.plant.timezone)
+        start = p.start_at or (utcnow().astimezone(tz).replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+        r["schedule"] = svc.schedule(r, lines, units, lim.set_length_m, start, tz)
     p.result = r
     p.calculated_at = utcnow()
     p.status = "calculated" if r["status"] in ("optimal", "feasible") else "draft"
