@@ -7,15 +7,24 @@
 #
 # Optional environment variables:
 #   GITHUB_TOKEN   read-only token if the repository is private
-#   REPO           default: tarekgebaly976/PlantPulse        BRANCH  default: ccr-8f177934-w5game
+#   REPO           default: tarekgebaly976/PlantPulse
+#   BRANCH         default: the branch /opt/cmms is on already (an update stays on it); a new install: ccr-8f177934-w5game
 #   CMMS_DOMAIN    your domain; default: <public-ip>.sslip.io (free hostname -> real Let's Encrypt certificate)
 #   ADMIN_EMAIL    first administrator e-mail (prompted if missing)
 #   SEED_DEMO=1    also load the separate DEMO organisation with sample data
 set -euo pipefail
 
 REPO="${REPO:-tarekgebaly976/PlantPulse}"
-BRANCH="${BRANCH:-ccr-8f177934-w5game}"
 DIR=/opt/cmms
+# An update keeps the branch the server already runs: going back to an older branch would leave the database ahead of
+# the code ("Can't locate revision") and stop the system.
+CURRENT="$( [[ -d "$DIR/.git" ]] && git -c safe.directory="$DIR" -C "$DIR" branch --show-current 2>/dev/null || true)"
+BRANCH="${BRANCH:-${CURRENT:-ccr-8f177934-w5game}}"
+if [[ -n "$CURRENT" && "$BRANCH" != "$CURRENT" ]]; then
+  echo "This server runs branch $CURRENT; you asked for $BRANCH."
+  read -rp "Switch the real system to $BRANCH? Type yes to go on: " ok
+  [[ "$ok" == yes ]] || { echo "Nothing changed."; exit 1; }
+fi
 
 [[ $EUID -eq 0 ]] || { echo "Run with sudo: sudo bash install.sh"; exit 1; }
 log() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
