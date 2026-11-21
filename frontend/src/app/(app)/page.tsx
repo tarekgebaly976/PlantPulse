@@ -73,7 +73,9 @@ function LineReport({ id, code, name }: { id: string; code: string; name: string
     <Group justify="space-between" wrap="nowrap" gap="xs">
       <Stack gap={0} style={{ minWidth: 0 }}>
         <Text fw={600} size="sm" truncate>{code} – {name}</Text>
-        <Text size="xs" c="dimmed">{r ? `${fmtDate(r.report_date)} · ${fmtNum(r.gross, 1)} ${r.unit} · ${t("dash.prodOee")} ${r.oee == null ? "—" : `${fmtNum(r.oee * 100, 1)} %`}` : q.data ? t("dash.prodNone") : "…"}</Text>
+        {/* each value isolated (bdi) so numbers and units keep their order in Arabic */}
+        <Text size="xs" c="dimmed">{r ? [fmtDate(r.report_date), `${fmtNum(r.gross, 1)} ${r.unit}`, `${t("dash.prodOee")} ${r.oee == null ? "—" : `${fmtNum(r.oee * 100, 1)} %`}`]
+          .map((x, i) => <span key={i}>{i > 0 && " · "}<bdi>{x}</bdi></span>) : q.data ? t("dash.prodNone") : "…"}</Text>
       </Stack>
       {r && <StatusBadge value={r.status} size="sm" />}
     </Group>
