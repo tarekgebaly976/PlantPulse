@@ -9,6 +9,15 @@ test("mobile shell, offline indicator and PWA assets", async ({ page, context })
   const bar = page.getByTestId("bottom-nav");
   await expect(bar.getByRole("link", { name: "My work" })).toBeVisible();
   await expect(bar.getByRole("link", { name: "New work request" })).toBeVisible();
+  // More opens the full menu; the maintenance group folds on a phone
+  await bar.getByRole("button", { name: "More" }).click();
+  const fold = page.getByTestId("nav-group-navGroup.maintenance");
+  const pmLink = page.getByRole("link", { name: "Preventive maintenance" });
+  if ((await fold.getAttribute("aria-expanded")) === "true") await fold.click();
+  await expect(pmLink).toBeHidden();
+  await fold.click();
+  await expect(pmLink).toBeVisible();
+  await page.getByRole("button", { name: "menu" }).click();
   await bar.getByRole("link", { name: "Scan QR" }).click();
   await expect(page).toHaveURL(/\/scan/);
   await context.setOffline(true);

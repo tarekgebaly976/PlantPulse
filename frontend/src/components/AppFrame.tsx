@@ -1,11 +1,11 @@
 "use client";
 
-import { ActionIcon, AppShell, Avatar, Badge, Box, useComputedColorScheme, useMantineColorScheme, Burger, Button, Group, Indicator, Menu, NavLink, PasswordInput, ScrollArea, Select, Stack, Text, Tooltip } from "@mantine/core";
+import { ActionIcon, AppShell, Avatar, Badge, Box, useComputedColorScheme, useMantineColorScheme, Burger, Button, Group, Indicator, Menu, NavLink, PasswordInput, ScrollArea, Select, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import { Modal } from "@/components/Modal";
-import { useDisclosure, useNetwork } from "@mantine/hooks";
+import { useDisclosure, useLocalStorage, useMediaQuery, useNetwork } from "@mantine/hooks";
 import {
   IconAlertTriangle, IconBell, IconBox, IconBuildingFactory2, IconChartLine, IconNotebook, IconCalendarTime, IconCalendarWeek, IconChartBar, IconClipboardList, IconDashboard, IconDroplet, IconFishBone, IconHeartRateMonitor,
-  IconAdjustments, IconBulb, IconScissors, IconRuler2, IconFirstAidKit, IconGauge, IconKey, IconLanguage, IconLogout, IconMoon, IconPlus, IconSun, IconQrcode, IconSettings, IconSitemap, IconTool, IconToolsKitchen, IconUserCheck, IconWifi, IconWifiOff, IconRoute,
+  IconAdjustments, IconBulb, IconChevronDown, IconMenu2, IconScissors, IconRuler2, IconFirstAidKit, IconGauge, IconKey, IconLanguage, IconLogout, IconMoon, IconPlus, IconSun, IconQrcode, IconSettings, IconSitemap, IconTool, IconToolsKitchen, IconUserCheck, IconWifi, IconWifiOff, IconRoute,
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -22,7 +22,7 @@ import { Loading } from "./ui";
 /** feature: hidden when the plant's production setup switches the feature off; label: the plant may rename the entry. */
 type NavItem = { href: string; key: string; icon: typeof IconDashboard; perm?: string; feature?: string; label?: string };
 const NAV_GROUPS: { key: string | null; items: NavItem[] }[] = [
-  { key: null, items: [{ href: "/", key: "nav.dashboard", icon: IconDashboard }] },
+  { key: null, items: [{ href: "/", key: "nav.home", icon: IconDashboard }] },
   { key: "navGroup.daily", items: [
     { href: "/my-work", key: "nav.myWork", icon: IconUserCheck, perm: "wo.view" },
     { href: "/scan", key: "nav.scan", icon: IconQrcode, perm: "asset.view" },
@@ -94,6 +94,8 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const opCfg = useQ<{ features: Record<string, boolean>; labels: Record<string, string> }>(can("op.view") ? "/operations/config" : null, undefined, { staleTime: 300_000 });
   const navShown = (n: NavItem) => (!n.perm || can(n.perm)) && (!n.feature || opCfg.data?.features?.[n.feature] !== false);
   const navLabel = (n: NavItem) => (n.label && opCfg.data?.labels?.[n.label]) || t(n.key);
+  const wide = useMediaQuery("(min-width: 62em)", true);
+  const [navOpen, setNavOpen] = useLocalStorage<string[]>({ key: "pp-nav-open", defaultValue: [] });
   const { setColorScheme } = useMantineColorScheme();
   const dark = useComputedColorScheme("light", { getInitialValueInEffect: true }) === "dark";
 
@@ -173,10 +175,26 @@ export function AppFrame({ children }: { children: ReactNode }) {
           {NAV_GROUPS.map((g) => {
             const items = g.items.filter(navShown);
             if (items.length === 0) return null;
+            // Phones: the daily-work group is always open; the others fold so the menu fits without long scrolling.
+            // The group of the open page opens by itself. Computers keep every group open.
+            const foldable = !wide && g.key !== null && g.key !== "navGroup.daily";
+            const hasActive = items.some((n) => n.href === activeHref);
+            const open = !foldable || hasActive || navOpen.includes(g.key ?? "");
+            // A folded group still shows how many things wait inside it.
+            const waiting = open ? 0 : items.reduce((sum, n) => sum + (navCount(n.href, counts.data)?.n ?? 0), 0);
             return (
               <div key={g.key ?? "top"}>
-                {g.key && <div className="pp-nav-group">{t(g.key)}</div>}
-                {items.map((n) => {
+                {g.key && (foldable ? (
+                  <UnstyledButton className="pp-nav-group pp-nav-fold" aria-expanded={open} data-testid={`nav-group-${g.key}`}
+                    onClick={() => !hasActive && setNavOpen((o) => (o.includes(g.key ?? "") ? o.filter((k) => k !== g.key) : [...o, g.key ?? ""]))}>
+                    <span>{t(g.key)}</span>
+                    <Group gap={6} wrap="nowrap">
+                      {waiting > 0 && <Badge size="sm" circle={waiting < 10} color="accent" variant="filled" aria-hidden>{waiting}</Badge>}
+                      <IconChevronDown size={16} style={{ transform: open ? undefined : "rotate(var(--pp-fold-rot, -90deg))", transition: "transform 150ms" }} />
+                    </Group>
+                  </UnstyledButton>
+                ) : <div className="pp-nav-group">{t(g.key)}</div>)}
+                {open && items.map((n) => {
                   const c = navCount(n.href, counts.data);
                   return (
                     <NavLink key={n.href} component={Link} href={n.href} label={navLabel(n)} leftSection={<n.icon size={19} stroke={1.7} />}
@@ -200,31 +218,52 @@ export function AppFrame({ children }: { children: ReactNode }) {
         </AppShell.Section>
       </AppShell.Navbar>
       <AppShell.Main className="pp-main pp-has-bottom-nav">{children}</AppShell.Main>
-      {!opened && <BottomNav pathname={pathname} unread={notif.data?.unread ?? 0} myOpen={counts.data?.my_open_work ?? 0} />}
+      {!opened && <BottomNav pathname={pathname} myOpen={counts.data?.my_open_work ?? 0} onMore={toggle} />}
       <ChangePassword opened={pwOpen} onClose={pw.close} />
     </AppShell>
   );
 }
 
-/** Phones and tablets: the four things a technician does most, always one tap away; the full menu stays in the burger. */
-function BottomNav({ pathname, unread, myOpen }: { pathname: string; unread: number; myOpen: number }) {
+/** Phones and tablets: Home, My work, Create, Scan and More (the full menu), always one tap away.
+ * Notifications live in the bell at the top. */
+function BottomNav({ pathname, myOpen, onMore }: { pathname: string; myOpen: number; onMore: () => void }) {
   const { t } = useTranslation();
   const { can } = useSession();
-  const item = (href: string, label: string, Icon: typeof IconDashboard, n = 0) => (
-    <Link href={href} data-active={(href === "/" ? pathname === "/" : pathname.startsWith(href)) || undefined} aria-label={label}>
+  const label = (text: string) => <span style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>;
+  const item = (href: string, text: string, Icon: typeof IconDashboard, n = 0) => (
+    <Link href={href} data-active={(href === "/" ? pathname === "/" : pathname.startsWith(href)) || undefined} aria-label={text}>
       <Indicator disabled={!n} label={n} size={16} color="red" offset={2}><Icon size={24} stroke={1.7} /></Indicator>
-      <span style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      {label(text)}
     </Link>
   );
+  // Create: only what this user may create. One choice opens at once, no extra tap.
+  const creates = [
+    can("request.create") && { href: "/requests?new=1", text: t("req.new"), Icon: IconAlertTriangle, color: "var(--mantine-color-red-6)" },
+    can("wo.create") && { href: "/work-orders/new", text: t("wo.new"), Icon: IconClipboardList, color: "var(--pp-strong)" },
+  ].filter((c): c is { href: string; text: string; Icon: typeof IconDashboard; color: string } => !!c);
+  const fab = <span className="pp-fab-circle"><IconPlus size={28} stroke={2.2} /></span>;
   return (
     <Box hiddenFrom="md" component="nav" className="pp-bottom-nav" data-testid="bottom-nav" aria-label="shortcuts">
-      {item("/", t("nav.dashboard"), IconDashboard)}
+      {item("/", t("nav.home"), IconDashboard)}
       {can("wo.view") && item("/my-work", t("nav.myWork"), IconUserCheck, myOpen)}
-      {can("request.create") && (
-        <Link href="/requests?new=1" className="pp-fab" aria-label={t("req.new")}><span className="pp-fab-circle"><IconPlus size={28} stroke={2.2} /></span></Link>
+      {creates.length === 1 && creates[0] && <Link href={creates[0].href} className="pp-fab" aria-label={creates[0].text}>{fab}</Link>}
+      {creates.length > 1 && (
+        <Menu position="top" offset={10} withinPortal shadow="md" width={230}>
+          <Menu.Target>
+            <UnstyledButton className="pp-fab" aria-label={t("nav.create")} data-testid="create-menu">{fab}</UnstyledButton>
+          </Menu.Target>
+          <Menu.Dropdown>
+            {creates.map((c) => (
+              <Menu.Item key={c.href} component={Link} href={c.href} className="tap-target" leftSection={<c.Icon size={20} color={c.color} />}>{c.text}</Menu.Item>
+            ))}
+          </Menu.Dropdown>
+        </Menu>
       )}
       {can("asset.view") && item("/scan", t("nav.scan"), IconQrcode)}
-      {item("/notifications", t("nav.notifications"), IconBell, unread)}
+      <UnstyledButton onClick={onMore} aria-label={t("nav.more")} data-testid="bottom-more">
+        <IconMenu2 size={24} stroke={1.7} />
+        {label(t("nav.more"))}
+      </UnstyledButton>
     </Box>
   );
 }
