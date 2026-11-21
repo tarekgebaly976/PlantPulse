@@ -4,7 +4,7 @@
  *  day from the roster (any of the 7 days), the planner edits by hand, the engineer approves, then the maintenance
  *  manager gives the final approval that writes assignments and planned dates to the work orders. */
 
-import { ActionIcon, Alert, Badge, Button, Card, Group, MultiSelect, NumberInput, Paper, ScrollArea, Select, SimpleGrid, Stack, Stepper, Table, Text, TextInput, Textarea, Tooltip } from "@mantine/core";
+import { ActionIcon, Alert, Badge, Button, Card, Group, MultiSelect, NumberInput, Paper, ScrollArea, SegmentedControl, Select, SimpleGrid, Stack, Stepper, Table, Text, TextInput, Textarea, Tooltip } from "@mantine/core";
 import { IconAlertTriangle, IconChevronLeft, IconChevronRight, IconCopy, IconHandStop, IconLock, IconPin, IconPlus, IconSparkles, IconTrash } from "@tabler/icons-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -33,13 +33,14 @@ interface Msg { code: string; params: MsgParams; text: string }
 interface RosterDay { kind: string; shift: string | null; regular: number; capacity: number }
 interface Person { user_id: string; name: string; trade: string | null; days: Record<string, RosterDay>; load: Record<string, number> }
 interface Sched {
-  id: string; status: string; max_overtime_hours: number; proposed_at: string | null; proposed_by: string | null; engineer_at: string | null;
+  id: string; status: string; days: number; max_overtime_hours: number; proposed_at: string | null; proposed_by: string | null; engineer_at: string | null;
   engineer_by: string | null; manager_at: string | null; manager_by: string | null; returned_comment: string | null;
   stats: { solver?: string; seconds?: number; scheduled?: number; deferred?: number; hours?: number; overtime_items?: number; people?: number };
 }
 interface WeekView {
   week_start: string; days: string[]; today: string; schedule: Sched | null; people: Person[]; items: Item[];
   over_capacity: { user_id: string; date: string; hours: number; capacity: number }[]; apply_warnings?: Msg[]; windows: Win[];
+  overlaps: { start: string; end: string; days: number; status: string }[];
 }
 interface Win { id: string; asset_id: string; asset: string; asset_code: string; date: string; start: string; end: string; hours: number; note: string | null }
 
@@ -47,6 +48,8 @@ const PRIO: Record<string, string> = { P1: "red", P2: "orange", P3: "blue", P4: 
 const STATUS_COLOR: Record<string, string> = { draft: "gray", engineer_approved: "yellow", approved: "teal" };
 const KIND_COLOR: Record<string, string> = { leave: "gray", absence: "dark", overtime: "orange", callout: "red" };
 const addDays = (d: string, n: number) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const MAX_DAYS = 31;
+const PRESETS = [7, 10, 14, 20, 30];
 /** The Sunday of a date's week. */
 const sundayOf = (d: string) => addDays(d, -new Date(`${d}T00:00:00Z`).getUTCDay());
 /** Thursday to Saturday the planner works on next week; earlier in the week, on this one. */
@@ -57,11 +60,15 @@ function Schedule() {
   const { can } = useSession();
   const router = useRouter();
   const params = useSearchParams();
-  const week = sundayOf(params.get("week") ?? defaultWeek());
-  const setWeek = (w: string) => router.replace(`/schedule?week=${w}`);
-  const q = useQ<WeekView>(`/schedule/weeks/${week}`);
+  // A plan starts on any day and is 1–31 days long; by default a week from Sunday.
+  const week = /^\d{4}-\d{2}-\d{2}$/.test(params.get("week") ?? "") ? (params.get("week") as string) : defaultWeek();
+  const askDays = Math.min(MAX_DAYS, Math.max(1, Number(params.get("days")) || 0)) || null;
+  const setWeek = (w: string, n?: number | null) => router.replace(`/schedule?week=${w}${n ? `&days=${n}` : ""}`);
+  const q = useQ<WeekView>(`/schedule/weeks/${week}`, askDays ? { days: askDays } : undefined);
   const v = q.data;
   const s = v?.schedule ?? null;
+  const n = v?.days.length ?? askDays ?? 7; // the days shown
+  const want = askDays ?? n; // the length the next proposal gets
   const [ot, setOt] = useState<number | string>(2);
   const [move, setMove] = useState<{ item: Item; user_id: string; work_date: string } | null>(null);
   const [defer, setDefer] = useState<{ wo: WO; reason: string } | null>(null);
@@ -78,7 +85,7 @@ function Schedule() {
   const phone = useMediaQuery("(max-width: 48em)");
   const [win, setWin] = useState<{ asset_id: string | null; work_date: string; start_time: string; hours: number | string; note: string } | null>(null);
 
-  const propose = useMut(() => post(`/schedule/weeks/${week}/propose`, { max_overtime_hours: Number(ot) || 0 }), { success: t("sched.proposed") });
+  const propose = useMut(() => post(`/schedule/weeks/${week}/propose`, { max_overtime_hours: Number(ot) || 0, days: want }), { success: t("sched.proposed") });
   const review = useMut(() => post(`/schedule/${s?.id}/review`));
   const approve = useMut(() => post<WeekView>(`/schedule/${s?.id}/approve`), { onDone: (r) => setApplied(r.apply_warnings ?? []) });
   const sendBack = useMut(() => post(`/schedule/${s?.id}/return`, { comment: back }), { onDone: () => setBack(null) });
@@ -87,7 +94,7 @@ function Schedule() {
   const saveDefer = useMut(() => post(`/schedule/${s?.id}/work-orders/${defer?.wo.id}/defer`, { reason: defer?.reason }), { onDone: () => { setDefer(null); setMove(null); } });
   const saveWin = useMut(() => post("/schedule/stop-windows", { ...win, hours: Number(win?.hours), note: win?.note || null }), { onDone: () => setWin(null) });
   const delWin = useMut((id: string) => del(`/schedule/stop-windows/${id}`));
-  const copyWin = useMut(() => post<{ copied: number }>("/schedule/stop-windows/copy", { from_week: addDays(week, -7), to_week: week }), { success: false,
+  const copyWin = useMut(() => post<{ copied: number }>("/schedule/stop-windows/copy", { from_week: addDays(week, -n), to_week: week, days: n }), { success: false,
     onDone: (r) => notifications.show({ color: "teal", message: t("sched.copied", { n: r.copied }) }) });
   const savePlace = useMut(() => post(`/schedule/${s?.id}/work-orders/${place?.wo.id}/place`, { user_ids: place?.users, work_date: place?.work_date }), { onDone: () => setPlace(null) });
 
@@ -108,9 +115,9 @@ function Schedule() {
   return (
     <>
       <PageHeader title={t("sched.title")} actions={<>
-        <ActionIcon variant="default" size="lg" aria-label={t("sched.prev")} onClick={() => setWeek(addDays(week, -7))}><IconChevronLeft size={18} style={flip} /></ActionIcon>
-        <Text fw={600} dir="ltr" data-testid="week-label">{fmtDate(v.week_start)} – {fmtDate(addDays(v.week_start, 6))}</Text>
-        <ActionIcon variant="default" size="lg" aria-label={t("sched.next")} onClick={() => setWeek(addDays(week, 7))}><IconChevronRight size={18} style={flip} /></ActionIcon>
+        <ActionIcon variant="default" size="lg" aria-label={t("sched.prev")} onClick={() => setWeek(addDays(week, -n), askDays)}><IconChevronLeft size={18} style={flip} /></ActionIcon>
+        <Text fw={600} dir="ltr" data-testid="week-label">{fmtDate(v.week_start)} – {fmtDate(addDays(v.week_start, n - 1))}</Text>
+        <ActionIcon variant="default" size="lg" aria-label={t("sched.next")} onClick={() => setWeek(addDays(week, n), askDays)}><IconChevronRight size={18} style={flip} /></ActionIcon>
         {s && <Badge size="lg" variant="light" tt="none" color={STATUS_COLOR[s.status]} data-testid="sched-status">{t(`sched.status_${s.status}`)}</Badge>}
       </>}>
         <Text size="sm" c="dimmed">{t("sched.hint")}</Text>
@@ -118,6 +125,27 @@ function Schedule() {
 
       <Stack>
         <Paper withBorder p="md">
+          <Group gap="sm" align="end" mb="md" wrap="wrap">
+            <TextInput type="date" label={t("sched.planStart")} value={week} w={170}
+              onChange={(e) => /^\d{4}-\d{2}-\d{2}$/.test(e.currentTarget.value) && setWeek(e.currentTarget.value, askDays)} />
+            <div>
+              <Text size="sm" fw={500} mb={2}>{t("sched.planDays")}</Text>
+              <SegmentedControl value={PRESETS.includes(want) ? String(want) : "x"} onChange={(x) => x !== "x" && setWeek(week, Number(x))}
+                data={[...PRESETS.map((d) => ({ value: String(d), label: d === 7 ? t("sched.week7") : t("sched.daysN", { n: d }) })), { value: "x", label: t("sched.custom") }]} />
+            </div>
+            <NumberInput w={110} aria-label={t("sched.planDays")} min={1} max={MAX_DAYS} value={want} clampBehavior="strict" allowDecimal={false}
+              onChange={(x) => typeof x === "number" && x >= 1 && x <= MAX_DAYS && setWeek(week, x)} />
+            <Button variant="subtle" size="xs" onClick={() => setWeek(sundayOf(week), 7)}>{t("sched.week7")}: {fmtDate(sundayOf(week))}</Button>
+          </Group>
+          {s && askDays && askDays !== s.days && <Alert mb="sm" color="blue" p="xs">{t("sched.lengthNote", { n: s.days, m: askDays })}</Alert>}
+          {v.overlaps.map((o) => (
+            <Alert key={o.start} mb="sm" color="orange" p="xs">
+              <Group justify="space-between" gap="xs">
+                <Text size="sm">{t("sched.overlap", { start: fmtDate(o.start), end: fmtDate(o.end), n: o.days })}</Text>
+                <Button size="xs" variant="light" onClick={() => setWeek(o.start, null)}>{t("sched.openPlan")}</Button>
+              </Group>
+            </Alert>
+          ))}
           <Stepper active={step} size="sm" allowNextStepsSelect={false}>
             <Stepper.Step label={t("sched.stepPropose")} description={s?.proposed_at ? `${s.proposed_by ?? ""} · ${fmtDate(s.proposed_at)}` : t("sched.notYet")} />
             <Stepper.Step label={t("sched.stepEngineer")} description={s?.engineer_at ? `${s.engineer_by ?? ""} · ${fmtDate(s.engineer_at)}` : undefined} />

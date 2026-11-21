@@ -7,7 +7,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -40,15 +40,15 @@ def _name(db: Session, uid: uuid.UUID | None) -> str | None:
     return u.full_name if u else None
 
 
-def view(db: Session, ctx: Ctx, week_start: date) -> dict:
-    """The week as the page shows it: people × days (roster and load), the placed and deferred work, and the warnings."""
-    svc.check_sunday(week_start)
-    days = [week_start + timedelta(days=i) for i in range(7)]
-    s = db.execute(
-        select(WeeklySchedule).where(WeeklySchedule.plant_id == ctx.plant_id, WeeklySchedule.week_start == week_start)
-    ).scalar_one_or_none()
+def view(db: Session, ctx: Ctx, week_start: date, n_days: int | None = None) -> dict:
+    """The plan as the page shows it: people × days (roster and load), the placed and deferred work, and the warnings.
+    A plan starts on any day and is 1–31 days long (its own length once proposed; else n_days, by default a week)."""
+    s = svc.plan_at(db, ctx.plant_id, week_start)
+    n = s.days if s else (n_days or 7)
+    svc.check_days(n)
+    days = [week_start + timedelta(days=i) for i in range(n)]
     chk = svc.check(db, ctx, s) if s else {"warnings": {}, "over_capacity": [], "week": None}
-    week = chk["week"] or svc.load_week(db, ctx.plant_id, ZoneInfo(ctx.plant.timezone), week_start, date.min, Decimal(2))
+    week = chk["week"] or svc.load_week(db, ctx.plant_id, ZoneInfo(ctx.plant.timezone), week_start, date.min, Decimal(2), n)
     items = list(s.items) if s else []
     wos = {w.id: w for w in db.execute(select(WorkOrder).where(WorkOrder.id.in_([i.work_order_id for i in items]))).scalars()}
     assets = {a.id: a for a in db.execute(select(Asset).where(Asset.id.in_([w.asset_id for w in wos.values()]))).scalars()}
@@ -129,6 +129,7 @@ def view(db: Session, ctx: Ctx, week_start: date) -> dict:
         sched = {
             "id": s.id,
             "status": s.status,
+            "days": s.days,
             "max_overtime_hours": float(s.max_overtime_hours),
             "proposed_at": s.proposed_at,
             "proposed_by": _name(db, s.created_by_id),
@@ -147,17 +148,22 @@ def view(db: Session, ctx: Ctx, week_start: date) -> dict:
         "people": people,
         "items": out_items,
         "over_capacity": [{**o, "hours": float(o["hours"]), "capacity": float(o["capacity"])} for o in chk["over_capacity"]],
-        "windows": windows_of(db, ctx, week_start),
+        "windows": windows_of(db, ctx, week_start, n),
+        # other plans sharing a day with this period (a new plan here may not overlap them)
+        "overlaps": [
+            {"start": o.week_start, "days": o.days, "end": o.week_start + timedelta(days=o.days - 1), "status": o.status}
+            for o in svc.overlapping(db, ctx.plant_id, week_start, n, s.id if s else None)
+        ],
     }
 
 
-def windows_of(db: Session, ctx: Ctx, week_start: date) -> list[dict]:
+def windows_of(db: Session, ctx: Ctx, week_start: date, n_days: int = 7) -> list[dict]:
     tz = ZoneInfo(ctx.plant.timezone)
     lo = datetime.combine(week_start, time(0), tzinfo=tz)
     rows = db.execute(
         select(StopWindow, Asset)
         .join(Asset, Asset.id == StopWindow.asset_id)
-        .where(StopWindow.plant_id == ctx.plant_id, StopWindow.starts_at < lo + timedelta(days=7), StopWindow.ends_at > lo)
+        .where(StopWindow.plant_id == ctx.plant_id, StopWindow.starts_at < lo + timedelta(days=n_days), StopWindow.ends_at > lo)
         .order_by(StopWindow.starts_at, Asset.code)
     ).all()
     return [
@@ -179,19 +185,23 @@ def windows_of(db: Session, ctx: Ctx, week_start: date) -> list[dict]:
 
 
 @router.get("/weeks/{week_start}")
-def get_week(week_start: date, ctx: Ctx = Depends(require("wo.view")), db: Session = Depends(get_db, scope="function")) -> dict:
-    return view(db, ctx, week_start)
+def get_week(
+    week_start: date, days: int | None = Query(None, ge=1, le=svc.MAX_DAYS), ctx: Ctx = Depends(require("wo.view")),
+    db: Session = Depends(get_db, scope="function"),
+) -> dict:  # fmt: skip
+    return view(db, ctx, week_start, days)
 
 
 class ProposeIn(In):
     max_overtime_hours: Decimal = Field(Decimal(2), ge=0, le=8)
+    days: int | None = Field(None, ge=1, le=svc.MAX_DAYS)  # length of the plan; default: as it is, or a week
 
 
 @router.post("/weeks/{week_start}/propose")
 def propose(
     week_start: date, body: ProposeIn, ctx: Ctx = Depends(require("schedule.plan")), db: Session = Depends(get_db, scope="function")
 ) -> dict:
-    s = svc.propose(db, ctx, week_start, body.max_overtime_hours)
+    s = svc.propose(db, ctx, week_start, body.max_overtime_hours, n_days=body.days)
     notify_reviewers(db, ctx, s)
     return view(db, ctx, week_start)
 
@@ -216,8 +226,8 @@ def _day_shift(db: Session, user_id: uuid.UUID, d: date) -> uuid.UUID | None:
 
 
 def _in_week(s: WeeklySchedule, d: date) -> None:
-    if not (s.week_start <= d <= s.week_start + timedelta(days=6)):
-        raise DomainError("The day is not in this week", "not_in_week", 422)
+    if not (s.week_start <= d <= s.week_start + timedelta(days=s.days - 1)):
+        raise DomainError("The day is not in this plan", "not_in_week", 422)
 
 
 class MoveIn(In):
@@ -294,7 +304,7 @@ def place(
     w = db.get(WorkOrder, wo_id)
     if w is None or w.plant_id != ctx.plant_id:
         raise HTTPException(404, "Work order not found")
-    week = svc.load_week(db, ctx.plant_id, ZoneInfo(ctx.plant.timezone), s.week_start, date.min, s.max_overtime_hours)
+    week = svc.load_week(db, ctx.plant_id, ZoneInfo(ctx.plant.timezone), s.week_start, date.min, s.max_overtime_hours, s.days)
     job = week.jobs.get(wo_id)
     if job is None:
         raise DomainError("This work order is not open for scheduling this week", "not_schedulable", 409)
@@ -394,19 +404,18 @@ def delete_window(
 
 
 class CopyIn(In):
-    from_week: date
-    to_week: date
+    from_week: date  # first day of the period copied from
+    to_week: date  # first day of the period copied to
+    days: int = Field(7, ge=1, le=svc.MAX_DAYS)
 
 
 @router.post("/stop-windows/copy")
 def copy_windows(body: CopyIn, ctx: Ctx = Depends(require("stop_window.manage")), db: Session = Depends(get_db, scope="function")) -> dict:
-    """Repeat one week's stop windows in another week (same weekday and time); windows already there are not doubled."""
-    svc.check_sunday(body.from_week)
-    svc.check_sunday(body.to_week)
+    """Repeat one period's stop windows in another (same offset and time); windows already there are not doubled."""
     shift = timedelta(days=(body.to_week - body.from_week).days)
-    have = {(w["asset_id"], w["starts_at"], w["ends_at"]) for w in windows_of(db, ctx, body.to_week)}
+    have = {(w["asset_id"], w["starts_at"], w["ends_at"]) for w in windows_of(db, ctx, body.to_week, body.days)}
     n = 0
-    for w in windows_of(db, ctx, body.from_week):
+    for w in windows_of(db, ctx, body.from_week, body.days):
         key = (w["asset_id"], w["starts_at"] + shift, w["ends_at"] + shift)
         if key in have:
             continue

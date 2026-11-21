@@ -69,7 +69,6 @@ def _by_wo(view):
 def test_propose_respects_roster_skills_and_lotos(world):
     ws, ids = _setup(world)
     planner = world.api("planner")
-    assert planner.post(f"/schedule/weeks/{(ws + timedelta(days=1)).isoformat()}/propose", {}).status_code == 422  # not a Sunday
     assert world.api("tech").post(f"/schedule/weeks/{ws.isoformat()}/propose", {}).status_code == 403
     v = planner.ok("post", f"/schedule/weeks/{ws.isoformat()}/propose", {"max_overtime_hours": 2})
     assert v["schedule"]["status"] == "draft" and v["schedule"]["stats"]["solver"] in ("OPTIMAL", "FEASIBLE")
@@ -243,8 +242,33 @@ def test_reopened_week_is_planned_again(world):
     hyd = ids["hyd"]
     v = planner.ok("post", f"/schedule/{sid}/work-orders/{hyd}/defer", {"reason": "Parts late"})
     eng.ok("post", f"/schedule/{sid}/review")
-    assert any(x["code"] == "taken_off" and x["params"]["number"] and "taken off the schedule" in x["text"]
-               for x in mgr.ok("post", f"/schedule/{sid}/approve")["apply_warnings"])
+    assert any(
+        x["code"] == "taken_off" and x["params"]["number"] and "taken off the schedule" in x["text"]
+        for x in mgr.ok("post", f"/schedule/{sid}/approve")["apply_warnings"]
+    )
     w = planner.ok("get", f"/work-orders/{hyd}")
     w = w.get("work_order", w)
     assert w["status"] == "planned" and w["planned_start"] is None
+
+
+def test_plan_of_any_length_from_any_day(world):
+    """A plan is a week by default, or 1–31 days from any day (e.g. 10 or 20 days); plans may not overlap."""
+    ws, ids = _setup(world)
+    planner = world.api("planner")
+    start = ws + timedelta(days=3)  # a Wednesday
+    v = planner.ok("get", f"/schedule/weeks/{start.isoformat()}", params={"days": 10})
+    assert len(v["days"]) == 10 and v["days"][0] == start.isoformat() and v["schedule"] is None
+    v = planner.ok("post", f"/schedule/weeks/{start.isoformat()}/propose", {"days": 10})
+    assert v["schedule"]["days"] == 10 and len(v["days"]) == 10
+    assert all(start.isoformat() <= i["work_date"] <= (start + timedelta(days=9)).isoformat() for i in v["items"] if not i["deferred"])
+    # once proposed, the plan keeps its length without asking
+    assert len(planner.ok("get", f"/schedule/weeks/{start.isoformat()}")["days"]) == 10
+    # a plan sharing a day with it is refused; the page shows the plan it overlaps
+    r = planner.post(f"/schedule/weeks/{ws.isoformat()}/propose", {"days": 7})
+    assert r.status_code == 409 and r.json()["code"] == "schedule_overlap"
+    assert planner.ok("get", f"/schedule/weeks/{ws.isoformat()}")["overlaps"][0]["start"] == start.isoformat()
+    # right after it is free; shortening the plan itself is allowed
+    after = start + timedelta(days=10)
+    assert planner.ok("post", f"/schedule/weeks/{after.isoformat()}/propose", {"days": 20})["schedule"]["days"] == 20
+    assert planner.ok("post", f"/schedule/weeks/{start.isoformat()}/propose", {"days": 5})["schedule"]["days"] == 5
+    assert planner.post(f"/schedule/weeks/{start.isoformat()}/propose", {"days": 32}).status_code == 422

@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,9 +20,11 @@ class WeeklySchedule(Base, PlantScoped, Timestamped):
     __table_args__ = (
         UniqueConstraint("plant_id", "week_start"),
         CheckConstraint("status IN ('draft','engineer_approved','approved')", name="status"),
+        CheckConstraint("days BETWEEN 1 AND 31", name="days"),
     )
     id: Mapped[uuid.UUID] = uuid_pk()
-    week_start: Mapped[date] = mapped_column(Date)  # always a Sunday
+    week_start: Mapped[date] = mapped_column(Date)  # the first day of the plan (any day; a week starts on Sunday)
+    days: Mapped[int] = mapped_column(Integer, default=7, server_default="7")  # length of the plan: a week, 10 days, 20 days …
     status: Mapped[str] = mapped_column(String(20), default="draft")
     max_overtime_hours: Mapped[Decimal] = mapped_column(Numeric(4, 2), default=2)  # extra hours a person may get on a work day
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))

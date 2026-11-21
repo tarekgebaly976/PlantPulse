@@ -45,6 +45,7 @@ PM_OUT_OF_TOLERANCE = 2000  # a PM done (or deferred) beyond its tolerance drops
 OVERTIME_PER_QUARTER = 3  # one overtime hour costs 12: less than deferring the lightest job (5 × 1 × 50)
 DEFAULT_SHIFT_START = time(7, 0)
 SOLVE_SECONDS = 20.0
+MAX_DAYS = 31  # longest plan: a week by default, or 10, 14, 20 … days
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -64,13 +65,13 @@ TEXT = {
     "line_running": "the line is not stopped during {name}'s shift on {date}",
     "window_short": "the stop window in the shift is {have} h, the job needs {need} h",
     "not_open": "work order is no longer open for scheduling",
-    "not_on_roster": "not on the roster this week",
+    "not_on_roster": "not on the roster in this period",
     # why a job is deferred
     "no_hours": "no estimated hours",
-    "week_over": "the week is over",
-    "no_roster": "nobody on the roster this week",
+    "week_over": "the plan period is over",
+    "no_roster": "nobody on the roster in this period",
     "too_long": "longer than one shift ({hours} h per person)",
-    "no_window": "needs the line stopped: no stop window of its line this week",
+    "no_window": "needs the line stopped: no stop window of its line in this period",
     "windows_too_short": "needs the line stopped: every stop window is shorter than the job ({hours} h per person)",
     "no_trade": "no {trade} technician for this department on the roster",
     "no_technician": "no technician for this department on the roster",
@@ -80,7 +81,7 @@ TEXT = {
     "stop_no_qualified": "needs the line stopped: nobody qualified is at work during a long enough stop window",
     "no_crew": "a crew of {crew} is not available on one day",
     "windows_full": "needs the line stopped: the stop windows of its line are already full",
-    "no_capacity": "not enough technician hours this week",
+    "no_capacity": "not enough technician hours in this period",
     "no_solution": "no schedule found in time",
     "hand_deferred": "deferred by hand",
     # applying the approved week to the work orders
@@ -114,9 +115,21 @@ def week_of(d: date) -> date:
     return d - timedelta(days=(d.weekday() + 1) % 7)
 
 
-def check_sunday(week_start: date) -> None:
-    if week_start.weekday() != 6:
-        raise DomainError("The week starts on Sunday", "not_sunday", 422)
+def check_days(n: int) -> None:
+    if not 1 <= n <= MAX_DAYS:
+        raise DomainError(f"A plan is 1 to {MAX_DAYS} days long", "plan_days", 422)
+
+
+def overlapping(db: Session, plant_id: uuid.UUID, start: date, n: int, exclude: uuid.UUID | None = None) -> list[WeeklySchedule]:
+    """Other plans with a day in [start, start + n)."""
+    near = db.execute(
+        select(WeeklySchedule).where(
+            WeeklySchedule.plant_id == plant_id,
+            WeeklySchedule.week_start < start + timedelta(days=n),
+            WeeklySchedule.week_start > start - timedelta(days=MAX_DAYS),
+        )
+    ).scalars()
+    return sorted((s for s in near if s.id != exclude and s.week_start + timedelta(days=s.days) > start), key=lambda s: s.week_start)
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -178,8 +191,11 @@ def _holders(db: Session, plant_id: uuid.UUID, perm: str) -> set[uuid.UUID]:
     return set(users_with_permission(db, plant_id, perm))
 
 
-def load_week(db: Session, plant_id: uuid.UUID, tz: ZoneInfo, week_start: date, today: date, max_overtime: Decimal) -> Week:
-    days = [week_start + timedelta(days=i) for i in range(7)]
+def load_week(
+    db: Session, plant_id: uuid.UUID, tz: ZoneInfo, week_start: date, today: date, max_overtime: Decimal, n_days: int = 7
+) -> Week:
+    """The plan period: week_start and the n_days - 1 days after it (a week by default)."""
+    days = [week_start + timedelta(days=i) for i in range(n_days)]
     end = days[-1]
     after_week = datetime.combine(end + timedelta(days=1), time(0), tzinfo=tz)
     wos = list(
@@ -526,11 +542,11 @@ def solve(
                 spans = sorted({w for wid, u, dd in x if u == uid and dd == d for w in week.jobs[wid].windows})
                 m.add(sum(stop_terms) <= int(_covered(spans, day.start, day.end) * Q))
         if week_load:
-            lv = m.new_int_var(0, 7 * 24 * Q, "")
+            lv = m.new_int_var(0, len(week.days) * 24 * Q, "")
             m.add(lv == sum(week_load) + sum(used[(uid, d)] for d in p.days))
             loads.append(lv)
     if loads:
-        peak = m.new_int_var(0, 7 * 24 * Q, "")
+        peak = m.new_int_var(0, len(week.days) * 24 * Q, "")
         for lv in loads:
             m.add(lv <= peak)
         cost.append(peak)
@@ -583,31 +599,45 @@ def _order_key(week: Week, wo_id: uuid.UUID) -> tuple:
 # Propose, check, approve
 
 
-def get_or_create(db: Session, plant_id: uuid.UUID, week_start: date) -> WeeklySchedule:
-    s = db.execute(
-        select(WeeklySchedule).where(WeeklySchedule.plant_id == plant_id, WeeklySchedule.week_start == week_start)
+def plan_at(db: Session, plant_id: uuid.UUID, start: date) -> WeeklySchedule | None:
+    return db.execute(
+        select(WeeklySchedule).where(WeeklySchedule.plant_id == plant_id, WeeklySchedule.week_start == start)
     ).scalar_one_or_none()
+
+
+def get_or_create(db: Session, plant_id: uuid.UUID, week_start: date, n_days: int = 7) -> WeeklySchedule:
+    s = plan_at(db, plant_id, week_start)
     if s is None:
-        s = WeeklySchedule(plant_id=plant_id, week_start=week_start, status="draft", stats={})
+        s = WeeklySchedule(plant_id=plant_id, week_start=week_start, days=n_days, status="draft", stats={})
         db.add(s)
         db.flush()
     return s
 
 
-def propose(db: Session, ctx: Ctx, week_start: date, max_overtime: Decimal, seconds: float = SOLVE_SECONDS) -> WeeklySchedule:
-    check_sunday(week_start)
-    s = get_or_create(db, ctx.plant_id, week_start)
-    if s.status == "approved":
-        raise DomainError("This week is approved; reopen it to propose again", "schedule_approved", 409)
+def propose(
+    db: Session, ctx: Ctx, week_start: date, max_overtime: Decimal, seconds: float = SOLVE_SECONDS, n_days: int | None = None
+) -> WeeklySchedule:
+    """Propose the plan that starts on week_start, n_days long (default: the plan's length, or a week)."""
+    existing = plan_at(db, ctx.plant_id, week_start)
+    n = n_days or (existing.days if existing else 7)
+    check_days(n)
+    if existing and existing.status == "approved":
+        raise DomainError("This plan is approved; reopen it to propose again", "schedule_approved", 409)
+    clash = overlapping(db, ctx.plant_id, week_start, n, existing.id if existing else None)
+    if clash:
+        o = clash[0]
+        raise DomainError(f"Overlaps the plan of {o.week_start} – {o.week_start + timedelta(days=o.days - 1)}", "schedule_overlap", 409)
+    s = get_or_create(db, ctx.plant_id, week_start, n)
+    s.days = n
     tz = ZoneInfo(ctx.plant.timezone)
-    week = load_week(db, ctx.plant_id, tz, week_start, plant_today(ctx.plant), max_overtime)
+    week = load_week(db, ctx.plant_id, tz, week_start, plant_today(ctx.plant), max_overtime, n)
     # Keep what was pinned by hand, and work already scheduled this week with its people.
     fixed: list[Placement] = []
     fixed_deferred: set[uuid.UUID] = set()
     kept: list[ScheduleItem] = []
     for it in s.items:
-        if not it.pinned or it.work_order_id not in week.jobs:
-            continue
+        if not it.pinned or it.work_order_id not in week.jobs or (not it.deferred and it.work_date not in week.days):
+            continue  # pinned on a day the (shorter) plan no longer has: planned again
         kept.append(it)
         if it.deferred:
             fixed_deferred.add(it.work_order_id)
@@ -657,7 +687,7 @@ def propose(db: Session, ctx: Ctx, week_start: date, max_overtime: Decimal, seco
     s.stats = stats | totals(s)
     db.flush()
     audit(db, "schedule.propose", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="weekly_schedule", entity_id=s.id,
-          data={"week": str(week_start), **{k: v for k, v in s.stats.items() if k != "objective"}})  # fmt: skip
+          data={"week": str(week_start), "days": n, **{k: v for k, v in s.stats.items() if k != "objective"}})  # fmt: skip
     return s
 
 
@@ -673,7 +703,7 @@ def totals(s: WeeklySchedule) -> dict:
 
 def check(db: Session, ctx: Ctx, s: WeeklySchedule) -> dict:
     """Per item, what breaks a rule (after hand edits); per person and day, the load against the roster."""
-    week = load_week(db, ctx.plant_id, ZoneInfo(ctx.plant.timezone), s.week_start, date.min, s.max_overtime_hours)
+    week = load_week(db, ctx.plant_id, ZoneInfo(ctx.plant.timezone), s.week_start, date.min, s.max_overtime_hours, s.days)
     warn: dict[str, list[dict]] = {}
     load: dict[tuple[uuid.UUID, date], Decimal] = defaultdict(Decimal)
     for it in s.items:
@@ -769,7 +799,7 @@ def approve(db: Session, ctx: Ctx, s: WeeklySchedule) -> list[dict]:
     if s.status != "engineer_approved":
         raise DomainError("The engineer approves the week first", "schedule_state", 409)
     tz = ZoneInfo(ctx.plant.timezone)
-    week = load_week(db, ctx.plant_id, tz, s.week_start, date.min, s.max_overtime_hours)
+    week = load_week(db, ctx.plant_id, tz, s.week_start, date.min, s.max_overtime_hours, s.days)
     by_wo: dict[uuid.UUID, list[ScheduleItem]] = defaultdict(list)
     for it in s.items:
         if not it.deferred and it.user_id and it.work_date:
