@@ -5,7 +5,7 @@ import { Modal } from "@/components/Modal";
 import { useDisclosure, useNetwork } from "@mantine/hooks";
 import {
   IconAlertTriangle, IconBell, IconBox, IconBuildingFactory2, IconChartLine, IconNotebook, IconCalendarTime, IconCalendarWeek, IconChartBar, IconClipboardList, IconDashboard, IconDroplet, IconFishBone, IconHeartRateMonitor,
-  IconAdjustments, IconBulb, IconScissors, IconFirstAidKit, IconGauge, IconKey, IconLanguage, IconLogout, IconMoon, IconPlus, IconSun, IconQrcode, IconSettings, IconSitemap, IconTool, IconToolsKitchen, IconUserCheck, IconWifi, IconWifiOff, IconRoute,
+  IconAdjustments, IconBulb, IconScissors, IconRuler2, IconFirstAidKit, IconGauge, IconKey, IconLanguage, IconLogout, IconMoon, IconPlus, IconSun, IconQrcode, IconSettings, IconSitemap, IconTool, IconToolsKitchen, IconUserCheck, IconWifi, IconWifiOff, IconRoute,
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -37,6 +37,7 @@ const NAV_GROUPS: { key: string | null; items: NavItem[] }[] = [
     { href: "/operations/kpis", key: "nav.opsKpis", icon: IconGauge, perm: "op.view", feature: "kpis" },
     { href: "/operations/insights", key: "nav.opsInsights", icon: IconBulb, perm: "op.view", feature: "insights" },
     { href: "/operations/trim-loss", key: "nav.trimLoss", icon: IconScissors, perm: "op.view", feature: "reports" },
+    { href: "/operations/cutting", key: "nav.cutPlan", icon: IconRuler2, perm: "op.view", feature: "reports" },
     { href: "/operations/incidents", key: "nav.opsIncidents", icon: IconFirstAidKit, perm: "op.view", feature: "incidents" },
     { href: "/operations/setup", key: "nav.opsSetup", icon: IconAdjustments, perm: "op.manage" },
   ] },

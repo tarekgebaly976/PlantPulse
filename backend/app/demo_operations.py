@@ -450,10 +450,45 @@ def build(db: Session, password: str, now: datetime | None = None) -> str:
     _incidents(db, plant, ref, current)
     _work_hours(db, plant, ref, current)
     _actions(db, plant, ref, current)
+    _cutting(db, plant, m, ref, current)
     db.flush()
     alert_svc.evaluate(db, plant)
     return (f"{PLANT_CODE}: operations sample plant with paper machine PM1, {n} daily reports, {logs} utility / stock preparation logs "
             f"and sheeting line SH1 ({k} reports)")  # fmt: skip
+
+
+# ---------------------------------------------------------------- the winder's cutting plan (invented orders)
+CUT_ORDERS = [  # customer, order ref, width mm, reels, tolerance %, due in days
+    ("Al Noor Printing (sample)", "SO-1041", 700, 40, 5, 9),
+    ("Gulf Packaging (sample)", "SO-1043", 850, 25, 5, 11),
+    ("Delta Boxes (sample)", "SO-1047", 1000, 30, 10, None),
+    ("Red Sea Cartons (sample)", "SO-1050", 620, 18, 5, None),
+    ("Nile Print (sample)", "SO-1052", 1250, 12, 0, 8),
+    ("Al Noor Printing (sample)", "SO-1055", 780, 22, 5, None),
+]
+
+
+def _cutting(db: Session, plant: Plant, m: OpMachine, ref: dict, current: date) -> None:
+    """The winder of PM1 and next week's cutting plan for grade 350, calculated (not released)."""
+    from app.models.cutting import CutOrder, CutPlan, CutWinder
+    from app.services import cutting as cut_svc
+
+    deckle = int(round(WIDTH_M * 1000))
+    w = CutWinder(plant_id=plant.id, machine_id=m.id, deckle_mm=deckle, max_reels=6, min_trim_mm=20, max_trim_mm=250, min_width_mm=300,
+                  change_cost_sets=Decimal("0.5"))  # fmt: skip
+    db.add(w)
+    g = ref["grades"].get(350)
+    p = CutPlan(plant_id=plant.id, machine_id=m.id, grade_id=g.id if g else None, title="Next week – grade 350 (sample)", status="draft", result={},
+                created_by_id=ref["users"]["prod.mgr"].id)  # fmt: skip
+    for i, (cust, so, width, reels, tol, due) in enumerate(CUT_ORDERS):
+        p.orders.append(CutOrder(customer=cust, ref=so, width_mm=width, reels=reels, tolerance_pct=Decimal(tol), sort=i,
+                                 due_date=current + timedelta(days=due) if due else None))  # fmt: skip
+    db.add(p)
+    db.flush()
+    lim = cut_svc.Limits(deckle=deckle, max_reels=6, min_trim=20, max_trim=250, min_width=300, change_cost_sets=0.5)
+    p.result = cut_svc.solve([cut_svc.Line(str(o.id), o.width_mm, o.reels, float(o.tolerance_pct), o.due_date) for o in p.orders], lim)
+    p.status = "calculated" if p.result.get("status") in ("optimal", "feasible") else "draft"
+    p.calculated_at = utcnow()
 
 
 # ---------------------------------------------------------------- a generic discrete line (invented)

@@ -67,6 +67,7 @@ PERMISSIONS: dict[str, str] = {
     "op.enter": "Enter and submit the daily production report (runs, reels, stops, quality losses)",
     "op.confirm": "Confirm (lock) or reopen daily production reports",
     "op.manage": "Manage operations settings: machines, grades and ideal rates, disciplines, sections, defects",
+    "op.cut": "Plan the winder's cutting: enter the orders, calculate the cutting patterns, release the plan",
 }
 
 # Permissions of the Operations module: present only when the installation switches the module on (CMMS_OPERATIONS_MODULE).
@@ -242,7 +243,7 @@ ROLES: dict[str, tuple[str, set[str]]] = {
     ),
     "production_manager": (
         "Production Manager",
-        _VIEW - {"audit.view"} | {"request.create", "op.enter", "op.confirm", "op.manage", "kpi.manage", "report.management", "stop_window.manage"},
+        _VIEW - {"audit.view"} | {"request.create", "op.enter", "op.confirm", "op.manage", "op.cut", "kpi.manage", "report.management", "stop_window.manage"},
     ),
     "management_viewer": ("Management Viewer", _VIEW - {"audit.view"}),
 }

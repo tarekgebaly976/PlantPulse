@@ -16,6 +16,7 @@ from app.api.routers import (
     assets,
     attachments,
     auth,
+    cutting,
     dashboard,
     inventory,
     io,
@@ -198,6 +199,7 @@ def create_app() -> FastAPI:
         operations.router,
         oplogs.router,
         production.router,
+        cutting.router,
     ):
         app.include_router(r, prefix=API)
 

@@ -2,6 +2,7 @@
 
 from app.models import (  # noqa: F401
     assets,
+    cutting,
     identity,
     inventory,
     lubrication,
