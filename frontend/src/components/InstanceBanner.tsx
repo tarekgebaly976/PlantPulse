@@ -7,15 +7,14 @@ import { useEffect, useState } from "react";
 const isDemo = (label: string) => label.trim().toUpperCase().startsWith("DEMO");
 
 /** In a test copy: the red TEST icon in the browser tab / iPhone home screen, and "TEST · " in front of the tab title.
- *  In the demo: "DEMO · " in front of the tab title, the normal icon. */
+ *  In the demo: the blue DEMO icon and "DEMO · ". The real system keeps the normal (dark blue) icon. */
 function markTestCopy(demo: boolean): () => void {
   const prefix = demo ? "DEMO · " : "TEST · ";
+  const dir = demo ? "/icons/demo/" : "/icons/test/";
   const apply = () => {
-    if (!demo) {
-      for (const link of document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"], link[rel="apple-touch-icon"]')) {
-        const path = new URL(link.href).pathname;
-        if (path.startsWith("/icons/") && !path.startsWith("/icons/test/")) link.href = path.replace("/icons/", "/icons/test/");
-      }
+    for (const link of document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"], link[rel="apple-touch-icon"]')) {
+      const path = new URL(link.href).pathname;
+      if (path.startsWith("/icons/") && !path.startsWith(dir)) link.href = path.replace(/^\/icons\/(test\/|demo\/)?/, dir);
     }
     if (!document.title.startsWith(prefix)) document.title = prefix + document.title;
   };
