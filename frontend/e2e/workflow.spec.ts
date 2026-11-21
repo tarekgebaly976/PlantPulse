@@ -51,7 +51,7 @@ test("work order lifecycle through the UI: create → approve → assign → exe
   await expect(tp.getByText("1 h")).toBeVisible();
   await tp.getByRole("tab", { name: "Checklist" }).click();
   await tp.getByLabel("Findings").first().fill("Outer race spalling, replaced bearing");
-  await tp.getByLabel("Root cause").fill("Insufficient lubrication");
+  await tp.getByLabel("Root cause", { exact: true }).fill("Insufficient lubrication");
   await tp.getByRole("button", { name: "Save" }).first().click();
   await tp.getByTestId("to-awaiting_review").click();
   await tp.getByTestId("transition-confirm").click();
