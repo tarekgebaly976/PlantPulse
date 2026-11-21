@@ -28,6 +28,7 @@ from app.services.production import kpis as kp
 from app.services.production import layout
 from app.services.production import measures as ms
 from app.services.production import templates as tpl
+from app.services.production import trim as trim_svc
 from app.services.production.periods import day_window
 
 router = APIRouter(prefix="/operations", tags=["production"])
@@ -628,6 +629,27 @@ def update_action(aid: uuid.UUID, body: ActionIn, ctx: Ctx = Depends(require("op
 @router.get("/insights")
 def insights(ctx: Ctx = Depends(require("op.view")), db: Session = DB) -> dict:
     return insight_svc.generate(db, ctx.plant, plant_today(ctx.plant), ctx.dept_ok)
+
+
+# ================================================================ paper waste (trim loss), phase A
+@router.get("/trim-loss")
+def trim_loss(
+    date_from: date | None = Query(None, alias="from"),
+    date_to: date | None = Query(None, alias="to"),
+    machine_id: uuid.UUID | None = None,
+    ctx: Ctx = Depends(require("op.view")),
+    db: Session = DB,
+) -> dict:
+    """Waste per paper machine and converting line (sheeters): by grade / sheet size, week, shift, with the top causes.
+    Default: the last 4 full weeks plus this week."""
+    to = date_to or plant_today(ctx.plant)
+    frm = date_from or trim_svc.week_of(to) - timedelta(days=28)
+    if frm > to:
+        raise HTTPException(422, "The start is after the end")
+    if (to - frm).days > 366:
+        raise HTTPException(422, "At most one year")
+    _line(db, ctx, machine_id)
+    return trim_svc.analyse(db, ctx.plant, frm, to, machine_id, ctx.dept_ok)
 
 
 # ================================================================ safety incidents
