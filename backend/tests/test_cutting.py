@@ -230,3 +230,100 @@ def test_suggestions_when_no_plan_is_possible():
     r = solve([Line("a", 2000, 4, 0, None), Line("b", 1000, 20, 0, None)], lim)
     assert [x["code"] for x in r["suggestions"]] == ["widen_tolerance"] and r["suggestions"][0]["order"] == "b"
     assert "suggestions" not in solve([Line("a", 1060, 30, 0, None)], lim)  # a plan: nothing to suggest
+
+
+def _xlsx(rows: list[list]) -> dict:
+    import io
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    for r in rows:
+        ws.append(r)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return {"file": ("orders.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+
+
+def test_orders_from_excel_one_plan_per_cycle(world: World):
+    import io
+
+    from openpyxl import load_workbook
+
+    s = setup_mill(world)
+    mgr = s["mgr"]
+    mid = s["machine"]["id"]
+    mgr.ok("put", f"/operations/cutting/winders/{mid}", {"deckle_mm": 3200, "set_length_m": 6000})
+    sh = mgr.ok("post", "/operations/cutting/converters", {"machine_id": mid, "code": "SH1", "name": "Sheeter", "kind": "sheeter",
+        "min_width_mm": 500, "max_width_mm": 1700, "min_length_mm": 400, "max_length_mm": 1600}, status=201)  # fmt: skip
+    # the template: headers in the user's language, the machine's grades and units in the drop-downs
+    t = mgr.get("/operations/cutting/import/template.xlsx", params={"machine_id": mid, "lang": "ar"})
+    assert t.status_code == 200
+    ws = load_workbook(io.BytesIO(t.content)).worksheets[0]
+    assert ws["A1"].value == "الدورة" and ws["H1"].value == "الكمية"
+    old = mgr.ok("post", "/operations/cutting/plans", {"machine_id": mid, "title": "Week 49"}, status=201)
+    mgr.ok("put", f"/operations/cutting/plans/{old['id']}/orders", {"orders": [{"customer": "Old", "width_mm": 1000, "reels": 4}]})
+    head = [
+        "Cycle",
+        "Grade",
+        "Customer",
+        "Order ref",
+        "Type",
+        "Width (mm)",
+        "Sheet length (mm)",
+        "Quantity",
+        "Tolerance %",
+        "Due date",
+        "Unit",
+    ]
+    bad = _xlsx([head,
+        ["Week 49", "400", "A", "SO-1", "reel", 1500, None, 12, 5, "2026-12-01", None],
+        ["Week 50", "400", "B", "SO-2", "sheet", 700, None, 60000, None, None, "SH1"],  # no sheet length
+        ["Week 50", "999", "C", "SO-3", "box", "wide", None, 0, 80, "soon", "XX"],
+        ["Week 51", "400", "D", None, "reel", 1200, None, 6, None, None, None],
+        ["Week 51", "300", "E", None, "reel", 1300, None, 6, None, None, None],  # two grades in one cycle
+    ])  # fmt: skip
+    assert world.api("production").post(f"/operations/cutting/import/preview?machine_id={mid}", files=bad).status_code == 403
+    p = mgr.ok("post", f"/operations/cutting/import/preview?machine_id={mid}", files=bad)
+    errs = {e["row"]: {x["code"] for x in e["errors"]} for e in p["errors"]}
+    assert errs == {3: {"length"}, 4: {"grade", "kind", "number", "width", "qty", "tolerance", "date", "unit"}}
+    assert next(c for c in p["cycles"] if c["title"] == "Week 51")["errors"][0]["code"] == "grades"
+    assert mgr.post(f"/operations/cutting/import/commit?machine_id={mid}", files=bad).status_code == 422
+    assert len(mgr.ok("get", "/operations/cutting/plans")) == 1  # nothing saved
+    good = _xlsx([["Orders for December"], head,
+        ["week 49", "400", "A", "SO-1", "بكرة", 1500, None, 12, 0.05, "01/12/2026", None],
+        [None] * 11,
+        ["Week 50", None, "B", "SO-2", "شيت", 700, 1000, "60,000", 5, None, "sh1"],
+        ["Week 50", "400", "C", "SO-3", "reel", 1680, None, 10, None, None, None],
+    ])  # fmt: skip
+    p = mgr.ok("post", f"/operations/cutting/import/preview?machine_id={mid}", files=good)
+    assert p["invalid"] == 0 and p["rows"] == 3
+    c49, c50 = p["cycles"]
+    assert (c49["action"], c49["plan_id"], c49["existing"], c49["reels"]) == ("add", old["id"], 1, 12)
+    assert (c50["action"], c50["grade"], c50["orders"], c50["sheets"], c50["reels"]) == ("new", "400", 2, 60000, 10)
+    r = mgr.ok("post", f"/operations/cutting/import/commit?machine_id={mid}", files=good)
+    assert (r["created"], r["added_to"], r["orders"]) == (1, 1, 3)
+    w49 = mgr.ok("get", f"/operations/cutting/plans/{old['id']}")
+    assert [o["customer"] for o in w49["orders"]] == ["Old", "A"] and w49["grade"] == "400"
+    a = w49["orders"][1]
+    assert a["due_date"] == "2026-12-01" and float(a["tolerance_pct"]) == 5
+    w50 = next(x for x in mgr.ok("get", "/operations/cutting/plans") if x["title"] == "Week 50")
+    w50 = mgr.ok("get", f"/operations/cutting/plans/{w50['id']}")
+    assert w50["orders"][0]["kind"] == "sheet" and w50["orders"][0]["converter_id"] == sh["id"] and w50["orders"][0]["reels"] == 60000
+    # a released plan takes no more orders
+    rel = mgr.ok("post", "/operations/cutting/plans", {"machine_id": mid, "title": "Week 52"}, status=201)
+    mgr.ok(
+        "put",
+        f"/operations/cutting/plans/{rel['id']}/orders",
+        {"orders": [{"width_mm": 1500, "reels": 12}, {"width_mm": 1680, "reels": 12, "tolerance_pct": 10}]},
+    )
+    assert mgr.ok("post", f"/operations/cutting/plans/{rel['id']}/calculate")["status"] == "calculated"
+    mgr.ok("post", f"/operations/cutting/plans/{rel['id']}/release")
+    p = mgr.ok(
+        "post",
+        f"/operations/cutting/import/preview?machine_id={mid}",
+        files=_xlsx([head, ["Week 52", None, "X", None, "reel", 1000, None, 2]]),
+    )
+    assert p["invalid"] == 1 and p["cycles"][0]["errors"][0]["code"] == "released"
+    assert mgr.post(f"/operations/cutting/import/preview?machine_id={mid}", files=_xlsx([["x", "y"], [1, 2]])).status_code == 422

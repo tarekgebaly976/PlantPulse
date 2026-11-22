@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,6 +21,7 @@ from app.models.identity import User
 from app.models.operations import OpGrade, OpMachine
 from app.schemas.common import In
 from app.services import cutting as svc
+from app.services import cutting_import
 from app.services.common import audit, plant_today, utcnow
 from app.services.production import trim as trim_svc
 
@@ -425,6 +426,46 @@ def save_orders(pid: uuid.UUID, body: OrdersIn, ctx: Ctx = Depends(require("op.c
     p.calculated_at = None
     db.flush()
     return plan_out(db, ctx, p)
+
+
+# ---------------- customer orders from Excel (several cycles in one file) ----------------
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@router.get("/import/template.xlsx")
+def import_template(machine_id: uuid.UUID, lang: str = "en", ctx: Ctx = Depends(require("op.cut")), db: Session = DB) -> Response:
+    m = _machine(db, ctx, machine_id)
+    return Response(cutting_import.template_xlsx(db, m, lang), media_type=XLSX,
+                    headers={"Content-Disposition": f'attachment; filename="cutting_orders_{m.code}.xlsx"'})  # fmt: skip
+
+
+def _import_file(file: UploadFile, db: Session, m: OpMachine) -> dict:
+    content = file.file.read(5 * 1024 * 1024 + 1)
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(413, "File too large (max 5 MB)")
+    try:
+        return cutting_import.parse(db, m, content)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+
+
+@router.post("/import/preview")
+def import_preview(machine_id: uuid.UUID, file: UploadFile = File(...), ctx: Ctx = Depends(require("op.cut")), db: Session = DB) -> dict:
+    """What the file would do: one plan per cycle, new or added to the plan of that title; the rows with errors."""
+    return cutting_import.preview(_import_file(file, db, _machine(db, ctx, machine_id)))
+
+
+@router.post("/import/commit")
+def import_commit(machine_id: uuid.UUID, file: UploadFile = File(...), ctx: Ctx = Depends(require("op.cut")), db: Session = DB) -> dict:
+    m = _machine(db, ctx, machine_id)
+    p = _import_file(file, db, m)
+    pv = cutting_import.preview(p)
+    if pv["invalid"] or not pv["cycles"]:
+        raise HTTPException(422, {"message": "The file has errors; nothing was saved", **pv})
+    r = cutting_import.commit(db, m, p, ctx.user.id)
+    audit(db, "cut.orders_import", user_id=ctx.user.id, plant_id=ctx.plant_id, entity_type="op_machine", entity_id=m.id,
+          data={k: r[k] for k in ("created", "added_to", "orders")})  # fmt: skip
+    return r
 
 
 @router.post("/plans/{pid}/calculate")

@@ -5,17 +5,18 @@
 // of each, the route of each order through the units, their load, the trim, and the actual trim of the grade beside it.
 // On phones the orders are cards, not a wide table.
 
-import { ActionIcon, Alert, Badge, Button, Card, Group, NumberInput, Paper, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, Textarea, Tooltip } from "@mantine/core";
+import { ActionIcon, Alert, Badge, Button, Card, FileInput, Group, NumberInput, Paper, SegmentedControl, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, Textarea, Tooltip } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { IconArrowBack, IconCalculator, IconLock, IconLockOpen, IconPencil, IconPlus, IconSettings, IconTrash } from "@tabler/icons-react";
+import { IconArrowBack, IconCalculator, IconFileSpreadsheet, IconLock, IconLockOpen, IconPencil, IconPlus, IconSettings, IconTrash } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { notifications } from "@mantine/notifications";
 import { useTranslation } from "react-i18next";
 import { Guard } from "@/components/AppFrame";
 import { Modal } from "@/components/Modal";
 import { ConfirmButton, DataTable, Loading, PageHeader } from "@/components/ui";
-import { del, post, put } from "@/lib/api";
+import { api, del, download, post, put } from "@/lib/api";
 import { fmtDate, fmtNum, useMut, useQ } from "@/lib/hooks";
 import { pct } from "@/lib/ops";
 import { useSession } from "@/lib/session";
@@ -104,6 +105,60 @@ function WinderModal({ w, onClose }: { w: Winder; onClose: () => void }) {
         </SimpleGrid>
         <Text size="xs" c="dimmed">{t("cut.setLengthHint")}</Text>
         <Button loading={save.isPending} disabled={f.max_trim_mm < f.min_trim_mm} onClick={() => save.mutate(undefined)}>{t("common.save")}</Button>
+      </Stack>
+    </Modal>
+  );
+}
+
+interface ImpErr { code: string; params: Record<string, string | number> }
+interface ImpPreview { rows: number; invalid: number; errors: { row: number; errors: ImpErr[] }[];
+  cycles: { title: string; grade: string | null; action: "new" | "add"; plan_id: string | null; existing: number; orders: number; reels: number; sheets: number; errors: ImpErr[] }[] }
+
+/** Customer orders from Excel: several production cycles in one file, one cutting plan per cycle. */
+function ImportModal({ winders, onClose }: { winders: Winder[]; onClose: () => void }) {
+  const { t, i18n } = useTranslation();
+  const [machine, setMachine] = useState<string | null>(winders[0]?.machine_id ?? null);
+  const [file, setFile] = useState<File | null>(null);
+  const [res, setRes] = useState<ImpPreview | null>(null);
+  const fd = () => { const d = new FormData(); if (file) d.append("file", file); return d; };
+  const check = useMut(() => api<ImpPreview>("POST", `/operations/cutting/import/preview?machine_id=${machine}`, fd()), { success: false, onDone: setRes });
+  const commit = useMut(() => api<{ created: number; added_to: number; orders: number }>("POST", `/operations/cutting/import/commit?machine_id=${machine}`, fd()),
+    { success: false, onDone: (r) => { notifications.show({ color: "teal", message: t("cut.impDone", { orders: r.orders, created: r.created, added: r.added_to }) }); onClose(); } });
+  const err = (e: ImpErr) => t(`cut.impErr_${e.code}`, e.params);
+  return (
+    <Modal opened onClose={onClose} title={t("cut.importOrders")} size="lg">
+      <Stack>
+        <Text size="sm" c="dimmed">{t("cut.importHint")}</Text>
+        {winders.length > 1 && <Select label={t("cut.machine")} allowDeselect={false} value={machine} onChange={(v) => { setMachine(v); setRes(null); }}
+          data={winders.map((w) => ({ value: w.machine_id, label: `${w.code} · ${w.name}` }))} />}
+        <Group><Button variant="light" disabled={!machine} leftSection={<IconFileSpreadsheet size={16} />}
+          onClick={() => void download("/operations/cutting/import/template.xlsx", { machine_id: machine ?? "", lang: i18n.language === "ar" ? "ar" : "en" })}>{t("cut.importTemplate")}</Button></Group>
+        <FileInput label={t("common.file")} accept=".xlsx" clearable value={file} onChange={(v) => { setFile(v); setRes(null); }} />
+        <Group>
+          <Button disabled={!file || !machine} loading={check.isPending} onClick={() => check.mutate(undefined)}>{t("cut.importCheck")}</Button>
+          <Button color="teal" disabled={!res || res.invalid > 0 || res.cycles.length === 0} loading={commit.isPending} onClick={() => commit.mutate(undefined)}>{t("cut.importCommit")}</Button>
+        </Group>
+        {res && (
+          <Stack gap="xs">
+            <Text size="sm">{t("cut.impRows", { n: res.rows })}{res.invalid > 0 && <> · <Text span c="red" fw={600}>{t("cut.impInvalid", { n: res.invalid })}</Text></>}</Text>
+            {res.cycles.map((c) => (
+              <Paper key={c.title} withBorder p="xs" data-testid="imp-cycle">
+                <Group justify="space-between" gap="xs">
+                  <Text fw={600} dir="auto">{c.title}{c.grade ? ` · ${c.grade}` : ""}</Text>
+                  <Badge variant="light" color={c.errors.length ? "red" : c.action === "new" ? "blue" : "teal"}>{c.action === "new" ? t("cut.impNew") : t("cut.impAdd", { n: c.existing })}</Badge>
+                </Group>
+                <Text size="sm" c="dimmed">{[`${c.orders} ${t("cut.orders")}`, c.reels ? `${fmtNum(c.reels, 0)} ${t("cut.reelsShort")}` : null,
+                  c.sheets ? `${fmtNum(c.sheets, 0)} ${t("cut.sheetsShort")}` : null].filter(Boolean).join(" · ")}</Text>
+                {c.errors.map((e, i) => <Text key={i} size="sm" c="red">{err(e)}</Text>)}
+              </Paper>
+            ))}
+            {res.errors.length > 0 && (
+              <Alert color="red" p="xs">
+                {res.errors.slice(0, 50).map((r) => <Text key={r.row} size="sm"><b>{t("cut.impRow", { row: r.row })}:</b> {r.errors.map(err).join(" · ")}</Text>)}
+              </Alert>
+            )}
+          </Stack>
+        )}
       </Stack>
     </Modal>
   );
@@ -447,6 +502,7 @@ function View() {
   const [editW, setEditW] = useState<Winder | null>(null);
   const [unit, setUnit] = useState<{ machineId: string; unit: Unit } | null>(null);
   const [nw, setNw] = useState<{ machine_id: string | null; grade_id: string | null; title: string } | null>(null);
+  const [imp, setImp] = useState(false);
   const create = useMut(() => post<PlanRow>("/operations/cutting/plans", nw), { onDone: (r) => { setNw(null); open(r.id); } });
   const ws = winders.data ?? [];
   const grades = ws.find((w) => w.machine_id === nw?.machine_id)?.grades ?? [];
@@ -488,7 +544,10 @@ function View() {
           </SimpleGrid>
           <Group justify="space-between">
             <Text fw={600}>{t("cut.plans")}</Text>
-            {can("op.cut") && <Button leftSection={<IconPlus size={16} />} onClick={() => setNw({ machine_id: ws[0]?.machine_id ?? null, grade_id: null, title: "" })}>{t("cut.newPlan")}</Button>}
+            {can("op.cut") && <Group gap="xs">
+              <Button variant="light" leftSection={<IconFileSpreadsheet size={16} />} onClick={() => setImp(true)}>{t("cut.importOrders")}</Button>
+              <Button leftSection={<IconPlus size={16} />} onClick={() => setNw({ machine_id: ws[0]?.machine_id ?? null, grade_id: null, title: "" })}>{t("cut.newPlan")}</Button>
+            </Group>}
           </Group>
           <DataTable rows={plans.data} onRow={(r) => open(r.id)} empty={t("cut.noPlans")} columns={[
             { key: "t", label: t("cut.title"), render: (r: PlanRow) => <b>{r.title}</b> },
@@ -503,6 +562,7 @@ function View() {
         </Stack>
       )}
       {editW && <WinderModal w={editW} onClose={() => setEditW(null)} />}
+      {imp && <ImportModal winders={ws} onClose={() => setImp(false)} />}
       {unit && <UnitModal machineId={unit.machineId} unit={unit.unit} onClose={() => setUnit(null)} />}
       {nw && (
         <Modal opened onClose={() => setNw(null)} title={t("cut.newPlan")}>

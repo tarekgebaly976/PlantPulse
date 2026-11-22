@@ -20,3 +20,26 @@ test("cutting plan: an existing sheeter can be edited and saved", async ({ page 
   await page.keyboard.press("Escape");
   await setChange(page, "30"); // back as it was
 });
+
+test("cutting plan: customer orders from the Excel template, one plan per cycle", async ({ page }) => {
+  await login(page, "prod.mgr");
+  await page.goto("/operations/cutting");
+  await page.getByRole("button", { name: "Import orders (Excel)" }).click();
+  const dlg = page.getByRole("dialog");
+  const [file] = await Promise.all([page.waitForEvent("download"), dlg.getByRole("button", { name: "Download template" }).click()]);
+  await dlg.locator('input[type="file"]').setInputFiles(await file.path()); // the template's two sample rows: cycle "Week 49"
+  await dlg.getByRole("button", { name: "Check file" }).click();
+  const cycle = dlg.getByTestId("imp-cycle");
+  await expect(cycle).toHaveCount(1);
+  await expect(cycle).toContainText("Week 49");
+  await expect(cycle).toContainText("New plan");
+  await dlg.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(dlg).toBeHidden();
+  const row = page.getByRole("row", { name: /Week 49/ });
+  await expect(row).toContainText("12 reels");
+  // clean up: the e2e data stays as it was
+  page.on("dialog", (d) => void d.accept());
+  await row.click();
+  await page.locator("button", { hasText: /^Delete$/ }).click();
+  await expect(page.getByRole("row", { name: /Week 49/ })).toHaveCount(0);
+});
