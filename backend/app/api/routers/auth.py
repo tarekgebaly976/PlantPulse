@@ -18,7 +18,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models.identity import LoginAttempt, Membership, User, UserSession
-from app.models.tenancy import Plant
+from app.models.tenancy import Organization, Plant
 from app.schemas.common import In
 from app.services import password_reset as pwreset
 from app.services.common import audit, hidden_permissions, role_permissions, utcnow
@@ -118,6 +118,11 @@ def build_me(db: Session, user: User, csrf: str) -> MeOut:
     )
 
 
+def _shared_demo(db: Session, user: User) -> bool:
+    org = db.get(Organization, user.organization_id) if user.organization_id else None
+    return org is not None and org.code == "DEMO"
+
+
 @router.post("/login", response_model=MeOut)
 def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db, scope="function")) -> MeOut:
     s = get_settings()
@@ -146,7 +151,9 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Account temporarily locked. Try again later.")
     if not verify_password(user.password_hash, body.password) or not user.is_active:
         user.failed_login_count += 1
-        if user.failed_login_count >= s.login_max_attempts:
+        # The shared sample accounts (DEMO organisation, used by testers and store reviewers) are not locked: one
+        # tester's wrong password would shut everyone out. Guessing is still capped per address (ip_failures above).
+        if user.failed_login_count >= s.login_max_attempts and not _shared_demo(db, user):
             user.locked_until = now + timedelta(minutes=s.login_lockout_minutes)
             user.failed_login_count = 0
             audit(db, "auth.lockout", user_id=user.id, organization_id=user.organization_id, ip=ip)

@@ -135,3 +135,18 @@ def test_meta_is_public_and_carries_the_instance_label(world, monkeypatch):
     assert anon.get("/api/v1/meta").json()["try_demo_url"] == "https://plantpulse-cmms.com/#try"  # sign-in page: "Try the demo"
     monkeypatch.setattr(get_settings(), "instance_label", "TEST")  # never on the demo or test copies
     assert anon.get("/api/v1/meta").json() == {"instance_label": "TEST", "password_reset": False, "try_demo_url": None}
+
+
+def test_shared_demo_accounts_are_not_locked_but_guessing_is_capped(world):
+    """The DEMO organisation's shared sample accounts (testers, store reviewers) do not lock: one tester's wrong
+    password must not shut everyone out. Guessing from one address is still stopped."""
+    with SessionLocal() as db, db.begin():
+        db.execute(text("UPDATE organizations SET code = 'DEMO' WHERE id = :id"), {"id": world.org.id})
+    api = Api(make_client(), None)
+    for _ in range(6):
+        assert api.post("/auth/login", {"email": "tech@example.com", "password": "wrong-password"}).status_code == 401
+    assert api.post("/auth/login", {"email": "tech@example.com", "password": PASSWORD}).status_code == 200
+    for _ in range(20):
+        api.post("/auth/login", {"email": "tech@example.com", "password": "wrong-password"})
+    r = api.post("/auth/login", {"email": "tech@example.com", "password": PASSWORD})
+    assert r.status_code == 429 and "Too many login attempts" in r.text
