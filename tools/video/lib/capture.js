@@ -25,6 +25,10 @@ const BLOCKLIST = ["SKF", "ABB", "Flender", "Atlas Copco", "Mobil", "Mobilgear",
 // data are not changed) they are shown as neutral sample names, in the style the demo already uses ("Line builder (sample)").
 // Longest first. The blocklist check still runs after this, so a name missing here stops the capture.
 const MASK = [
+  // invented customers of the demo cutting plan, shown neutrally (no company-like names in the videos)
+  ["Cairo Print House (sample)", "Customer F (sample)"], ["Al Noor Printing (sample)", "Customer A (sample)"],
+  ["Gulf Packaging (sample)", "Customer B (sample)"], ["Red Sea Cartons (sample)", "Customer D (sample)"],
+  ["Delta Boxes (sample)", "Customer C (sample)"], ["Nile Print (sample)", "Customer E (sample)"],
   ["Mobilgear 600 XP 220", "Gear oil VG 220 (sample)"], ["LGEP 2", "grease (sample)"], ["Bosch Rexroth", "Hydraulics maker (sample)"],
   ["Atlas Copco", "Compressor maker (sample)"], ["SKF-SA", "Bearing supplier (sample)"], ["SKF", "Bearing maker (sample)"],
   ["Mobil", "Lubricant maker (sample)"], ["Flender", "Gearbox maker (sample)"], ["ABB", "Electrical maker (sample)"],
