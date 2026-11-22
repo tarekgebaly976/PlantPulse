@@ -117,7 +117,8 @@ function UnitModal({ machineId, unit, onClose }: { machineId: string; unit: Unit
   const { t } = useTranslation();
   const [f, setF] = useState<Unit>(unit);
   const n = (v: number | string | null) => (v === "" || v === null ? null : Number(v));
-  const body = { ...f, machine_id: machineId, min_width_mm: Number(f.min_width_mm), max_width_mm: Number(f.max_width_mm), min_length_mm: n(f.min_length_mm),
+  const { id: _id, ...rest } = f; // the id goes in the URL; the API refuses unknown fields
+  const body = { ...rest, machine_id: machineId, min_width_mm: Number(f.min_width_mm), max_width_mm: Number(f.max_width_mm), min_length_mm: n(f.min_length_mm),
     max_length_mm: n(f.max_length_mm), side_trim_mm: Number(f.side_trim_mm), speed_mpm: n(f.speed_mpm), change_minutes: Number(f.change_minutes), stands: Number(f.stands) };
   const save = useMut(() => (f.id ? put(`/operations/cutting/converters/${f.id}`, body) : post("/operations/cutting/converters", body)), { onDone: onClose });
   const remove = useMut(() => del(`/operations/cutting/converters/${f.id}`), { onDone: onClose });
