@@ -22,6 +22,7 @@ It does not change any application code, configuration, database schema or migra
 | `lib/capture.js` | filming: screenshots + element boxes per step |
 | `lib/audio.py` | voice per scene: TTS or your recording, cleaned and normalised to -16 LUFS |
 | `lib/stage.html`, `lib/render.js` | compositor and encoder |
+| `lib/anim.js` | animated scenes (layout `anim`): drawn people, machine, phone and charts, each action on its own sentence; marked "Illustration" (video 19) |
 | `scripts/reset-demo.sh` | puts the local demo database back to its seeded state before each capture |
 | `out/` (git-ignored) | captures, audio, key frames and the MP4 files |
 

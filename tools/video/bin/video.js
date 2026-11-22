@@ -55,6 +55,7 @@ function sceneParts(s, beats) {
     const parts = b.map((x, k) => (say(k) ? { key: k, text: k === 0 && s.lead ? `${s.lead} ${say(k)}` : say(k) } : null)).filter(Boolean);
     return parts.length ? parts : [{ key: "all", text: s.narration }];
   }
+  if (s.layout === "anim") return s.says.map((text, k) => ({ key: k, text }));  // one part per action
   return [{ key: "all", text: s.narration }];
 }
 

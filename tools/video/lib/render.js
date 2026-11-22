@@ -18,7 +18,8 @@ const GAP = 0.3;      // pause between two spoken parts
 const SHORT = { view: 1.6, click: 1.9, type: 2.1 };  // a step without its own sentence
 
 function buildTimeline(def, OUT) {
-  const beatsAll = JSON.parse(fs.readFileSync(path.join(OUT, "captures", "beats.json"), "utf8"));
+  const bf = path.join(OUT, "captures", "beats.json");
+  const beatsAll = fs.existsSync(bf) ? JSON.parse(fs.readFileSync(bf, "utf8")) : {}; // an animated video films nothing
   const dur = JSON.parse(fs.readFileSync(path.join(OUT, "audio", "durations.json"), "utf8"));
   const logo = path.join(ROOT, "..", "..", "frontend", "public", "icons", "icon.svg");
   const scenes = [], voice = [];
@@ -53,7 +54,8 @@ function buildTimeline(def, OUT) {
       D = x - GAP - t + TAIL;
     } else {
       let x = t + LEAD;
-      for (const p of parts) { voice.push({ id: p.id, at: x }); x += p.seconds + GAP; }
+      s.partAt = [];  // when each sentence starts (animated scenes act on it)
+      for (const p of parts) { voice.push({ id: p.id, at: x }); s.partAt.push(x); x += p.seconds + GAP; }
       D = Math.max(x - GAP - t + TAIL, 3);
     }
     s.t0 = t; s.t1 = t + D;

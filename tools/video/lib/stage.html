@@ -104,6 +104,7 @@
 <body>
 <div id="bg"></div>
 <div id="root"></div>
+<script src="anim.js"></script>
 <script>
 "use strict";
 const W = 1920, H = 1080, XF = 0.6; // crossfade between scenes (s)
@@ -328,11 +329,11 @@ function renderIntro(s, t) {
   else o.rip.style.opacity = 0;
 }
 
-const BUILD = { intro: buildIntro, app: buildApp, title: buildTitle, cards: buildCards, modules: buildMods };
-const RENDER = { intro: renderIntro, app: renderApp, title: renderTitle, cards: renderStagger, modules: renderStagger };
+const BUILD = { intro: buildIntro, app: buildApp, title: buildTitle, cards: buildCards, modules: buildMods, anim: (sc, s) => window.buildAnim(sc, s, header) };
+const RENDER = { intro: renderIntro, app: renderApp, title: renderTitle, cards: renderStagger, modules: renderStagger, anim: (s, t) => window.renderAnim(s, t) };
 
 window.setup = async (tl) => {
-  TL = tl;
+  TL = tl; window.TL_LOGO = tl.logo;
   if (tl.lang === "ar") { document.documentElement.dir = "rtl"; document.documentElement.lang = "ar"; }
   const root = document.getElementById("root");
   SC = tl.scenes.map((s) => { const sc = el("div", "scene"); root.appendChild(sc); BUILD[s.layout](sc, s); s.el = sc; return s; });
