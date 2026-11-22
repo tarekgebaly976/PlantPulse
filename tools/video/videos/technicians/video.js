@@ -24,7 +24,7 @@ module.exports = {
       "This video is for technicians. Everything they need is on the phone: their jobs, the equipment behind every QR label, and a field round that keeps working without internet."),
     {
       id: "02-mywork", layout: "app", device: "phone", chapter: "My work", step: "1 · My work",
-      narration: "PlantPulse can be installed on the phone's home screen, and opens on My work: the jobs assigned to you, soonest first. "
+      narration: "PlantPulse can be installed on the phone's home screen, and opens on Home; the bottom bar leads to My work: the jobs assigned to you, soonest first. "
         + "A red shield marks jobs that need lock-out or a permit. Open a job, and the buttons at the bottom move it on, for example: start the work.",
       async capture(cap) {
         const s = await cap.login("tech1", "phone");
@@ -132,7 +132,7 @@ module.exports = {
 
 // ---- Voice, one sentence per filmed step ----
 require("../_common").applySays(module.exports, {
-  "02-mywork": ["PlantPulse installs on the phone's home screen and opens on My work: your jobs, soonest first. A red shield marks jobs that need lock-out or a permit.",
+  "02-mywork": ["PlantPulse installs on the phone's home screen and opens on Home, with the work that needs attention. The bar at the bottom holds Home, My work, the plus button, Scan QR and More. My work lists your jobs, soonest first; a red shield marks jobs that need lock-out or a permit.",
     "Open a job.", "The buttons at the bottom move it on: start the work.", "The job is in progress. Its tabs hold the checklist, hours and parts."],
   "03-scan": ["Every machine has a QR label. Scan QR uses the phone's camera.", "Or type the code printed under the label.",
     "The equipment page opens.", "Its history, spare parts and documents, and a button to report a problem."],

@@ -57,7 +57,6 @@ module.exports = {
         await s.click(p.getByRole("button", { name: "Add: Lubrication points" }), "Add a lubrication point", { wait: 900 });
         const d = p.getByRole("dialog");
         await s.quiet(async () => {
-          await d.getByLabel("Code").fill("LP-OVN-FAN1");
           const a = d.getByRole("combobox").first(); await a.click(); await a.fill("L1-OVN-Z1-FAN1"); await p.waitForTimeout(900);
           await p.getByRole("option", { name: /^L1-OVN-Z1-FAN1 / }).first().click();
           await d.getByLabel("Component").fill("Fan bearing DE");
@@ -125,7 +124,7 @@ require("../_common").applySays(module.exports, {
   "03-lists": ["The lubrication page has a tab for each list. The points, with their next due date: overdue ones in red.",
     "The routes, with their number of points.", "The tasks, done, missed or pending, each with its work order.",
     "The lubricants.", "And the consumption of each lubricant."],
-  "04-route": ["Adding a point takes one form.", "Equipment, component, lubricant, amount, method, how often, and its route.",
+  "04-route": ["Adding a point takes one form.", "Equipment, component, lubricant, amount, method, how often, and its route. The code is optional: left blank, it is made from the name.",
     "Routes are generated automatically, or by the team with Generate.", "Every due point now has its task and work order.",
     "One work order holds every due point of the route.", "The technician starts the route.",
     "A reminder: never mix or substitute lubricants without verified compatibility and approval.",

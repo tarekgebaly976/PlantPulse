@@ -17,7 +17,7 @@ module.exports = {
       async capture(cap) {
         const s = await cap.login("manager");
         const p = s.page;
-        await s.view("The dashboard", { weight: 1 });
+        await s.view("Home – the dashboard", { weight: 1 });
         await s.view("Counters in the colour code", { focus: p.getByTestId("dash-legend"), zoom: 1.4 });
         await s.click(p.getByTestId("customise-dashboard"), "Customise dashboard", { wait: 1000 });
       },
@@ -63,7 +63,7 @@ module.exports = {
 };
 
 applySays(module.exports, {
-  "02-dashboard": ["The dashboard is the first screen: quick buttons, counters, the work that needs attention, KPI tiles and condition alarms.",
+  "02-dashboard": ["The Home page is the first screen, the plant's dashboard: quick buttons, counters, the work that needs attention, KPI tiles and condition alarms.",
     "Every counter uses the colour code and opens exactly the list it counts.",
     "Each person can customise it: sections, counters and KPIs. The layout is saved on the server, so phone and computer show the same."],
   "03-search": ["The magnifier, or Control K, searches everything you may see at once.",

@@ -63,14 +63,13 @@ module.exports = {
         await s.click(p.getByRole("button", { name: "New shutdown" }), "New shutdown");
         await s.quiet(async () => {
           const d = p.getByRole("dialog");
-          await d.getByLabel("Code").fill("SD-L1-DEC");
           await d.getByLabel("Name").fill("Line 1 planned stop");
           await d.getByLabel("Scope").fill("Mixer drive bearings, oven fan coupling, press HPU hoses");
           await d.getByLabel("Start").fill(day(5, "06:00"));
           await d.getByLabel("End").fill(day(6, "18:00"));
         });
-        await s.click(p.getByRole("dialog").getByRole("button", { name: "Create" }), "Code, name, scope and the planned window");
-        await s.quiet(async () => { await p.getByText("SD-L1-DEC").first().click(); await p.waitForURL(/shutdowns\//); state.url = p.url(); await s.settle(800); });
+        await s.click(p.getByRole("dialog").getByRole("button", { name: "Create" }), "Name, scope and the planned window – the code is automatic");
+        await s.quiet(async () => { await p.getByText("Line 1 planned stop").first().click(); await p.waitForURL(/shutdowns\//); state.url = p.url(); await s.settle(800); });
         await s.quiet(async () => { await addPackage(p, PKGS[0]); await p.getByRole("dialog").getByRole("button", { name: "Create" }).click(); await p.waitForTimeout(800); });
         await s.click(p.getByRole("button", { name: "+ Work packages" }), "Add work packages");
         await s.quiet(async () => { await p.keyboard.press("Escape"); await p.waitForTimeout(400); });
@@ -135,7 +134,7 @@ module.exports = {
 
 // ---- Voice, one sentence per filmed step or card ----
 require("../_common").applySays(module.exports, {
-  "03-create": ["The planner creates the shutdown.", "With its code, name, scope and the planned window.",
+  "03-create": ["The planner creates the shutdown.", "With its name, scope and the planned window. The code can be left blank: it is made from the name.",
     "Then the work packages: first, isolate the line.",
     "Each package has a duration, manpower, and the packages it must wait for. Three jobs in parallel, then the restart test, which waits for all three."],
   "04-gantt": ["The schedule is calculated at once. The critical path is drawn in red: any delay there delays the restart. The others show their float.",

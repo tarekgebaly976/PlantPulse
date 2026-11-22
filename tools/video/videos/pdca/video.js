@@ -7,7 +7,7 @@ module.exports = {
   file: "15-pdca-continuous-improvement",
   intro: "PDCA – continuous improvement",
   title: "PlantPulse – PDCA, continuous improvement",
-  covers: "Plan – Do – Check – Act with PlantPulse: plans, targets and schedules (Plan); work orders, safety and records on the phone (Do); KPIs, control charts, insights and alerts (Check); RCA actions, changed plans, effectiveness checks and approvals (Act)",
+  covers: "Plan – Do – Check – Act with PlantPulse: plans, targets, the weekly schedule and the cutting plan (Plan); work orders, safety and records on the phone (Do); KPIs, control charts, insights, alerts and paper waste (Check); RCA actions, changed plans, effectiveness checks and approvals (Act)",
   keyframes: [["02-cycle", 0.95], ["03-plan", 0.5], ["05-check", 0.5], ["06-act", 0.5]],
   scenes: [
     title("01-title", "PDCA with PlantPulse", "Plan · Do · Check · Act – every day, on real records",
@@ -15,9 +15,9 @@ module.exports = {
     {
       id: "02-cycle", layout: "cards", chapter: "PDCA", title: "Plan · Do · Check · Act",
       cards: [
-        { t: "Plan", d: "PM and lubrication plans, shutdowns, targets for every KPI" },
+        { t: "Plan", d: "PM and lubrication plans, the weekly schedule, shutdowns, the cutting plan, KPI targets" },
         { t: "Do", d: "Work orders with LOTO and permits, daily production reports, field rounds" },
-        { t: "Check", d: "KPIs against targets, control charts, Nelson rules, insights, alerts" },
+        { t: "Check", d: "KPIs against targets, control charts, Nelson rules, insights, alerts, paper waste" },
         { t: "Act", d: "RCA actions, changed plans, effectiveness checks, approvals" },
       ],
     },
@@ -28,6 +28,16 @@ module.exports = {
         const p = s.page;
         await s.goto("/pm");
         await s.view("Plan: preventive plans and their schedule", { weight: 1.1 });
+        await s.goto("/schedule");
+        await s.quiet(async () => {
+          await p.getByRole("button", { name: "Next period" }).click(); await p.waitForTimeout(1000);
+          await p.getByTestId("propose").click(); await p.waitForTimeout(3500);
+        });
+        await s.view("Plan: the weekly schedule, from the roster and the skills", { focus: p.getByTestId("schedule-grid"), zoom: 1.1, weight: 1.1 });
+        const c = await cap.login("prod.mgr");
+        await c.goto("/operations/cutting");
+        await c.quiet(async () => { await c.page.getByText("Next week – grade 350 (sample)").click(); await c.page.waitForTimeout(1500); });
+        await c.view("Plan: the winder's cutting plan", { focus: c.page.getByText("Planned trim", { exact: true }).first(), zoom: 1.2 });
         const m = await cap.login("manager");
         await m.goto("/kpis");
         await m.view("Plan: a target for every KPI", { focus: m.page.getByTestId("kpi-mttr"), zoom: 1.4 });
@@ -56,6 +66,8 @@ module.exports = {
         const m = await cap.login("prod.mgr");
         await m.goto("/operations/insights");
         await m.view("Check: insights spot drifts and repeated losses", { weight: 1.1 });
+        await m.goto("/operations/trim-loss");
+        await m.view("Check: paper waste, week by week", { weight: 1 });
       },
     },
     {
@@ -86,23 +98,26 @@ module.exports = {
 
 applySays(module.exports, {
   "03-plan": ["Plan. Preventive maintenance, lubrication routes and shutdowns are planned in advance, and the work orders come by themselves on time.",
+    "The weekly schedule puts the approved work on people who are at work and qualified, approved by the engineer and the maintenance manager.",
+    "Production plans the winder's cutting for the least trim.",
     "And every KPI has a target, for the plant or each department. The plan says what good looks like."],
   "04-do": ["Do. The work is done through work orders: approved, assigned, made safe with lock-out and permits, and recorded with hours, parts and findings, on the computer or the phone.",
     "Production records every day the same way: output, stops, losses and quality."],
   "05-check": ["Check. Every KPI is calculated from those records and shown against its target, in the colour code.",
     "The control chart and the Nelson rules show whether a change is real, or just noise.",
-    "And insights and alerts find drifts and repeated losses before they become big problems."],
+    "Insights and alerts find drifts and repeated losses before they become big problems.",
+    "And paper waste shows, week by week, whether the cutting plan really cuts the trim."],
   "06-act": ["Act. A major or repeated failure gets a root cause analysis, with corrective and preventive actions, owners and due dates.",
     "Changes to plans, like a deferral or a cancellation, are approved by a second person, and kept in the history."],
 }, {
   "02-cycle": { lead: "PDCA is a simple loop: plan, do, check, act, and again. PlantPulse gives each step its tools.", says: [
-    "Plan: preventive and lubrication plans, shutdowns, and a target for every KPI.",
+    "Plan: preventive and lubrication plans, the weekly schedule, shutdowns, the cutting plan, and a target for every KPI.",
     "Do: work orders with lock-out and permits, daily production reports, and field rounds on the phone.",
-    "Check: KPIs against targets, control charts with Nelson rules, insights and alerts.",
+    "Check: KPIs against targets, control charts with Nelson rules, insights, alerts and paper waste.",
     "Act: RCA actions, changed plans, effectiveness checks and approvals."] },
   "07-loop": { lead: "And the loop closes.", says: [
     "What is learned changes the plan: a better PM plan, or a new target, starts the next cycle.",
     "The effectiveness check proves it: if the same failure returns, the analysis reopens by itself.",
     "Maintenance and production work on the same records, so everyone checks the same truth.",
-    "Small cycles every day on the dashboard, and bigger ones in the monthly review with the management presentation."] },
+    "Small cycles every day on the Home page, and bigger ones in the monthly review with the management presentation."] },
 });

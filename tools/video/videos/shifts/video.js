@@ -72,7 +72,7 @@ applySays(module.exports, {
   "03-roster": ["Teams follow a rotation pattern.", "From the pattern, the roster is generated for the period.", "Done.",
     "The roster shows who works which shift, day by day; leave, overtime and call-outs are entered here too.",
     "Manpower turns it into hours available per day, and flags days with planned work but nobody rostered.",
-    "Shift types are the codes in the roster, like day, evening and night.",
+    "Shift types are the codes in the roster, like day, evening and night. The skill matrix, in the last tab, has its own video.",
     "And a whole month can be imported from Excel."],
   "04-handover": ["At the end of the shift, the outgoing person writes the handover.",
     "The summary, outstanding breakdowns, pending work, safety concerns, open permits and critical risks, for the incoming person.",

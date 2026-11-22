@@ -30,10 +30,10 @@ module.exports = {
     {
       id: "02-what", layout: "app", device: "desktop", chapter: "What it is",
       narration: "PlantPulse is a web app for the whole plant: on a computer, a tablet or a phone, in English, Arabic or Bengali. "
-        + "Everyone signs in and sees their own plant, starting with the dashboard.",
+        + "Everyone signs in and sees their own plant, starting with the Home page.",
       async capture(cap) {
         const s = await cap.login("manager");
-        await s.view("The dashboard: today's work of the plant at a glance", { weight: 1.3 });
+        await s.view("Home: today's work of the plant at a glance", { weight: 1.3 });
         await s.view("Every counter opens the list it counts", { focus: s.page.getByText("Needs attention").first(), zoom: 1.35 });
       },
     },
@@ -43,10 +43,10 @@ module.exports = {
       cards: [
         { t: "Technicians", d: "My work, checklists, hours, spare parts – on the phone" },
         { t: "Supervisors", d: "Accept requests, assign, sign off LOTO and permits, close" },
-        { t: "Planners", d: "Preventive plans, schedules, shutdowns" },
-        { t: "Engineers", d: "Condition monitoring, root cause analysis" },
+        { t: "Planners", d: "Preventive plans, the weekly schedule, shutdowns" },
+        { t: "Engineers", d: "Skill matrix, schedule approval, condition monitoring, RCA" },
         { t: "Store", d: "Spare parts and parts used" },
-        { t: "Production", d: "Shift reports, daily logs, production KPIs" },
+        { t: "Production", d: "Shift reports, daily logs, KPIs, the cutting plan" },
         { t: "Managers", d: "KPIs, reports and approvals" },
       ],
       narration: "Technicians and supervisors run the daily work. Planners and engineers plan maintenance. "
@@ -57,8 +57,8 @@ module.exports = {
       title: "The modules – grouped as in the menu",
       groups: [
         { t: "Daily work", items: ["My work", "Scan QR", "Field round (offline)", "Work requests", "Work orders"] },
-        { t: "Production", items: ["Production dashboard", "Production reports", "Daily logs", "Production KPIs", "Production insights", "Safety incidents"] },
-        { t: "Maintenance", items: ["Preventive maintenance", "Lubrication", "Condition monitoring", "Shutdowns", "Root cause analysis"] },
+        { t: "Production", items: ["Production dashboard", "Production reports", "Daily logs", "Production KPIs", "Production insights", "Paper waste (trim)", "Cutting plan (winder)", "Safety incidents"] },
+        { t: "Maintenance", items: ["Maintenance schedule", "Preventive maintenance", "Lubrication", "Condition monitoring", "Shutdowns", "Root cause analysis"] },
         { t: "Assets & resources", items: ["Assets", "Spare parts", "Shifts & handover"] },
         { t: "Analysis & admin", items: ["KPIs & reports", "Administration"] },
       ],
@@ -83,7 +83,8 @@ module.exports = {
       async capture(cap) {
         const s = await cap.login("production", "phone");
         const p = s.page;
-        await s.click(p.locator(".pp-fab"), "Shift leader: the + button – new work request");
+        await s.click(p.locator(".pp-fab"), "Shift leader: the + button in the bottom bar");
+        await s.click(p.getByRole("menuitem", { name: "New work request" }), "New work request", { wait: 1200 });
         const dlg = p.getByRole("dialog");
         const asset = dlg.getByRole("combobox").first();
         await s.type(asset, ASSET, "Choose the equipment", { after: async () => { await p.waitForTimeout(800); await p.getByRole("option").first().click(); } });
@@ -202,10 +203,11 @@ module.exports = {
 // ---- Voice, one sentence per filmed step (app scenes) or per card, so the picture follows the voice ----
 const SAYS = {
   "02-what": ["PlantPulse is a web app for the whole plant: on a computer, a tablet or a phone, in English, Arabic or Bengali.",
-    "Everyone signs in and starts on the dashboard. Each counter opens the list it counts."],
-  "05-colours": ["One colour code runs through every screen, and the dashboard shows it as a key.",
+    "Everyone signs in and starts on the Home page. Each counter opens the list it counts."],
+  "05-colours": ["One colour code runs through every screen, and the Home page shows it as a key.",
     "Red: act now. Amber: needs attention, or waiting for someone. Green: all clear, or target met. Grey: information."],
-  "06-report": ["Now one quick story. On line one, the press has stopped. The shift leader taps the plus button to report it.",
+  "06-report": ["Now one quick story. On line one, the press has stopped. The shift leader taps the plus button in the bottom bar.",
+    "And chooses New work request.",
     "First, the equipment: the press hydraulic unit.", "Then what is wrong: a hydraulic oil leak.",
     "The machine is stopped, so Breakdown is ticked.", "Submit, and the supervisors are alerted at once."],
   "07-accept": ["The mechanical supervisor opens the new request, marked as a breakdown.", "They accept it as an emergency breakdown.",
@@ -224,13 +226,13 @@ const CARDS = {
   "03-who": { lead: "One system, for every role.", says: [
     "Technicians do their work on the phone: checklists, hours and spare parts.",
     "Supervisors accept requests, assign the work, sign off lock-out and permits, and close the jobs.",
-    "Planners plan preventive work, schedules and shutdowns.", "Engineers follow condition monitoring and root cause analysis.",
-    "The store looks after the spare parts.", "Production records its shift reports, daily logs and KPIs.",
+    "Planners plan preventive work, the weekly schedule and shutdowns.", "Engineers keep the skill matrix, approve the weekly schedule, and follow condition monitoring and root cause analysis.",
+    "The store looks after the spare parts.", "Production records its shift reports, daily logs and KPIs, and plans the winder's cutting.",
     "And managers follow the KPIs and reports, and give the approvals."] },
   "04-modules": { lead: "The modules follow the menu.", says: [
     "Daily work: my work, scan QR, the offline field round, work requests and work orders.",
-    "Production: the dashboard, reports, daily logs, KPIs, insights and safety incidents.",
-    "Maintenance: preventive plans, lubrication, condition monitoring, shutdowns and root cause analysis.",
-    "Then assets, spare parts, and shifts with their handover.", "And finally: KPIs, reports, and administration."] },
+    "Production: the dashboard, reports, daily logs, KPIs, insights, paper waste, the cutting plan and safety incidents.",
+    "Maintenance: the weekly schedule, preventive plans, lubrication, condition monitoring, shutdowns and root cause analysis.",
+    "Then assets, spare parts, and shifts with their handover and the skill matrix.", "And finally: KPIs, reports, and administration."] },
 };
 require("../_common").applySays(module.exports, SAYS, CARDS);

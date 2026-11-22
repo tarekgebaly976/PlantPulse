@@ -75,6 +75,7 @@ module.exports = {
         await s.view("Production KPIs against their targets", { weight: 1.2 });
         await s.click(p.getByRole("link", { name: "Production insights" }), "Production insights", { wait: 1500 });
         await s.view("Each insight comes with an action", { focus: p.getByRole("button", { name: "Action" }).first(), zoom: 1.3 });
+        await s.click(p.getByRole("link", { name: "Paper waste (trim)" }), "New: paper waste and the cutting plan", { wait: 2000, zoom: 1 });
       },
     },
     {
@@ -107,7 +108,8 @@ applySays(module.exports, {
     "Utilities, stock preparation and checks have their own daily log forms, with totals and warnings calculated."],
   "06-kpis": ["Production KPIs are worked out from the reports and logs, each against its target, for yesterday, the last seven days or the month.",
     "Production insights compare the last week with the weeks before, using alert rules.",
-    "Each insight, like a rising reject rate or a repeated loss, comes with an action and an owner."],
+    "Each insight, like a rising reject rate or a repeated loss, comes with an action and an owner.",
+    "The menu now also has paper waste, read from the reel reports, and the winder's cutting plan. Both have their own video."],
   "08-safety": ["One safety register for the whole plant: days without a lost-time incident, and the rates per million hours worked.",
     "Incidents are reported here or from the shift logs, and followed up with actions.",
     "And production setup guides the configuration step by step: areas, lines, products, loss categories, KPIs, quality defects and daily log forms."],

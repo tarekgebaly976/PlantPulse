@@ -118,7 +118,7 @@ module.exports = {
 // ---- Voice, one sentence per filmed step or card ----
 require("../_common").applySays(module.exports, {
   "03-plans": ["This is the planner's page. PM plans lists every plan, with its next due date and last completion.",
-    "Job plans hold the task lists.", "A new job plan takes its tasks one by one: a check, or a reading with a unit and limits, plus safety precautions and tools.",
+    "Job plans hold the task lists, and the skills the work needs.", "A new job plan takes its tasks one by one: a check, or a reading with a unit and limits, plus safety precautions and tools.",
     "A new PM plan picks the equipment, the job plan, the trigger, the frequency, and how many days ahead the work order is made."],
   "04-generate": ["The scheduler makes the work orders every day. A planner can also run it now.",
     "The schedule tab shows what is due, with a link to each work order.", "Open one.",
