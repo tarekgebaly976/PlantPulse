@@ -30,6 +30,8 @@ It does not change any application code, configuration, database schema or migra
 ```bash
 # once: local PostgreSQL + backend venv + frontend build as in docs/TESTING.md, with CMMS_OPERATIONS_MODULE=true;
 # demo data: seed-demo --profile general, demo-operations, demo-rca, demo-kpi-targets (your own LOCAL CMMS_DEMO_PASSWORD)
+# videos 16-18 (skill matrix, maintenance schedule, cutting plan) need the app with those features (branch claude/skill-matrix);
+# the demo's schedule work is for next week, so film from the week the demo was seeded
 tools/video/scripts/reset-demo.sh --save                      # snapshot of the fresh demo, used before every capture
 uv venv tools/video/.venv -p 3.12 && uv pip install -p tools/video/.venv -r tools/video/requirements.txt
 # each video
