@@ -14,6 +14,9 @@
     supervisor: { hat: "#F8FAFC", body: "#475569", trim: "#FDE047", label: "Supervisor" },
     engineer: { hat: "#3B82F6", body: "#1E40AF", trim: "#BFDBFE", label: "Engineer" },
     manager: { hat: null, body: "#1F2937", trim: "#14B8A6", label: "Manager" },
+    operator: { hat: "#22C55E", body: "#4B5563", trim: "#86EFAC", label: "Operator" },
+    planner: { hat: null, body: "#7C3AED", trim: "#DDD6FE", label: "Planner" },
+    storekeeper: { hat: "#A855F7", body: "#92400E", trim: "#FDE68A", label: "Storekeeper" },
   };
   let BLINK = 0;
   function toon(parent, role, opts = {}) {
@@ -115,7 +118,16 @@
     S("rect", { x: -2000, y: 430, width: 8000, height: 14, rx: 7, fill: "#B45309" }, g);
     for (let i = 0; i < 14; i++) S("circle", { cx: i * 300 + 120, cy: 404, r: 16, fill: "#64748B", stroke: "#334155", "stroke-width": 4 }, g);
     const sign = (x, txt) => { const s = S("g", { transform: `translate(${x} 470)` }, g); S("rect", { x: -190, y: -32, width: 380, height: 64, rx: 12, fill: C.teal }, s); S("text", { x: 0, y: 13, "text-anchor": "middle", "font-size": 32, "font-weight": 900, fill: "#052A27" }, s, txt); };
-    sign(540, "Production hall"); sign(1625, "Maintenance workshop"); sign(3300, "Control room");
+    sign(540, "Production hall"); sign(1625, "Maintenance workshop"); sign(3300, "Control room"); sign(-700, "Stores & lubricants");
+    for (const i of [-2, -1]) S("rect", { x: i * 650 + 60, y: 90, width: 540, height: 230, rx: 10, fill: `url(#${sky.id})`, stroke: "#334155", "stroke-width": 10 }, g);
+    // stores: shelves with spare parts, oil drums, a grease gun
+    for (const sx of [-1250, -900]) {
+      for (let r = 0; r < 4; r++) S("rect", { x: sx, y: 560 + r * 80, width: 300, height: 10, fill: "#64748B" }, g);
+      S("rect", { x: sx, y: 540, width: 10, height: 340, fill: "#475569" }, g); S("rect", { x: sx + 290, y: 540, width: 10, height: 340, fill: "#475569" }, g);
+      for (let r = 0; r < 3; r++) for (let k = 0; k < 4; k++) S("rect", { x: sx + 18 + k * 68, y: 590 + r * 80 - 2, width: 52, height: -0.0001 + 48, rx: 6, fill: ["#B45309", "#2563EB", "#0D9488", "#9333EA"][(r + k) % 4], transform: `translate(0 ${-48})` }, g);
+    }
+    for (const [dx, col] of [[-520, "#1D4ED8"], [-420, "#B91C1C"], [-320, "#15803D"]]) { S("rect", { x: dx, y: 760, width: 84, height: 120, rx: 10, fill: col }, g); S("rect", { x: dx, y: 790, width: 84, height: 8, fill: "rgba(255,255,255,.3)" }, g); S("rect", { x: dx, y: 840, width: 84, height: 8, fill: "rgba(255,255,255,.3)" }, g); }
+    S("rect", { x: -200, y: 800, width: 140, height: 80, rx: 8, fill: "#475569" }, g); S("text", { x: -130, y: 850, "text-anchor": "middle", "font-size": 18, "font-weight": 900, fill: "#F8FAFC" }, g, "COUNTER");
     // lamps
     w.lamps = [];
     for (let i = 0; i < 9; i++) {
@@ -417,4 +429,5 @@
       show(s._.band, q.p(t, 0, 0.8, 2.6));
     },
   };
+  window.FACTORY = { world, toon, bubble, animateWorld, shots, screen, OVER };
 })();
