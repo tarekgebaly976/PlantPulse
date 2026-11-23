@@ -43,13 +43,22 @@
       else if (it.btn) { const [l, col] = it.btn; S("rect", { x: 0, y: 0, width: w, height: 54, rx: 14, fill: col || C.navy }, e); S("text", { x: w / 2, y: 36, "text-anchor": "middle", "font-size": 23, "font-weight": 900, fill: "#fff" }, e, l); h = 62; }
       else if (it.badge) { const [l, col] = it.badge; S("rect", { x: 0, y: 0, width: w, height: 50, rx: 25, fill: col || C.green }, e); S("text", { x: w / 2, y: 33, "text-anchor": "middle", "font-size": 22, "font-weight": 900, fill: "#fff" }, e, l); }
       else if (it.chart) {
-        const ch = it.chart, H = 200, max = ch.max || Math.max(...ch.pts, ch.alarm || 0) * 1.15, Y = (v) => H - (v / max) * (H - 20);
+        const ch = it.chart, H = ch.h || 200, mn = ch.min || 0, max = ch.max || Math.max(...ch.pts, ch.alarm || 0) * 1.15, Y = (v) => H - ((v - mn) / (max - mn)) * (H - 20);
         S("rect", { x: 0, y: 0, width: w, height: H + 10, rx: 12, fill: "#fff", stroke: "#E2E8F0" }, e);
+        if (ch.cl != null && ch.sig) {  // Nelson zones: within 1σ green, 1–2σ amber, 2–3σ red, centre line solid
+          [[3, "#FEE2E2"], [2, "#FEF3C7"], [1, "#DCFCE7"]].forEach(([k, f]) => S("rect", { x: 10, y: Y(ch.cl + k * ch.sig), width: w - 20, height: Y(ch.cl - k * ch.sig) - Y(ch.cl + k * ch.sig), fill: f }, e));
+          for (const k of [3, -3]) S("line", { x1: 10, y1: Y(ch.cl + k * ch.sig), x2: w - 10, y2: Y(ch.cl + k * ch.sig), stroke: C.red, "stroke-width": 2, "stroke-dasharray": "8 5" }, e);
+        }
+        if (ch.cl != null) S("line", { x1: 10, y1: Y(ch.cl), x2: w - 10, y2: Y(ch.cl), stroke: "#475569", "stroke-width": 2.5 }, e);
         if (ch.alarm) S("line", { x1: 10, y1: Y(ch.alarm), x2: w - 10, y2: Y(ch.alarm), stroke: C.red, "stroke-width": 3, "stroke-dasharray": "10 6" }, e);
         if (ch.warn) S("line", { x1: 10, y1: Y(ch.warn), x2: w - 10, y2: Y(ch.warn), stroke: C.amber, "stroke-width": 3, "stroke-dasharray": "10 6" }, e);
         const pts = ch.pts.map((v, i) => `${20 + (i * (w - 40)) / (ch.pts.length - 1)},${Y(v)}`);
         e._line = S("polyline", { points: pts.join(" "), fill: "none", stroke: C.teal, "stroke-width": 4 }, e);
-        ch.pts.forEach((v, i) => S("circle", { cx: 20 + (i * (w - 40)) / (ch.pts.length - 1), cy: Y(v), r: 6, fill: ch.alarm && v >= ch.alarm ? C.red : ch.warn && v >= ch.warn ? C.amber : C.teal }, e));
+        ch.pts.forEach((v, i) => {
+          const cx = 20 + (i * (w - 40)) / (ch.pts.length - 1), hit = ch.hit && ch.hit.includes(i);
+          if (hit) S("circle", { cx, cy: Y(v), r: 12, fill: "none", stroke: C.red, "stroke-width": 3 }, e);
+          S("circle", { cx, cy: Y(v), r: 6, fill: hit ? C.red : ch.hit ? C.teal : ch.alarm && v >= ch.alarm ? C.red : ch.warn && v >= ch.warn ? C.amber : C.teal }, e);
+        });
         h = H + 20;
       }
       items.push({ e, it }); y += h + 8;

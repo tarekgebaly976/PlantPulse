@@ -54,7 +54,7 @@ module.exports = {
       cast: { eng: { role: "engineer", x: 2630, item: "tablet" }, mgr: { role: "manager", x: 3930, flip: true } },
       beats: [
         { p: 0, at: 0.3, on: "big", card: { title: "KPIs", items: [{ kpi: ["PM compliance", "96%", "#16A34A"] }, { kpi: ["MTTR", "2.9 h", A] }, { kpi: ["Grinding mill vibration", "rising", R] }], stagger: 0.7 } },
-        { p: 1, at: 0.2, on: "big", card: { title: "Control chart · Nelson rules", items: [{ chart: { pts: [2.1, 2.3, 2.2, 2.4, 2.6, 2.9, 3.3, 3.8, 4.4], warn: 3.0, alarm: 4.0 } }, { badge: ["Rule 3 – six points rising: a real change", R] }], stagger: 1.0 } },
+        { p: 1, at: 0.2, on: "big", card: { title: "Control chart · Nelson rules", items: [{ chart: { pts: [2.1, 2.3, 2.2, 2.4, 2.6, 2.9, 3.3, 3.8, 4.4], warn: 3.0, alarm: 4.0 } }, { badge: ["Rule 3 – seven points rising: a real change", R] }], stagger: 1.0 } },
         { p: 1, at: 2.6, say: "eng", lines: ["That is real!"], color: R, dx: -40 },
       ],
     }),
