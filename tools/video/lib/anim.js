@@ -487,20 +487,24 @@
     },
   };
 
+  // shared with lib/factory.js (the cartoon factory scenes)
+  window.ANIMS = A;
+  window.ANIMKIT = { S, C, clamp, ease, lerp, show, move, T, person, machine, bigPhone, row, button, badge, panel, tick, lock, bell };
+
   // ---------- the layout ----------
   window.buildAnim = function (sc, s, header) {
     header(sc, s);
     const svg = S("svg", { width: 1920, height: 1080, viewBox: "0 0 1920 1080", style: "position:absolute;inset:0" });
     sc.appendChild(svg);
     s._ = { logo: window.TL_LOGO };
-    A[s.anim].build(svg, s);
+    (window.ANIMS[s.anim] || A[s.anim]).build(svg, s);
     const ill = document.createElement("div");
     ill.className = "demo"; ill.style.right = "64px"; ill.style.top = "86px"; ill.innerHTML = "<b></b>Illustration";
     sc.appendChild(ill);
     const cap = document.createElement("div"); cap.className = "cap"; sc.appendChild(cap); s._.cap = cap; s._.capIdx = -2;
   };
   window.renderAnim = function (s, t) {
-    A[s.anim].render(s, t);
+    (window.ANIMS[s.anim] || A[s.anim]).render(s, t);
     // caption of the sentence being spoken
     const at = s.partAt || [];
     let k = -1; at.forEach((x, i) => { if (t >= x - 0.2) k = i; });
