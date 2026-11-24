@@ -74,12 +74,12 @@ module.exports = {
       ],
     }),
     story("06-end", "PlantPulse", [
-      "PlantPulse. Maintenance and production, in one place, in English, Arabic and Bengali. Try the demo today.",
-    ], ["Try the demo: demo.plantpulse-cmms.com"], {
+      "PlantPulse. Maintenance and production, in one place, in English, Arabic and Bengali. Try the demo, or get the Android app on Google Play.",
+    ], ["Demo: demo.plantpulse-cmms.com · Android: Google Play"], {
       cam: [3270, 540, 1.0],
       cast: { tech: { role: "technician", x: 2500, item: "phone" }, sup: { role: "supervisor", x: 2700, item: "clipboard" }, eng: { role: "engineer", x: 3850, item: "tablet", flip: true }, mgr: { role: "manager", x: 4050, flip: true } },
       beats: [
-        { p: 0, at: 0.2, on: "big", card: { title: "PlantPulse", items: [{ h: "Maintenance and production in one place" }, { li: "Work orders · PM · Condition monitoring" }, { li: "Weekly schedule · Shutdowns · RCA" }, { li: "Production · KPIs · Offline on the phone" }, { badge: ["demo.plantpulse-cmms.com", G] }], stagger: 0.5 } },
+        { p: 0, at: 0.2, on: "big", card: { title: "PlantPulse", items: [{ h: "Maintenance and production in one place" }, { li: "Work orders · PM · Condition monitoring" }, { li: "Weekly schedule · Shutdowns · RCA" }, { li: "Production · KPIs · Offline on the phone" }, { badge: ["demo.plantpulse-cmms.com", G] }, { badge: ["Android: Google Play · PlantPulse CMMS", B] }], stagger: 0.5 } },
         { p: 0, at: 0.6, pose: "tech", wave: 1 }, { p: 0, at: 0.8, pose: "sup", wave: 1 }, { p: 0, at: 1.0, pose: "eng", wave: 1 }, { p: 0, at: 1.2, pose: "mgr", wave: 1 },
       ],
     }),
