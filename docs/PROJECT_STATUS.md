@@ -17,7 +17,7 @@ PlantPulse is now two things on one server (Oracle Cloud, Riyadh, `84.8.106.22`)
 | Android app | [Google Play: PlantPulse CMMS – Maintenance](https://play.google.com/store/apps/details?id=io.plantpulse.app) | **published** (production release, version 2); opens the real system only |
 | iPhone | Safari › Share › Add to Home Screen | installable web app (no App Store version) |
 
-Open items: deferral reasons are English only; paper trim loss phase.
+Open items: paper trim loss, next phase. (Weekly-schedule deferral reasons and warnings are shown in English, Arabic and Bengali since 2026-11-21; only the note written into a work order's history when the manager approves a deferral is still English, part of roadmap item 17.)
 
 Operator guide (every command): [English](PLANTPULSE-GUIDE.md) · [Arabic](PLANTPULSE-GUIDE-AR.md) · Plan ahead: [ROADMAP.md](ROADMAP.md)
 
