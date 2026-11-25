@@ -24,88 +24,120 @@ DEMO sample organisation (no company data).
 **Website** (optional): `https://plantpulse-cmms.com` (first submitted as `https://84-8-106-22.sslip.io`, which still works)
 **Privacy policy URL**: `https://app.plantpulse-cmms.com/privacy`
 
-### English (en-US) – default
+### English (en-US) – default (updated 2026-11-25)
 
 **Short description** (≤80):
 ```
-Work orders, PM, lubrication and condition monitoring for maintenance teams
+Work orders, PM, offline jobs and weekly schedules for plant maintenance teams
 ```
 
 **Full description** (≤4000):
 ```
-PlantPulse is a maintenance management system (CMMS) for industrial plants. It brings work orders, preventive maintenance, lubrication, condition monitoring and spare parts into one app that works on the shop floor as well as in the office.
+PlantPulse is a maintenance management system (CMMS) for industrial plants. Work orders, preventive maintenance, lubrication, condition monitoring, spare parts and the weekly maintenance schedule in one app, on the shop floor and in the office.
 
 PlantPulse is for organisations that run it: sign in with the account your maintenance administrator gives you.
 
 WORK ORDERS
 • Raise a work request in seconds, with standard symptoms and a photo
 • Plan, assign, start and complete jobs; record labour, parts and the failure cause
-• "My work" shows each technician exactly what is due today
+• Home and "My work" show each technician what is due today
+
+WORKS WITHOUT INTERNET
+• Scan any equipment QR code and raise requests with photos with no signal
+• Carry out work orders offline: checklist, readings, hours and parts
+• Everything is sent when the phone is back online, with a check if a colleague changed the same job
+
+WEEKLY MAINTENANCE SCHEDULE
+• One tap proposes the week: approved jobs placed on the technicians on shift
+• Matches trade, skills, valid certificates and LOTO / permit sign-off
+• Jobs that need the line stopped go into the line's stop windows
+• A clear reason for every deferred job; the engineer, then the manager approves
+
+SKILL MATRIX
+• Skill levels and certificate expiry dates for every technician
+• Required skills on work orders and job plans
+• A warning where only one person, or nobody, is qualified
 
 PREVENTIVE MAINTENANCE & LUBRICATION
-• Time- and meter-based PM plans that generate work orders automatically
+• Time- and meter-based PM plans that create work orders automatically
 • Lubrication routes with points, lubricants and intervals
 • Overdue and upcoming work at a glance
 
-CONDITION MONITORING (PdM)
+CONDITION MONITORING & RELIABILITY
 • Vibration, temperature, oil and other readings against warning and alarm limits
-• Critical points first, trends per point, alerts when a limit is crossed
-• Import historical readings from Excel
+• Control charts with the eight Nelson rules and their probable cause, so drift is seen before an alarm
+• Root cause analysis (5W1H, 5 Whys, fishbone) with an action plan
+• Failure-mode Pareto, MTBF, MTTR and KPI targets on your own dashboard
 
-ASSETS & RELIABILITY
+ASSETS
 • Asset tree with search, QR code labels and a built-in scanner
-• Failure-mode catalogue, Pareto by failure mode, MTBF / MTTR KPIs
-• Department-based access: every team sees its own area
+• The full history of every machine in one place
 
 BUILT FOR REAL PLANTS
-• English, Arabic and Bengali interfaces
-• Roles for managers, planners, supervisors, engineers and technicians
+• English, Arabic (right to left) and Bengali
+• Roles for managers, planners, supervisors, engineers and technicians, each seeing their own departments
+• Shift rosters, handovers and notifications by department
 • Excel import and export for assets, plans, users and readings
-• Shift rosters and notifications by department
 
 Your organisation's data stays on its own server and is sent only over encrypted connections.
 ```
 
-### Arabic (ar)
+### Arabic (ar) (updated 2026-11-25)
 
 **App name**: `PlantPulse – الصيانة`
 
 **Short description**:
 ```
-أوامر العمل والصيانة الوقائية والتزييت ومراقبة الحالة لفرق صيانة المصانع
+أوامر العمل والصيانة الوقائية والعمل بدون إنترنت والجدول الأسبوعي لفرق الصيانة
 ```
 
 **Full description**:
 ```
-PlantPulse نظام لإدارة الصيانة (CMMS) للمنشآت الصناعية. يجمع أوامر العمل والصيانة الوقائية والتزييت ومراقبة الحالة وقطع الغيار في تطبيق واحد يعمل في الموقع وفي المكتب.
+PlantPulse نظام لإدارة الصيانة (CMMS) للمنشآت الصناعية. أوامر العمل والصيانة الوقائية والتزييت ومراقبة الحالة وقطع الغيار والجدول الأسبوعي للصيانة في تطبيق واحد، في أرض المصنع وفي المكتب.
 
 التطبيق مخصص للمنشآت التي تستخدمه: سجّل الدخول بالحساب الذي يعطيك إياه مسؤول الصيانة.
 
 أوامر العمل
 • طلب عمل خلال ثوانٍ مع أعراض قياسية وصورة
-• تخطيط وتعيين وبدء وإنهاء الأعمال مع تسجيل العمالة وقطع الغيار وسبب العطل
-• شاشة "عملي" تعرض لكل فني ما هو مطلوب اليوم
+• تخطيط وتكليف وبدء وإنهاء الأعمال مع تسجيل العمالة وقطع الغيار وسبب العطل
+• الصفحة الرئيسية و"أعمالي" تعرض لكل فني المطلوب منه اليوم
+
+يعمل بدون إنترنت
+• امسح رمز QR لأي معدة وارفع طلبات بالصور بدون تغطية
+• نفّذ أوامر العمل بدون إنترنت: قائمة الفحص والقراءات والساعات وقطع الغيار
+• كل شيء يُرسَل عند عودة الاتصال، مع فحص إن كان زميل غيّر نفس العمل
+
+الجدول الأسبوعي للصيانة
+• بلمسة واحدة يُقترح الأسبوع: الأعمال المعتمدة توزَّع على الفنيين في الوردية
+• حسب التخصص والمهارات والشهادات السارية واعتماد LOTO / تصريح العمل
+• الأعمال التي تحتاج توقف الخط توضع في نوافذ توقف خطها
+• سبب واضح لكل عمل مؤجَّل؛ يعتمده المهندس ثم المدير
+
+مصفوفة المهارات
+• مستوى كل فني في كل مهارة وتاريخ انتهاء شهاداته
+• المهارات المطلوبة في أوامر العمل وخطط العمل
+• تنبيه حين يكون شخص واحد فقط مؤهلًا أو لا أحد
 
 الصيانة الوقائية والتزييت
-• خطط صيانة حسب الوقت أو العدّاد تُنشئ أوامر العمل تلقائياً
+• خطط صيانة حسب الوقت أو العدّاد تُنشئ أوامر العمل تلقائيًا
 • مسارات تزييت بالنقاط والزيوت والفترات
 • الأعمال المتأخرة والقادمة في لمحة
 
-مراقبة الحالة (PdM)
-• قراءات الاهتزاز والحرارة والزيت وغيرها مع حدود التحذير والإنذار
-• النقاط الحرجة أولاً، واتجاه كل نقطة، وتنبيه عند تجاوز الحد
-• استيراد القراءات السابقة من Excel
+مراقبة الحالة والاعتمادية
+• قراءات الاهتزاز والحرارة والزيت وغيرها مقابل حدود التحذير والإنذار
+• خرائط تحكم بقواعد نيلسون الثمانية وسببها المحتمل، فيُكتشف الانحراف قبل الإنذار
+• تحليل السبب الجذري (5W1H ولماذا الخمسة وعظم السمكة) مع خطة إجراءات
+• باريتو أنماط الأعطال وMTBF وMTTR ومستهدفات المؤشرات على لوحتك الخاصة
 
-المعدات والاعتمادية
+المعدات
 • شجرة معدات مع بحث وملصقات QR وماسح مدمج
-• كتالوج أنماط الأعطال وتحليل باريتو ومؤشرات MTBF / MTTR
-• صلاحيات حسب القسم: كل فريق يرى منطقته
+• السجل الكامل لكل ماكينة في مكان واحد
 
 مصمم للمصانع الحقيقية
-• واجهة بالإنجليزية والعربية والبنغالية
-• أدوار للمدير والمخطط والمشرف والمهندس والفني
+• العربية (من اليمين لليسار) والإنجليزية والبنغالية
+• أدوار للمدير والمخطط والمشرف والمهندس والفني، كلٌّ يرى أقسامه
+• جداول الورديات والتسليم والإشعارات حسب القسم
 • استيراد وتصدير Excel للمعدات والخطط والمستخدمين والقراءات
-• جداول الورديات والإشعارات حسب القسم
 
 بيانات منشأتك تبقى على خادمها الخاص ولا تُنقل إلا عبر اتصال مشفّر.
 ```
@@ -115,7 +147,7 @@ PlantPulse نظام لإدارة الصيانة (CMMS) للمنشآت الصنا
 ## 2. App content (Policy → App content)
 
 ### Privacy policy
-`https://84-8-106-22.sslip.io/privacy`
+`https://app.plantpulse-cmms.com/privacy` (first submitted as `https://84-8-106-22.sslip.io/privacy`)
 
 ### Ads
 **No, my app does not contain ads.**
