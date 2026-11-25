@@ -5,7 +5,9 @@
 //   cd backend && CMMS_DEMO_PASSWORD='Demo-Passw0rd!2026' .venv/bin/python -m app.cli seed-demo --profile general
 //   .venv/bin/uvicorn app.main:app --port 8000 &                     # no CMMS_INSTANCE_LABEL: no DEMO badge on the shots
 //   cd ../frontend && npm run build && BACKEND_URL=http://127.0.0.1:8000 npx next start -p 3000 &
-//   node scripts/site-screenshots.js site/public/img/v4               # needs Playwright (require('playwright'))
+//   node scripts/site-screenshots.js site/public/img/v5               # needs Playwright (require('playwright'))
+//
+// The planner shot proposes next week's maintenance schedule in that LOCAL database (a draft, as the planner would).
 //
 // The file names are those used in site/public/index.html; put new shots in a NEW folder (v4, v5 …) and change the
 // paths in index.html, so phones do not keep showing cached old images.
@@ -15,7 +17,7 @@ const { chromium } = require("playwright");
 
 const BASE = process.env.APP_URL ?? "http://127.0.0.1:3000";
 const PASSWORD = process.env.DEMO_PASSWORD ?? "Demo-Passw0rd!2026";
-const out = path.resolve(process.argv[2] ?? "site/public/img/v4");
+const out = path.resolve(process.argv[2] ?? "site/public/img/v5");
 const PHONE = { viewport: { width: 405, height: 720 }, deviceScaleFactor: 4 / 3, isMobile: true, hasTouch: true }; // → 540 x 960
 
 async function session(browser, who, lang = "en") {
@@ -28,11 +30,18 @@ async function session(browser, who, lang = "en") {
   await page.locator('button[type="submit"]').click();
   await page.waitForURL((u) => !u.pathname.startsWith("/login"));
   // Same language every time (the preference is stored per user on the server).
-  await page.locator('[aria-label="Language"], [aria-label="اللغة"], [aria-label="ভাষা"]').first().click();
-  await page.getByRole("menuitem", { name: lang === "ar" ? "العربية" : "English" }).click();
-  await page.waitForTimeout(800);
+  // (On phones the language button sits in the account menu, so set it through the API and reload.)
+  await page.evaluate(async (locale) => {
+    const csrf = decodeURIComponent((document.cookie.match(/(?:^|; )cmms_csrf=([^;]*)/) ?? [])[1] ?? "");
+    await fetch("/api/v1/auth/locale", { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf }, body: JSON.stringify({ locale }) });
+  }, lang);
+  await page.reload(); await page.waitForTimeout(800);
   const plant = await page.evaluate(async () => (await (await fetch("/api/v1/auth/me")).json()).plants[0].plant_id);
-  const api = async (url) => (await page.request.get(`${BASE}/api/v1${url}`, { headers: { "X-Plant-Id": plant } })).json();
+  const api = (url) => page.evaluate(async ([u, p]) => { // inside the page, so the (Secure) session cookie goes along
+    const r = await fetch(`/api/v1${u}`, { headers: { "X-Plant-Id": p } });
+    if (!r.ok) throw new Error(`${u}: ${r.status}`);
+    return r.json();
+  }, [url, plant]);
   return { ctx, page, api };
 }
 
@@ -88,6 +97,10 @@ async function save(browser, png, name) {
   await m.page.goto(`${BASE}/pdm`); await settle(m.page);
   await m.page.getByTestId("table-cards").getByText("VIB-MIX-DE", { exact: true }).click();
   await shot(m.page, "pdm-trend");
+  const nel = m.page.getByRole("dialog").getByTestId("nelson-table");
+  if (await nel.count()) {
+    await nel.evaluate((el) => el.scrollIntoView({ block: "end" })); await shot(m.page, "nelson");
+  } else console.log("  (no Nelson table in the trend dialog)");
   await m.page.keyboard.press("Escape");
 
   await m.page.goto(`${BASE}/kpis`); await settle(m.page);
@@ -105,17 +118,39 @@ async function save(browser, png, name) {
   await m.page.goto(`${BASE}/`);
   await m.ctx.close();
 
-  // Technician: own work list
+  // Technician: own work list, then the field round without a connection
   const tech = await session(browser, "tech1");
   await tech.page.goto(`${BASE}/my-work`); await shot(tech.page, "mywork");
+  await tech.page.goto(`${BASE}/field`); await settle(tech.page);
+  await tech.ctx.setOffline(true); await tech.page.waitForTimeout(1500);
+  await tech.page.getByText(/My work orders/).first().click();
+  await shot(tech.page, "field-offline");
+  await tech.ctx.setOffline(false);
   await tech.ctx.close();
+
+  // Planner: next week's maintenance schedule (proposed if it is not yet) and the skill matrix
+  const pl = await session(browser, "planner");
+  const sunday = new Date(); sunday.setDate(sunday.getDate() + 7 - sunday.getDay());
+  await pl.page.goto(`${BASE}/schedule?week=${sunday.toISOString().slice(0, 10)}`); await settle(pl.page);
+  const propose = pl.page.getByTestId("propose");
+  if (await propose.count()) { await propose.click(); await pl.page.getByText("Work orders scheduled").waitFor({ timeout: 60000 }); }
+  await pl.page.waitForTimeout(6000); // the "Schedule proposed" message closes by itself
+  await pl.page.reload(); await settle(pl.page);
+  await pl.page.getByText("Work orders scheduled").first().evaluate((el) => el.scrollIntoView({ block: "start" }));
+  await pl.page.evaluate(() => window.scrollBy(0, -90)); await shot(pl.page, "schedule");
+  await pl.page.locator("main table").first().evaluate((el) => el.scrollIntoView({ block: "start" }));
+  await pl.page.evaluate(() => window.scrollBy(0, -70)); await shot(pl.page, "schedule-board");
+  await pl.page.goto(`${BASE}/shifts`); await settle(pl.page);
+  await pl.page.getByRole("tab", { name: "Skill matrix" }).click(); await settle(pl.page);
+  await pl.page.locator("table").first().scrollIntoViewIfNeeded();
+  await pl.page.evaluate(() => window.scrollBy(0, -20)); await shot(pl.page, "skills");
+  await pl.ctx.close();
 
   // Arabic interface (manager), then back to English so the demo account stays as it was
   const ar = await session(browser, "manager", "ar");
   await ar.page.goto(`${BASE}/`); await shot(ar.page, "dashboard-ar");
-  await ar.page.locator('[aria-label="اللغة"]').first().click();
-  await ar.page.getByRole("menuitem", { name: "English" }).click();
   await ar.ctx.close();
+  await (await session(browser, "manager", "en")).ctx.close();
 
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });
