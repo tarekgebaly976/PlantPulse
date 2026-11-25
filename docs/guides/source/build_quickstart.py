@@ -61,7 +61,7 @@ H.append(grid([
     [L(APP), T("<b>النظام نفسه</b> (بيانات مصنعك الحقيقية). منه تسجّل الدخول وتعمل كل يوم.", "<b>The system itself</b> (your plant's real data). Sign in and work here every day."), T("كل المستخدمين", "Every user")],
     [L(SITE), T("الموقع التعريفي: ما هو PlantPulse، المميزات، طلب تجربة أو تواصل.", "The website: what PlantPulse is, features, ask for a trial or contact."), T("الجميع والعملاء الجدد", "Everyone, new customers")],
     [L(DEMO), T("<b>النسخة التجريبية (DEMO)</b>: مصنع ببيانات أمثلة للتدريب والعرض. تُعاد لحالتها كل ليلة.", "<b>The demo</b>: a sample plant for training and showing. Reset every night."), T("التدريب والعروض", "Training, demonstrations")],
-    [L(PLAY), T("<b>تطبيق Google Play</b> «PlantPulse CMMS – Maintenance». متاح الآن للمختبِرين، وللجميع بعد اعتماد النشر (بعد حوالي 22 نوفمبر).", "<b>Google Play app</b> “PlantPulse CMMS – Maintenance”. Testers now; everyone after publishing is approved (after about 22 November)."), T("مستخدمو أندرويد", "Android users")],
+    [L(PLAY), T("<b>تطبيق Google Play</b> «PlantPulse CMMS – Maintenance». منشور على Google Play ومتاح للجميع.", "<b>Google Play app</b> “PlantPulse CMMS – Maintenance”. Published on Google Play, open to everyone."), T("مستخدمو أندرويد", "Android users")],
     [L(APP + "/field"), T("<b>جولة الموقع</b>: مسح QR وطلبات وأوامر عمل بدون إنترنت.", "<b>Field round</b>: QR, requests and work orders without internet."), T("الفنيون والمهندسون والمشرفون", "Technicians, engineers, supervisors")],
     [L(APP + "/forgot-password"), T("نسيت كلمة المرور: يرسل رابطًا لتعيين كلمة جديدة (إن كان مفعّلًا، وإلا اطلب من المسؤول).", "Forgot password: sends a link to set a new one (if enabled; otherwise ask the administrator)."), T("كل المستخدمين", "Every user")],
     [L(APP + "/privacy"), T("سياسة الخصوصية.", "Privacy policy."), T("الجميع", "Everyone")],
@@ -78,8 +78,8 @@ H.append(steps([T(f"افتح Chrome أو Edge واكتب {L(APP)}.", f"Open Chro
                 T("غيّر كلمة المرور فورًا: أيقونة الشخص (أعلى) › <b>تغيير كلمة المرور</b>.", "Change the password at once: person icon (top) › <b>Change password</b>."),
                 T("اختر اللغة من زر اللغة بجانب الجرس: عربي، إنجليزي أو بنغالي.", "Choose the language with the button next to the bell: English, Arabic or Bengali.")]))
 H.append(h3(T("ب. على جوال أندرويد", "B. On an Android phone")))
-H.append(steps([T("<b>من Google Play</b> (عند النشر للجميع، أو إذا كنت مختبِرًا): ابحث عن <b>PlantPulse CMMS</b> أو افتح رابط Google Play أعلاه › <b>تثبيت</b> › افتح وسجّل الدخول.",
-                  "<b>From Google Play</b> (when public, or if you are a tester): search <b>PlantPulse CMMS</b> or open the Google Play link above › <b>Install</b> › open and sign in."),
+H.append(steps([T("<b>من Google Play</b> (الطريقة المفضلة): ابحث عن <b>PlantPulse CMMS</b> أو افتح رابط Google Play أعلاه › <b>تثبيت</b> › افتح وسجّل الدخول.",
+                  "<b>From Google Play</b> (recommended): search <b>PlantPulse CMMS</b> or open the Google Play link above › <b>Install</b> › open and sign in."),
                 T(f"<b>أو من Chrome</b>: افتح {L(APP)} في <b>Chrome</b> وسجّل الدخول › قائمة Chrome (ثلاث نقاط) › <b>تثبيت التطبيق</b> أو <b>إضافة إلى الشاشة الرئيسية</b>.",
                   f"<b>Or from Chrome</b>: open {APP} in <b>Chrome</b> and sign in › Chrome menu (three dots) › <b>Install app</b> or <b>Add to Home screen</b>."),
                 T("افتح PlantPulse بعد ذلك من أيقونته (ترس مع نبضة برتقالية).", "From then on open PlantPulse from its icon (gear with an orange pulse).")]))

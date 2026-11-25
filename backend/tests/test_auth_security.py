@@ -130,11 +130,12 @@ def test_meta_is_public_and_carries_the_instance_label(world, monkeypatch):
     from app.core.config import get_settings
 
     anon = make_client()
-    assert anon.get("/api/v1/meta").json() == {"instance_label": "", "password_reset": False, "try_demo_url": None}  # no mail in tests
+    assert anon.get("/api/v1/meta").json() == {"instance_label": "", "password_reset": False, "try_demo_url": None, "android_app_url": None}  # no mail in tests
     monkeypatch.setattr(get_settings(), "product_domain", "plantpulse-cmms.com")
     assert anon.get("/api/v1/meta").json()["try_demo_url"] == "https://plantpulse-cmms.com/#try"  # sign-in page: "Try the demo"
+    assert anon.get("/api/v1/meta").json()["android_app_url"].endswith("id=io.plantpulse.app")  # and the Google Play app
     monkeypatch.setattr(get_settings(), "instance_label", "TEST")  # never on the demo or test copies
-    assert anon.get("/api/v1/meta").json() == {"instance_label": "TEST", "password_reset": False, "try_demo_url": None}
+    assert anon.get("/api/v1/meta").json() == {"instance_label": "TEST", "password_reset": False, "try_demo_url": None, "android_app_url": None}
 
 
 def test_shared_demo_accounts_are_not_locked_but_guessing_is_capped(world):

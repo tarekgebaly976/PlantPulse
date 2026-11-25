@@ -45,6 +45,7 @@ from app.services.common import sync_rbac
 
 log = logging.getLogger("cmms.api")
 API = "/api/v1"
+ANDROID_APP_URL = "https://play.google.com/store/apps/details?id=io.plantpulse.app"  # "PlantPulse CMMS – Maintenance"
 
 
 class RateLimiter:
@@ -158,6 +159,8 @@ def create_app() -> FastAPI:
             "instance_label": s.instance_label,
             "password_reset": s.password_reset_enabled,
             "try_demo_url": f"https://{s.product_domain}/#try" if demo else None,
+            # The Google Play app opens this real system only, so the demo, test and customer copies do not offer it.
+            "android_app_url": ANDROID_APP_URL if demo else None,
         }
 
     @app.get(f"{API}/health/ready", tags=["health"])

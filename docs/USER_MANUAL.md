@@ -16,7 +16,9 @@ several plants, choose the plant in the top bar; you only see data of the select
 if your account is department-restricted).
 
 ## 2. Install on a phone or tablet
-Open the site in Chrome/Edge (Android) or Safari (iOS) → *Add to Home screen*. The app opens on **My work**.
+**Android**: install **PlantPulse CMMS – Maintenance** from [Google Play](https://play.google.com/store/apps/details?id=io.plantpulse.app) and sign in (on an Android phone the
+sign-in page also shows a *Get the Android app on Google Play* button). Or open the site in Chrome → *Install app*.
+**iPhone / iPad**: open the site in Safari → Share → *Add to Home Screen*. The app opens on **My work**.
 
 ## 2a. Searching
 The magnifier in the top bar (or **Ctrl+K**, or **/**) searches everything you are allowed to see at once: equipment,

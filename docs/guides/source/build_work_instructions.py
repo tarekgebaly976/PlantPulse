@@ -130,11 +130,11 @@ proc("Sign in and change your password", "Everyone", "Any browser",
       "Change the password at once: tap the <b>person icon</b> (top right) › <b>Change password</b>.",
       "Type the current password, the new password twice, and press <b>Save</b>."],
      ("note", "A password needs at least 12 characters with three of: lowercase, uppercase, digit, symbol. Never share it: every action is recorded under your name."))
-proc("Install the app on a phone", "Everyone with a phone", "Chrome on Android, Safari on iPhone",
-     ["<b>Android</b>: open the link in <b>Chrome</b>, sign in, then Chrome menu (three dots) › <b>Install app</b> or <b>Add to Home screen</b>.",
+proc("Install the app on a phone", "Everyone with a phone", "Google Play on Android, Safari on iPhone",
+     ["<b>Android</b>: open <b>Google Play</b>, search <b>PlantPulse CMMS</b> (app “PlantPulse CMMS – Maintenance”) › <b>Install</b> › open it and sign in. Or open the link in <b>Chrome</b>, sign in, then Chrome menu (three dots) › <b>Install app</b>.",
       "<b>iPhone</b>: open the link in <b>Safari</b> (or Chrome), tap the <b>Share</b> button › <b>Add to Home Screen</b> › <b>Add</b>.",
       "Open PlantPulse from its <b>PlantPulse</b> icon (gear with an orange pulse) on the home screen from now on, and sign in once inside it."],
-     ("warn", "Install from Chrome, not Samsung Internet. Samsung Internet packages the page as an app and Google Play Protect may show a warning. A Google Play version of PlantPulse is in preparation."),
+     ("warn", "Install from Chrome, not Samsung Internet. Samsung Internet packages the page as an app and Google Play Protect may show a warning. The Google Play app avoids this altogether."),
      ("tip", "If a new button described in this guide is missing after an update, close the app completely (recent apps list) and open it again."))
 proc("Find your way around", "Everyone", "Top bar and menu",
      ["<b>Menu</b> (left, or the three lines on a phone): Dashboard, My work, Scan QR, Work requests, Work orders, Assets, Preventive maintenance, Lubrication, Condition monitoring, Shifts and handover, Spare parts, Shutdowns, KPIs and reports, Administration.",
@@ -468,7 +468,7 @@ proc("Check the backups", "Administrator", "Oracle console › Storage › Bucke
 part("Troubleshooting", "Quick answers to the most common problems.")
 TROUBLE = [
     ("A button from this guide is missing", "Refresh the page; on a phone close the app from the recent apps list and open it again. If still missing, your role may not include it."),
-    ("Play Protect warning when installing", "Install from Chrome (menu › Add to Home screen), not from Samsung Internet."),
+    ("Play Protect warning when installing", "Install PlantPulse from Google Play, or from Chrome (menu › Add to Home screen), not from Samsung Internet."),
     ("The phone camera does not open a QR label", "Use Scan QR inside the app, or type the code printed under the QR."),
     ("A KPI shows “Not available”", "Read the reason on the card: usually missing labour hours, production data, budget or rosters."),
     ("An import is refused", "Preview lists every error by row; fix them, choose the file again and preview again. Nothing is saved until all rows are valid."),

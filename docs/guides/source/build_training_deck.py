@@ -146,9 +146,9 @@ T["en"] = dict(
           ["Anyone reports; production too", "Supervisor accepts → work order", "LOTO / permit signed off before start", "Technician: checklist, hours, parts, findings",
            "Supervisor checks and completes", "Closed jobs are read-only history"]),
     a1=("Session A · everyone", "Getting started",
-        "Show the steps live. Install from Chrome on Android (not Samsung Internet). The language choice follows the user on every device. "
+        "Show the steps live. On Android install from Google Play (or from Chrome, not Samsung Internet). The language choice follows the user on every device. "
         "The magnifier (Ctrl+K) finds equipment, work orders, requests, parts, plans, points, RCAs and shutdowns with words in any order.",
-        ["Open app.plantpulse-cmms.com, sign in, change the temporary password", "Phone: Chrome › Install app (iPhone: Share › Add to Home Screen)",
+        ["Open app.plantpulse-cmms.com, sign in, change the temporary password", "Phone: Google Play › PlantPulse CMMS (iPhone: Safari › Share › Add to Home Screen)",
          "Menu: daily work, maintenance, assets and resources, KPIs, administration", "ONLINE badge, bell for notifications, language EN / AR / BN",
          "Magnifier or Ctrl+K: one search for everything", "Assets: hierarchy tree, equipment page with its full history"], "tr-assets.png"),
     a2=("Session A · everyone", "The dashboard: one colour code, your own layout",
@@ -257,7 +257,7 @@ T["en"] = dict(
             "Decide conflicts with your colleague – never guess", "Supervisors review the same day", "Managers set targets once and look at them monthly", "Use your own account only"]),
     nxt=("Next steps", "After the training",
          "Agree dates for each session and who attends. Prepare the phones of the technicians (app installed, field round updated). Managers set the main targets. "
-         "PlantPulse on Google Play after closed testing (about 22 November).",
+         "PlantPulse is on Google Play: Android phones install “PlantPulse CMMS – Maintenance” from the store.",
          ["Plan sessions A–F and the attendance list", "Install the app and prepare every technician phone (Field round › Update)", "Managers set targets for the main KPIs",
           "Each person customises the dashboard", "Weekly: review Nelson signals and open RCAs", "Questions: the work instructions, troubleshooting part"]),
 )
@@ -291,9 +291,9 @@ T["ar"] = dict(
           ["أي شخص يبلّغ، والإنتاج أيضًا", "المشرف يقبل ← أمر عمل", "اعتماد العزل / التصريح قبل البدء", "الفني: قائمة الفحص، الساعات، القطع، الملاحظات",
            "المشرف يراجع ويكمل", "الأعمال المغلقة سجل للقراءة فقط"]),
     a1=("الجلسة أ · الجميع", "البداية",
-        "اعرض الخطوات مباشرة. ثبّت من Chrome على أندرويد (وليس Samsung Internet). اختيار اللغة يتبع المستخدم على كل جهاز. "
+        "اعرض الخطوات مباشرة. على أندرويد ثبّت من Google Play (أو من Chrome، وليس Samsung Internet). اختيار اللغة يتبع المستخدم على كل جهاز. "
         "العدسة (Ctrl+K) تجد المعدات وأوامر العمل والطلبات والقطع والخطط والنقاط والتحليلات والتوقفات بكلمات بأي ترتيب.",
-        ["افتح app.plantpulse-cmms.com، سجّل الدخول، غيّر كلمة المرور المؤقتة", "الجوال: Chrome › تثبيت التطبيق (آيفون: مشاركة › إضافة إلى الشاشة الرئيسية)",
+        ["افتح app.plantpulse-cmms.com، سجّل الدخول، غيّر كلمة المرور المؤقتة", "الجوال: Google Play › PlantPulse CMMS (آيفون: Safari › مشاركة › إضافة إلى الشاشة الرئيسية)",
          "القائمة: العمل اليومي، الصيانة، الأصول والموارد، المؤشرات، الإدارة", "شارة «متصل»، الجرس للإشعارات، اللغة عربي / إنجليزي / بنغالي",
          "العدسة أو Ctrl+K: بحث واحد لكل شيء", "الأصول: شجرة المستويات، صفحة المعدة بسجلها الكامل"], "tr-assets.png"),
     a2=("الجلسة أ · الجميع", "لوحة المعلومات: مفتاح ألوان واحد وشكل تختاره",
@@ -401,7 +401,7 @@ T["ar"] = dict(
             "احسم التعارض مع زميلك – لا تخمّن", "المشرفون يراجعون في نفس اليوم", "المديرون يحددون المستهدفات مرة ويراجعونها شهريًا", "استخدم حسابك فقط"]),
     nxt=("الخطوات التالية", "بعد التدريب",
          "اتفق على مواعيد كل جلسة ومن يحضر. جهّز جوالات الفنيين (التطبيق مثبت وجولة الموقع محدثة). المديرون يحددون المستهدفات الرئيسية. "
-         "PlantPulse على Google Play بعد الاختبار المغلق (حوالي 22 نوفمبر).",
+         "PlantPulse متاح على Google Play: جوالات أندرويد تثبّت «PlantPulse CMMS – Maintenance» من المتجر.",
          ["خطط الجلسات أ–و وقائمة الحضور", "ثبّت التطبيق وجهّز جوال كل فني (جولة الموقع › تحديث)", "المديرون يحددون مستهدفات المؤشرات الرئيسية",
           "كل شخص يخصص لوحة المعلومات", "أسبوعيًا: مراجعة إشارات نيلسون والتحليلات المفتوحة", "أسئلة: تعليمات العمل، جزء حل المشاكل"]),
 )

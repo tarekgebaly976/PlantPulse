@@ -17,7 +17,7 @@
 	handle /api/* {
 		reverse_proxy api:8000
 	}
-	# Android app link (Google Play): deploy/well-known/assetlinks.json, once the app is signed.
+	# Android app link (Google Play app io.plantpulse.app, published 2026-11-25): deploy/well-known/assetlinks.json.
 	handle /.well-known/assetlinks.json {
 		root * /srv
 		file_server

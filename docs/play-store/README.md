@@ -1,5 +1,10 @@
 # PlantPulse – Google Play listing kit
 
+> **Status 2026-11-25: published.** “PlantPulse CMMS – Maintenance” (`io.plantpulse.app`), production release
+> version 2 is live: https://play.google.com/store/apps/details?id=io.plantpulse.app. The app opens the real system (app.plantpulse-cmms.com) only; the demo,
+> test copy and customer copies are used in the browser. The website and the real system's sign-in page (Android
+> browsers only) link to the store. The sections below are kept as the record of what was submitted.
+
 Everything Play Console asks for, ready to paste. Images are in this folder; all screenshots use the
 DEMO sample organisation (no company data).
 
@@ -16,8 +21,8 @@ DEMO sample organisation (no company data).
 **App name** (≤30): `PlantPulse – Maintenance`
 **Category**: Business (alternative: Productivity) · **Tags**: Business, Productivity
 **Contact e-mail**: a support address you are happy to show publicly (not a personal one if you can avoid it)
-**Website** (optional): `https://84-8-106-22.sslip.io`
-**Privacy policy URL**: `https://84-8-106-22.sslip.io/privacy`
+**Website** (optional): `https://plantpulse-cmms.com` (first submitted as `https://84-8-106-22.sslip.io`, which still works)
+**Privacy policy URL**: `https://app.plantpulse-cmms.com/privacy`
 
 ### English (en-US) – default
 

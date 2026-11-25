@@ -28,7 +28,7 @@ Checklist with owner and target month (Arabic): [ACTION_PLAN_2026-11.md](ACTION_
 ## App (CMMS) — product features
 | # | Item | Why |
 |---|---|---|
-| 14 | Google Play publication (listing kit ready in `docs/play-store`) | Phone install from the store |
+| 14 | ✅ **Done 2026-11-25**: published on Google Play as “PlantPulse CMMS – Maintenance” (`io.plantpulse.app`, version 2), https://play.google.com/store/apps/details?id=io.plantpulse.app | Phone install from the store |
 | 15 | Offline technician mode (queue + conflict check) | Plants with weak Wi-Fi on the shop floor |
 | 16 | SSO (Azure AD / Google) + MFA for admins | Asked for by larger companies' IT |
 | 17 | Arabic for server messages and PDF reports | Full Arabic experience |

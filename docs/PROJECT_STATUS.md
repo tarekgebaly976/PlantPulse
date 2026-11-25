@@ -6,6 +6,19 @@ PlantPulse is now two things on one server (Oracle Cloud, Riyadh, `84.8.106.22`)
    https://test.84-8-106-22.sslip.io. Unchanged by the product work below.
 2. **PlantPulse as a product** for other plants: website, public demo, and one separate PlantPulse per customer.
 
+**Update 2026-11-25.** What is available now:
+
+| What | Where | State |
+|---|---|---|
+| Plant CMMS (real) | https://app.plantpulse-cmms.com (old address 84-8-106-22.sslip.io still works) | live; skill matrix, weekly maintenance schedule (two-step approval), line stop windows, automatic codes |
+| Test copy | https://test.app.plantpulse-cmms.com | `scripts/test-copy.sh update` after each release |
+| Public demo | https://demo.plantpulse-cmms.com | `scripts/demo.sh launch-update`; DEMO sample accounts never lock |
+| Website | https://plantpulse-cmms.com | "Try the demo" e-mails the demo sign-in; links to Google Play |
+| Android app | [Google Play: PlantPulse CMMS – Maintenance](https://play.google.com/store/apps/details?id=io.plantpulse.app) | **published** (production release, version 2); opens the real system only |
+| iPhone | Safari › Share › Add to Home Screen | installable web app (no App Store version) |
+
+Open items: deferral reasons are English only; paper trim loss phase.
+
 Operator guide (every command): [English](PLANTPULSE-GUIDE.md) · [Arabic](PLANTPULSE-GUIDE-AR.md) · Plan ahead: [ROADMAP.md](ROADMAP.md)
 
 ## Live on the server

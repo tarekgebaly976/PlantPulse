@@ -17,9 +17,15 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [demoUrl, setDemoUrl] = useState<string | null>(null);
+  const [androidUrl, setAndroidUrl] = useState<string | null>(null);
   useEffect(() => { if (me) router.replace("/"); }, [me, router]);
   useEffect(() => {
-    fetch("/api/v1/meta").then((r) => (r.ok ? r.json() : null)).then((m: { try_demo_url?: string | null } | null) => setDemoUrl(m?.try_demo_url ?? null)).catch(() => undefined);
+    fetch("/api/v1/meta").then((r) => (r.ok ? r.json() : null)).then((m: { try_demo_url?: string | null; android_app_url?: string | null } | null) => {
+      setDemoUrl(m?.try_demo_url ?? null);
+      // Only in an Android browser: not inside the installed app (Google Play or home-screen), not on iPhone or a computer.
+      const installed = window.matchMedia("(display-mode: standalone)").matches || document.referrer.startsWith("android-app://");
+      setAndroidUrl(/Android/i.test(navigator.userAgent) && !installed ? (m?.android_app_url ?? null) : null);
+    }).catch(() => undefined);
   }, []);
 
   async function submit(e: FormEvent) {
@@ -61,6 +67,9 @@ export default function LoginPage() {
                 <Text size="xs" c="dimmed" mb={8}>{t("auth.tryDemoHint")}</Text>
                 <Button component="a" href={demoUrl} target="_blank" rel="noopener" variant="light" fullWidth>{t("auth.tryDemo")}</Button>
               </Paper>
+            )}
+            {androidUrl && (
+              <Button component="a" href={androidUrl} target="_blank" rel="noopener" variant="default" fullWidth data-testid="android-app">{t("auth.getAndroidApp")}</Button>
             )}
             <Text size="xs" c="dimmed">{t("auth.sessionNote")}</Text>
             <Text size="xs" ta="center"><a href="/privacy" style={{ color: "inherit" }}>Privacy policy / سياسة الخصوصية</a></Text>
