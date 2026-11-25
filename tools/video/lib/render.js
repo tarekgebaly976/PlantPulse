@@ -118,6 +118,7 @@ function layoutBeats(s, beats, t0, parts, voice, OUT) {
 async function openStage(tl) {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
+  page.on("pageerror", (e) => console.error("page error:", e.message));
   await page.goto(url(path.join(__dirname, "stage.html")));
   await page.evaluate(async (x) => { await window.setup(x); }, tl);
   return { browser, page };

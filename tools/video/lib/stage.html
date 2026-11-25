@@ -9,6 +9,7 @@
   @font-face { font-family: "PPArabic"; src: url("../../../frontend/node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-400-normal.woff2") format("woff2"); font-weight: 400; }
   @font-face { font-family: "PPArabic"; src: url("../../../frontend/node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-600-normal.woff2") format("woff2"); font-weight: 500 600; }
   @font-face { font-family: "PPArabic"; src: url("../../../frontend/node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-700-normal.woff2") format("woff2"); font-weight: 700 900; }
+  @font-face { font-family: "PPHand"; src: url("../assets/fonts/architects-daughter-latin-400-normal.woff2") format("woff2"); font-weight: 100 900; }
   html[dir="rtl"] body { font-family: "PPInter", "PPArabic", sans-serif; }
   html[dir="rtl"] .cap { border-left: 1px solid var(--line); border-right: 6px solid var(--teal); }
   html[dir="rtl"] .side ol { border-left: none; border-right: 3px solid var(--line); }
@@ -107,6 +108,7 @@
 <script src="anim.js"></script>
 <script src="factory.js"></script>
 <script src="story.js"></script>
+<script src="board.js"></script>
 <script>
 "use strict";
 const W = 1920, H = 1080, XF = 0.6; // crossfade between scenes (s)
@@ -339,6 +341,7 @@ window.setup = async (tl) => {
   if (tl.lang === "ar") { document.documentElement.dir = "rtl"; document.documentElement.lang = "ar"; }
   const root = document.getElementById("root");
   SC = tl.scenes.map((s) => { const sc = el("div", "scene"); root.appendChild(sc); BUILD[s.layout](sc, s); s.el = sc; return s; });
+  await Promise.all([document.fonts.load('700 56px PPHand'), document.fonts.load('400 56px PPHand')]).catch(() => {});
   await document.fonts.ready;
   await Promise.all([...document.images].map((i) => i.decode().catch(() => { throw new Error("image " + i.src); })));
 };
