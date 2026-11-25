@@ -12,7 +12,7 @@ DEMO sample organisation (no company data).
 |---|---|---|
 | App icon | `icon-512.png` | 512×512 |
 | Feature graphic | `feature-graphic-1024x500.png` | 1024×500 |
-| Phone screenshots (upload 2–8) | `1-login.png` … `7-scan.png` | 1080×1920 |
+| Phone screenshots (upload all 8, in order) | `1-dashboard.png` … `8-dashboard-ar.png` (home, QR, jobs offline, weekly schedule, skill matrix, vibration trend, Nelson rules, Arabic); remake with `node scripts/site-screenshots.js docs/play-store --play` | 1080×1920 |
 
 ---
 

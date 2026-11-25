@@ -7,6 +7,9 @@
 //   cd ../frontend && npm run build && BACKEND_URL=http://127.0.0.1:8000 npx next start -p 3000 &
 //   node scripts/site-screenshots.js site/public/img/v5               # needs Playwright (require('playwright'))
 //
+// Google Play listing (1080 x 1920 PNG, the 8 shots in PLAY below, numbered):
+//   node scripts/site-screenshots.js docs/play-store --play
+//
 // The planner shot proposes next week's maintenance schedule in that LOCAL database (a draft, as the planner would).
 //
 // The file names are those used in site/public/index.html; put new shots in a NEW folder (v4, v5 …) and change the
@@ -18,7 +21,10 @@ const { chromium } = require("playwright");
 const BASE = process.env.APP_URL ?? "http://127.0.0.1:3000";
 const PASSWORD = process.env.DEMO_PASSWORD ?? "Demo-Passw0rd!2026";
 const out = path.resolve(process.argv[2] ?? "site/public/img/v5");
-const PHONE = { viewport: { width: 405, height: 720 }, deviceScaleFactor: 4 / 3, isMobile: true, hasTouch: true }; // → 540 x 960
+const play = process.argv.includes("--play");
+// Website: 540 x 960 WebP. Google Play: 1080 x 1920 PNG, only these, in this order.
+const PLAY = ["dashboard", "asset-qr", "field-offline", "schedule-board", "skills", "pdm-trend", "nelson", "dashboard-ar"];
+const PHONE = { viewport: { width: 405, height: 720 }, deviceScaleFactor: play ? 1080 / 405 : 4 / 3, isMobile: true, hasTouch: true };
 
 async function session(browser, who, lang = "en") {
   const ctx = await browser.newContext(PHONE);
@@ -52,6 +58,14 @@ async function settle(page) {
 
 /** PNG from Playwright → WebP via the browser's own encoder (no extra tools). */
 async function save(browser, png, name) {
+  if (play) {
+    const i = PLAY.indexOf(name);
+    if (i < 0) return;
+    const file = `${i + 1}-${name}.png`;
+    fs.writeFileSync(path.join(out, file), png);
+    console.log(`  ${file}`);
+    return;
+  }
   const page = await browser.newPage();
   const b64 = png.toString("base64");
   const webp = await page.evaluate(async (data) => {
