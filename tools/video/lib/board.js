@@ -74,47 +74,26 @@
 
   // ---------- the hand with a marker (tip at 0,0) ----------
   function hand(parent, uid) {
-    // a realistic hand holding a marker; the marker tip is at 0,0
+    // just the marker (no hand): dark green body, black tip and grip, grey end cap; the tip is at 0,0
     const g = S("g", { opacity: 0 }, parent);
-    const box = S("g", { transform: "rotate(-10) scale(0.82)" }, g);
-    box.innerHTML = HAND_SVG.replace(/id="(\w+)"/g, `id="$1${uid}"`).replace(/url\(#(\w+)\)/g, `url(#$1${uid})`);
+    const box = S("g", { transform: "rotate(-16)" }, g);
+    box.innerHTML = MARKER_SVG.replace(/id="(\w+)"/g, `id="$1${uid}"`).replace(/url\(#(\w+)\)/g, `url(#$1${uid})`);
     return g;
   }
-  const HAND_SVG = `<defs>
-  <linearGradient id="skin" x1="0" y1="0" x2="0.7" y2="1">
-    <stop offset="0" stop-color="#F3C9AB"/><stop offset="0.5" stop-color="#E5AA87"/><stop offset="1" stop-color="#C47F60"/>
-  </linearGradient>
-  <linearGradient id="skin2" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#F7D6BE"/><stop offset="1" stop-color="#DB9C7C"/>
-  </linearGradient>
-  <linearGradient id="mk" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#6B7A70"/><stop offset="0.35" stop-color="#2F3A34"/><stop offset="1" stop-color="#121815"/>
-  </linearGradient>
-  <radialGradient id="shade" cx="0.3" cy="0.2" r="0.9">
-    <stop offset="0.5" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#6B3320" stop-opacity="0.35"/>
-  </radialGradient>
-  <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="6" dy="10" stdDeviation="8" flood-color="#000" flood-opacity="0.18"/></filter>
-</defs>
-<g id="H" filter="url(#soft)">
-  <path d="M 250,-4 C 300,-24 370,-10 400,20 C 440,60 455,120 480,190 C 505,255 545,305 600,350 L 600,660 L 350,660 C 335,540 300,440 250,380 C 205,326 170,260 160,200 C 150,140 175,60 250,-4 Z" fill="url(#skin)" stroke="#B5704F" stroke-width="2.5"/>
-  <path d="M 250,-4 C 300,-24 370,-10 400,20 C 440,60 455,120 480,190 C 505,255 545,305 600,350 L 600,660 L 350,660 C 335,540 300,440 250,380 C 205,326 170,260 160,200 C 150,140 175,60 250,-4 Z" fill="url(#shade)"/>
-  <path d="M 0,0 L 22,-9 L 22,9 Z" fill="#111"/>
-  <rect x="20" y="-13" width="32" height="26" rx="4" fill="#1A1F1C"/>
-  <rect x="48" y="-17" width="384" height="34" rx="8" fill="url(#mk)"/>
-  <rect x="58" y="-12" width="360" height="5" rx="2.5" fill="#fff" opacity="0.2"/>
-  <rect x="420" y="-19" width="30" height="38" rx="8" fill="#20271F"/>
-  <path d="M 175,24 C 150,30 145,70 170,80 C 200,92 245,84 262,66 C 270,50 255,34 230,28 Z" fill="url(#skin2)" stroke="#B5704F" stroke-width="2"/>
-  <path d="M 172,86 C 148,96 150,132 176,140 C 208,150 250,138 262,118 C 266,102 250,92 228,88 Z" fill="url(#skin2)" stroke="#B5704F" stroke-width="2"/>
-  <path d="M 186,144 C 166,156 172,186 198,190 C 228,194 260,180 266,164 C 268,150 252,144 232,142 Z" fill="url(#skin2)" stroke="#B5704F" stroke-width="2"/>
-  <path d="M 312,128 C 270,112 220,72 172,36 C 150,20 150,2 168,0 C 188,-2 222,14 262,36 C 304,58 340,84 338,110 C 336,128 324,132 312,128 Z" fill="url(#skin2)" stroke="#B5704F" stroke-width="2.5"/>
-  <path d="M 158,10 C 160,2 170,0 180,4 L 188,8 C 190,16 184,22 176,20 L 164,16 C 159,15 157,13 158,10 Z" fill="#F8DDCD" stroke="#C48A6F" stroke-width="1.5"/>
-  <path d="M 240,40 C 248,50 248,62 242,72" fill="none" stroke="#B5704F" stroke-width="2" opacity="0.55"/>
-  <path d="M 90,-12 C 88,-30 104,-38 126,-36 L 250,-34 C 282,-34 304,-20 304,-2 C 304,12 286,18 262,14 L 126,6 C 104,6 92,4 90,-12 Z" fill="url(#skin2)" stroke="#B5704F" stroke-width="2.5"/>
-  <path d="M 96,-20 C 97,-30 106,-33 118,-32 L 128,-31 C 132,-24 130,-16 122,-14 L 102,-13 C 97,-14 95,-17 96,-20 Z" fill="#F8DDCD" stroke="#C48A6F" stroke-width="1.5"/>
-  <path d="M 176,-34 C 180,-26 180,-14 174,-6 M 236,-34 C 241,-24 240,-10 234,-2" fill="none" stroke="#B5704F" stroke-width="2" opacity="0.55"/>
-  <path d="M 330,-6 C 352,6 364,24 368,46 M 380,22 C 396,44 402,70 402,96" fill="none" stroke="#B5704F" stroke-width="2" opacity="0.4"/>
-</g>
-`;
+  const MARKER_SVG = `<defs>
+    <linearGradient id="mb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6E7F73"/><stop offset="0.3" stop-color="#3A4A40"/><stop offset="0.75" stop-color="#26322B"/><stop offset="1" stop-color="#151C18"/></linearGradient>
+    <linearGradient id="mg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4A4F4C"/><stop offset="0.4" stop-color="#1E2220"/><stop offset="1" stop-color="#0C0E0D"/></linearGradient>
+    <linearGradient id="mc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E5E7E6"/><stop offset="0.45" stop-color="#9DA3A0"/><stop offset="1" stop-color="#4E5350"/></linearGradient>
+    <filter id="ms" x="-10%" y="-60%" width="120%" height="260%"><feDropShadow dx="10" dy="16" stdDeviation="9" flood-color="#000" flood-opacity="0.22"/></filter>
+  </defs>
+  <g filter="url(#ms)">
+    <path d="M 0,0 L 30,-9 L 30,9 Z" fill="#0A0A0A"/>
+    <path d="M 28,-13 L 74,-22 L 74,22 L 28,13 Z" fill="url(#mg)"/>
+    <rect x="72" y="-26" width="430" height="52" rx="18" fill="url(#mb)"/>
+    <rect x="84" y="-19" width="400" height="7" rx="3.5" fill="#fff" opacity="0.18"/>
+    <rect x="498" y="-27" width="46" height="54" rx="12" fill="url(#mc)"/>
+    <ellipse cx="544" cy="0" rx="6" ry="24" fill="#7C827F"/>
+  </g>`;
 
   // ---------- build ----------
   function strokes(parent, list, color, w) {
