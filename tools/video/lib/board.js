@@ -69,15 +69,18 @@
     heart: ["M 0,70 Q -90,10 -80,-36 Q -70,-80 -26,-74 Q -6,-70 0,-46 Q 6,-70 26,-74 Q 70,-80 80,-36 Q 90,10 0,70 Z"],
     loop: ["M -60,-30 A 70,70 0 1,1 -40,50", "M -52,64 L -40,50 L -58,40"],
     star: ["M 0,-82 L 22,-26 L 82,-24 L 34,12 L 52,72 L 0,38 L -52,72 L -34,12 L -82,-24 L -22,-26 Z"],
+    book: ["M 0,-50 Q -45,-72 -92,-58 L -92,62 Q -45,48 0,70 Q 45,48 92,62 L 92,-58 Q 45,-72 0,-50 Z", "M 0,-50 L 0,70", "M -74,-30 Q -40,-40 -16,-28 M -74,0 Q -40,-10 -16,2 M 16,-28 Q 40,-40 74,-30 M 16,2 Q 40,-10 74,0"],
+    cap: ["M -96,-20 L 0,-62 L 96,-20 L 0,22 Z", "M -56,0 L -56,48 Q 0,80 56,48 L 56,0", "M 96,-20 L 96,46", c(96, 54, 8)],
     plant: [r(-30, 20, 60, 60), "M 0,20 L 0,-40", "M 0,-10 Q -50,-20 -50,-70 Q 0,-60 0,-10", "M 0,-30 Q 50,-40 50,-90 Q 0,-80 0,-30"],
   };
 
   // ---------- the hand with a marker (tip at 0,0) ----------
   function hand(parent, uid) {
-    // just the marker (no hand): dark green body, black tip and grip, grey end cap; the tip is at 0,0
+    // the founder's own hand holding a marker (assets/hand.png, cut out of a photo); the marker tip is at 0,0
     const g = S("g", { opacity: 0 }, parent);
-    const box = S("g", { transform: "rotate(-16)" }, g);
-    box.innerHTML = MARKER_SVG.replace(/id="(\w+)"/g, `id="$1${uid}"`).replace(/url\(#(\w+)\)/g, `url(#$1${uid})`);
+    S("image", { href: "../assets/hand.png", x: -3, y: -70, width: 561, height: 756, filter: `url(#hs${uid})` }, g);
+    const f = S("filter", { id: `hs${uid}`, x: "-10%", y: "-10%", width: "130%", height: "130%" }, g);
+    S("feDropShadow", { dx: 12, dy: 18, stdDeviation: 10, "flood-color": "#000", "flood-opacity": 0.2 }, f);
     return g;
   }
   const MARKER_SVG = `<defs>

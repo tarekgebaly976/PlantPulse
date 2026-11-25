@@ -1,7 +1,8 @@
 // Whiteboard 1 – twenty-five years in maintenance (anim "board", lib/board.js). First person, the founder's story from
 // the founder's CV, without any company names: paper machine engineer from 2000, Suez 2008, Riyadh from 2011
-// (superintendent, mechanical manager, predictive maintenance), head of engineering and maintenance since 2016 at a
-// 200,000 t/yr board mill, paper machine upgrade over SAR 100M, about SAR 1M a year saved, TPM, RCM, Lean.
+// (mechanical manager from 2012, predictive maintenance; the superintendent role is left out on purpose), head of engineering and maintenance since 2016 at a
+// 200,000 t/yr board mill, paper machine upgrade over SAR 100M, about SAR 1M a year saved, TPM, RCM, Lean; always learning: manufacturing excellence and kaizen, digital transformation, MBA and PMP self-study
+// (no degree or certificate, so only ever called self-study).
 "use strict";
 
 const board = (id, chapter, says, captions, spec) => ({ id, layout: "anim", anim: "board", chapter, says, captions, ...spec });
@@ -24,10 +25,11 @@ module.exports = {
     board("01-years", "1 · Twenty-five years", [
       "More than twenty-five years. That is how long I have worked in engineering and maintenance, in paper and board mills, in Egypt and Saudi Arabia.",
       "It started in 2000, as a mechanical engineer on a paper machine: rolls, pumps, gearboxes and cranes, laser alignment, and my first PM checklists and lubrication schedules.",
-      "In 2008, a paper mill in Suez. In 2011, Riyadh: superintendent, then mechanical manager, bringing in vibration analysis, bearing diagnostics and oil sampling.",
+      "In 2008, a paper mill in Suez. Then Riyadh, where I became mechanical manager in 2012, bringing in vibration analysis, bearing diagnostics and oil sampling.",
       "Since 2016, I have led the engineering and maintenance department of a two hundred thousand ton a year board mill: mechanical, condition monitoring, planning, workshops and utilities.",
       "Along the way: a paper machine upgrade worth more than a hundred million riyals, about a million riyals a year saved in maintenance cost, and TPM, RCM and Lean on the shop floor.",
-    ], ["25+ years in engineering and maintenance", "2000 · Mechanical engineer on a paper machine", "2008 · Suez – 2011 · Riyadh", "Since 2016 · Head of engineering and maintenance", "SAR 100M+ upgrade · ≈ SAR 1M a year saved · TPM, RCM, Lean"], {
+      "And I never stopped learning: manufacturing excellence and kaizen, digital transformation, and self-study for an MBA and the PMP.",
+    ], ["25+ years in engineering and maintenance", "2000 · Mechanical engineer on a paper machine", "2008 · Suez – 2012 · Riyadh, mechanical manager", "Since 2016 · Head of engineering and maintenance", "SAR 100M+ upgrade · ≈ SAR 1M a year saved · TPM, RCM, Lean", "Always learning: excellence, digital, MBA and PMP self-study"], {
       cam: [960, 540, 1],
       items: [
         { p: 0, at: 0.2, text: "25+", x: 560, y: 500, size: 300, color: "teal", anchor: "middle", dur: 1.1 },
@@ -45,7 +47,7 @@ module.exports = {
         { p: 2, at: 0, cam: [2100, 540, 1], dur: 1.6 },
         { p: 2, at: 0.6, line: [1250, Y, 2950, Y], w: 8 },
         ...mile(2, 1.2, 1650, "2008", "Suez, Egypt", "paper mill"),
-        ...mile(2, 4.6, 2500, "2011", "Riyadh", "superintendent → manager"),
+        ...mile(2, 4.6, 2500, "2012", "Riyadh", "mechanical manager"),
         { p: 2, at: 8.4, icon: "pulse", x: 2500, y: 830, s: 0.9, color: "red" },
         { p: 3, at: 0, cam: [3350, 540, 1], dur: 1.6 },
         { p: 3, at: 0.6, arrow: [2950, Y, 4150, Y], w: 8 },
@@ -62,6 +64,17 @@ module.exports = {
         { p: 4, at: 7.0, text: "saved in maintenance cost", x: 3350, y: 705, size: 40, anchor: "middle" },
         { p: 4, at: 8.6, icon: "loop", x: 3910, y: 400, s: 1.0, color: "teal" },
         { p: 4, at: 9.6, text: "TPM · RCM · Lean", x: 3910, y: 640, size: 56, anchor: "middle", color: "teal" },
+        { p: 5, at: 0, wipe: true },
+        { p: 5, at: 0.3, text: "always learning", x: 3350, y: 230, size: 90, anchor: "middle" },
+        { p: 5, at: 1.4, underline: [3070, 3630, 255] },
+        { p: 5, at: 1.8, icon: "loop", x: 2790, y: 480, s: 0.8 },
+        { p: 5, at: 2.6, text: "manufacturing excellence", x: 2790, y: 650, size: 42, anchor: "middle" },
+        { p: 5, at: 3.4, text: "kaizen", x: 2790, y: 705, size: 40, anchor: "middle", color: "grey" },
+        { p: 5, at: 4.0, icon: "laptop", x: 3350, y: 480, s: 0.8 },
+        { p: 5, at: 4.8, text: "digital transformation", x: 3350, y: 650, size: 42, anchor: "middle" },
+        { p: 5, at: 5.6, icon: "book", x: 3910, y: 480, s: 0.8 },
+        { p: 5, at: 6.4, text: "MBA · PMP", x: 3910, y: 650, size: 48, anchor: "middle" },
+        { p: 5, at: 7.0, text: "self-study", x: 3910, y: 705, size: 40, anchor: "middle", color: "grey" },
       ],
     }),
     board("02-lessons", "2 · Three lessons", [
